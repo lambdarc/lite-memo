@@ -118,6 +118,75 @@ class MemoDaoTest {
         assertEquals(listOf(900, 1), dao.imageFileNameBatchSizes)
     }
 
+    @Test
+    fun boundaryGetActiveMemosWithRefsPreservesDistinctInputOrder() = runTest {
+        // Arrange
+        val dao = RecordingMemoDao(
+            activeMemosById = mapOf(
+                "memo-1" to memoWithRefs(id = "memo-1"),
+                "memo-2" to memoWithRefs(id = "memo-2")
+            )
+        )
+
+        // Act
+        // Boundary: query row order must not replace the caller's distinct ID order
+        val memos = dao.getActiveMemosWithRefs(listOf("memo-2", "memo-1", "memo-2"))
+
+        // Assert
+        assertEquals(listOf("memo-2", "memo-1"), memos.map { it.memo.id })
+    }
+
+    @Test
+    fun boundaryMoveMemosToTrashSkipsReadsAndWritesForEmptyInput() = runTest {
+        // Arrange
+        val dao = RecordingMemoDao(failOnWrite = true)
+
+        // Act
+        // Boundary: an empty bulk operation is a no-op
+        dao.moveMemosToTrash(emptyMap())
+
+        // Assert
+        assertEquals(emptyList<String>(), dao.calls)
+    }
+
+    @Test
+    fun boundaryRestoreMemosFromTrashUsesSqliteSafeBatches() = runTest {
+        // Arrange
+        val dao = RecordingMemoDao()
+        val ids = List(901) { index -> "memo-$index" }
+
+        // Act
+        // Boundary: validation and update queries stay below SQLite's bind limit
+        dao.restoreMemosFromTrash(ids)
+
+        // Assert
+        assertEquals(
+            listOf(900, 1),
+            dao.trashedMemoIdBatchSizes
+        )
+        assertEquals(listOf(900, 1), dao.restoredMemoBatchSizes)
+    }
+
+    @Test
+    fun errorMoveMemosToTrashValidatesEveryMemoBeforeWriting() {
+        // Arrange
+        val dao = RecordingMemoDao(activeMemoIds = setOf("memo-1"))
+
+        // Act & Assert
+        // Error: a mixed active/trashed selection must fail before the first update
+        assertThrows(IllegalStateException::class.java) {
+            runTest {
+                dao.moveMemosToTrash(
+                    linkedMapOf(
+                        "memo-1" to 1_000L,
+                        "memo-2" to 2_000L
+                    )
+                )
+            }
+        }
+        assertEquals(emptyList<String>(), dao.calls.filter { it.startsWith("moveMemoToTrash:") })
+    }
+
     private fun memoEntity(id: String) = MemoEntity(
         id = id,
         title = "Title",
@@ -128,10 +197,24 @@ class MemoDaoTest {
         deletedAt = null
     )
 
-    private class RecordingMemoDao(private val failOnWrite: Boolean = false) : MemoDao {
+    private fun memoWithRefs(id: String) = MemoWithRefs(
+        memo = memoEntity(id),
+        tagRefs = emptyList(),
+        imageRefs = emptyList()
+    )
+
+    private class RecordingMemoDao(
+        private val failOnWrite: Boolean = false,
+        private val activeMemoIds: Set<String>? = null,
+        private val trashedMemoIds: Set<String>? = null,
+        private val activeMemosById: Map<String, MemoWithRefs> = emptyMap()
+    ) : MemoDao,
+        MemoBulkDao {
 
         val calls = mutableListOf<String>()
         val imageFileNameBatchSizes = mutableListOf<Int>()
+        val trashedMemoIdBatchSizes = mutableListOf<Int>()
+        val restoredMemoBatchSizes = mutableListOf<Int>()
         private val emptyMemoFlow = flowOf(emptyList<MemoWithRefs>())
 
         override fun observeActiveMemosWithRefs() = emptyMemoFlow
@@ -145,6 +228,17 @@ class MemoDaoTest {
             emptyMemoFlow
 
         override suspend fun getActiveMemoWithRefs(id: String): MemoWithRefs? = null
+
+        override suspend fun getActiveMemosWithRefsBatch(ids: List<String>): List<MemoWithRefs> =
+            ids.asReversed().mapNotNull(activeMemosById::get)
+
+        override suspend fun getActiveMemoIdsBatch(ids: List<String>): List<String> =
+            ids.filter { id -> activeMemoIds?.contains(id) ?: true }
+
+        override suspend fun getTrashedMemoIdsBatch(ids: List<String>): List<String> {
+            trashedMemoIdBatchSizes += ids.size
+            return ids.filter { id -> trashedMemoIds?.contains(id) ?: true }
+        }
 
         override fun observeTrashedMemosWithRefs() = emptyMemoFlow
 
@@ -194,6 +288,11 @@ class MemoDaoTest {
             return emptyList()
         }
 
+        override suspend fun getImageFileNamesForMemosBatch(memoIds: List<String>): List<String> {
+            imageFileNameBatchSizes += memoIds.size
+            return emptyList()
+        }
+
         override suspend fun findReferencedImageFileNames(fileNames: List<String>): List<String> =
             emptyList()
 
@@ -211,7 +310,14 @@ class MemoDaoTest {
 
         override suspend fun restoreMemoFromTrash(id: String): Int = 1
 
+        override suspend fun restoreMemosFromTrashBatch(ids: List<String>): Int {
+            restoredMemoBatchSizes += ids.size
+            return ids.size
+        }
+
         override suspend fun deleteMemoPermanently(id: String): Int = 1
+
+        override suspend fun deleteMemosPermanentlyBatch(ids: List<String>): Int = ids.size
 
         override suspend fun discardMemo(id: String): Int = 1
 

@@ -9,6 +9,7 @@ import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.memoImageFixture
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoSummary
+import com.appvoyager.litememo.domain.model.MemoTrashUpdate
 import com.appvoyager.litememo.domain.model.Tag
 import com.appvoyager.litememo.domain.model.value.MemoId
 import com.appvoyager.litememo.domain.model.value.SearchQuery
@@ -868,13 +869,26 @@ class HomeViewModelTest {
 
         override suspend fun getActiveMemo(id: MemoId): Memo? = null
 
+        override suspend fun getActiveMemos(ids: List<MemoId>): List<Memo> = emptyList()
+
         override suspend fun saveMemo(memo: Memo) = Unit
+
+        override suspend fun saveAllActiveMemos(
+            expectedActiveIds: List<MemoId>,
+            memos: List<Memo>
+        ) = Unit
 
         override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) = Unit
 
+        override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) = Unit
+
         override suspend fun restoreMemoFromTrash(id: MemoId) = Unit
 
+        override suspend fun restoreMemosFromTrash(ids: List<MemoId>) = Unit
+
         override suspend fun deleteMemoPermanently(id: MemoId) = Unit
+
+        override suspend fun deleteMemosPermanently(ids: List<MemoId>) = Unit
 
         override suspend fun discardMemo(id: MemoId) = Unit
 
@@ -911,13 +925,27 @@ class HomeViewModelTest {
 
         override suspend fun getActiveMemo(id: MemoId): Memo? = memo.takeIf { it.id == id }
 
+        override suspend fun getActiveMemos(ids: List<MemoId>): List<Memo> =
+            listOf(memo).filter { it.id in ids }
+
         override suspend fun saveMemo(memo: Memo): Unit = error("Failed to save memo.")
+
+        override suspend fun saveAllActiveMemos(
+            expectedActiveIds: List<MemoId>,
+            memos: List<Memo>
+        ): Unit = error("Failed to save active memos.")
 
         override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) = Unit
 
+        override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) = Unit
+
         override suspend fun restoreMemoFromTrash(id: MemoId) = Unit
 
+        override suspend fun restoreMemosFromTrash(ids: List<MemoId>) = Unit
+
         override suspend fun deleteMemoPermanently(id: MemoId) = Unit
+
+        override suspend fun deleteMemosPermanently(ids: List<MemoId>) = Unit
 
         override suspend fun discardMemo(id: MemoId) = Unit
 

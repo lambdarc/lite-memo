@@ -7,6 +7,7 @@ import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.model.ApplyMemoBulkActionCommand
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoBulkAction
+import com.appvoyager.litememo.domain.model.MemoTrashUpdate
 import com.appvoyager.litememo.domain.model.value.MemoId
 import com.appvoyager.litememo.domain.model.value.TagId
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
@@ -389,6 +390,31 @@ class ApplyMemoBulkActionUseCaseTest {
     }
 
     @Test
+    fun interactionSetFavoriteValidatesAllSelectedMemosWhileSavingOnlyChangedMemos() = runTest {
+        // Arrange
+        val unchanged = memoFixture(id = "memo-unchanged", isFavorite = true)
+        val changed = memoFixture(id = "memo-changed")
+        val repository = FakeMemoRepository(listOf(unchanged, changed))
+        val useCase = applyMemoBulkActionUseCase(memoRepository = repository)
+
+        // Act
+        // Interaction: every selected ID remains a transaction precondition without extra writes.
+        useCase(
+            ApplyMemoBulkActionCommand(
+                memoIds = listOf(unchanged.id, changed.id),
+                action = MemoBulkAction.setFavorite(true)
+            )
+        )
+
+        // Assert
+        assertEquals(
+            listOf(unchanged.id, changed.id) to listOf(changed.id),
+            repository.activeBulkSaveExpectedIdBatches.single() to
+                repository.savedMemos.map { it.id }
+        )
+    }
+
+    @Test
     fun invokeThrowsBeforeWritingWhenMemoIsMissing() = runTest {
         // Arrange
         val repository = FakeMemoRepository(listOf(memoFixture(id = "memo-1")))
@@ -457,7 +483,7 @@ class ApplyMemoBulkActionUseCaseTest {
         )
 
         // Assert
-        coVerify(exactly = 0) { memoRepository.getActiveMemo(any()) }
+        coVerify(exactly = 0) { memoRepository.getActiveMemos(any()) }
         coVerify(exactly = 0) { tagRepository.getTag(any()) }
         verify(exactly = 0) { timeProvider.now() }
         confirmVerified(memoRepository, tagRepository, timeProvider)
@@ -469,7 +495,7 @@ class ApplyMemoBulkActionUseCaseTest {
         val memoRepository = mockk<MemoRepository>()
         val tagRepository = mockk<TagRepository>(relaxed = true)
         val timeProvider = mockk<CurrentTimeProvider>()
-        coEvery { memoRepository.getActiveMemo(MemoId("missing")) } returns null
+        coEvery { memoRepository.getActiveMemos(listOf(MemoId("missing"))) } returns emptyList()
         val useCase = ApplyMemoBulkActionUseCase(
             memoRepository = memoRepository,
             tagRepository = tagRepository,
@@ -488,8 +514,8 @@ class ApplyMemoBulkActionUseCaseTest {
 
         // Assert
         assertEquals(IllegalArgumentException::class.java, error?.javaClass)
-        coVerify(exactly = 1) { memoRepository.getActiveMemo(MemoId("missing")) }
-        coVerify(exactly = 0) { memoRepository.saveAllMemos(any()) }
+        coVerify(exactly = 1) { memoRepository.getActiveMemos(listOf(MemoId("missing"))) }
+        coVerify(exactly = 0) { memoRepository.saveAllActiveMemos(any(), any()) }
         confirmVerified(memoRepository, tagRepository)
     }
 
@@ -501,7 +527,7 @@ class ApplyMemoBulkActionUseCaseTest {
         val memoRepository = mockk<MemoRepository>()
         val tagRepository = mockk<TagRepository>()
         val timeProvider = mockk<CurrentTimeProvider>()
-        coEvery { memoRepository.getActiveMemo(memo.id) } returns memo
+        coEvery { memoRepository.getActiveMemos(listOf(memo.id)) } returns listOf(memo)
         coEvery { tagRepository.getTag(tagId) } returns null
         val useCase = ApplyMemoBulkActionUseCase(
             memoRepository = memoRepository,
@@ -521,14 +547,14 @@ class ApplyMemoBulkActionUseCaseTest {
 
         // Assert
         assertEquals(IllegalArgumentException::class.java, error?.javaClass)
-        coVerify(exactly = 1) { memoRepository.getActiveMemo(memo.id) }
+        coVerify(exactly = 1) { memoRepository.getActiveMemos(listOf(memo.id)) }
         coVerify(exactly = 1) { tagRepository.getTag(tagId) }
-        coVerify(exactly = 0) { memoRepository.saveAllMemos(any()) }
+        coVerify(exactly = 0) { memoRepository.saveAllActiveMemos(any(), any()) }
         confirmVerified(memoRepository, tagRepository)
     }
 
     @Test
-    fun invokeStopsSavingAfterFirstWriteFailure() = runTest {
+    fun errorBulkSaveFailureLeavesAllMemosUnchanged() = runTest {
         // Arrange
         val delegate = FakeMemoRepository(
             listOf(
@@ -537,10 +563,11 @@ class ApplyMemoBulkActionUseCaseTest {
                 memoFixture(id = "memo-3")
             )
         )
-        val repository = WriteFailingMemoRepository(delegate, saveFailureId = MemoId("memo-2"))
+        val repository = WriteFailingMemoRepository(delegate, failOnSave = true)
         val useCase = applyMemoBulkActionUseCase(memoRepository = repository)
 
         // Act
+        // Error: a failed bulk save does not persist a prefix of the input.
         runCatching {
             useCase(
                 ApplyMemoBulkActionCommand(
@@ -551,11 +578,14 @@ class ApplyMemoBulkActionUseCaseTest {
         }
 
         // Assert
-        assertEquals(listOf(MemoId("memo-1")), delegate.savedMemos.map { it.id })
+        assertEquals(
+            listOf(false, false, false),
+            delegate.currentMemos().map { it.isFavorite }
+        )
     }
 
     @Test
-    fun invokeStopsMovingAfterFirstWriteFailure() = runTest {
+    fun errorBulkTrashFailureLeavesAllMemosActive() = runTest {
         // Arrange
         val delegate = FakeMemoRepository(
             listOf(
@@ -564,10 +594,11 @@ class ApplyMemoBulkActionUseCaseTest {
                 memoFixture(id = "memo-3")
             )
         )
-        val repository = WriteFailingMemoRepository(delegate, moveFailureId = MemoId("memo-2"))
+        val repository = WriteFailingMemoRepository(delegate, failOnMove = true)
         val useCase = applyMemoBulkActionUseCase(memoRepository = repository)
 
         // Act
+        // Error: a failed bulk trash move does not persist a prefix of the input.
         runCatching {
             useCase(
                 ApplyMemoBulkActionCommand(
@@ -578,7 +609,10 @@ class ApplyMemoBulkActionUseCaseTest {
         }
 
         // Assert
-        assertEquals(listOf(MemoId("memo-1")), delegate.movedToTrash.map { it.memoId })
+        assertEquals(
+            listOf(null, null, null),
+            delegate.currentMemos().map { it.deletedAt }
+        )
     }
 
     private fun applyMemoBulkActionUseCase(
@@ -593,22 +627,21 @@ class ApplyMemoBulkActionUseCaseTest {
 
     private class WriteFailingMemoRepository(
         private val delegate: FakeMemoRepository,
-        private val saveFailureId: MemoId? = null,
-        private val moveFailureId: MemoId? = null
+        private val failOnSave: Boolean = false,
+        private val failOnMove: Boolean = false
     ) : MemoRepository by delegate {
 
-        override suspend fun saveMemo(memo: Memo) {
-            if (memo.id == saveFailureId) error("Failed to save memo.")
-            delegate.saveMemo(memo)
+        override suspend fun saveAllActiveMemos(
+            expectedActiveIds: List<MemoId>,
+            memos: List<Memo>
+        ) {
+            if (failOnSave) error("Failed to save memos.")
+            delegate.saveAllActiveMemos(expectedActiveIds, memos)
         }
 
-        override suspend fun saveAllMemos(memos: List<Memo>) {
-            memos.forEach { saveMemo(it) }
-        }
-
-        override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) {
-            if (id == moveFailureId) error("Failed to move memo.")
-            delegate.moveMemoToTrash(id, deletedAt)
+        override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) {
+            if (failOnMove) error("Failed to move memos.")
+            delegate.moveMemosToTrash(updates)
         }
     }
 

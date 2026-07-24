@@ -1,5 +1,6 @@
 package com.appvoyager.litememo.data.repository
 
+import com.appvoyager.litememo.data.local.dao.MemoBulkDao
 import com.appvoyager.litememo.data.local.dao.MemoDao
 import com.appvoyager.litememo.data.mapper.toDomain
 import com.appvoyager.litememo.data.mapper.toEntity
@@ -11,6 +12,7 @@ import com.appvoyager.litememo.data.util.deleteImageFiles
 import com.appvoyager.litememo.data.util.requireNoDuplicateIds
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoSummary
+import com.appvoyager.litememo.domain.model.MemoTrashUpdate
 import com.appvoyager.litememo.domain.model.value.MemoId
 import com.appvoyager.litememo.domain.model.value.SearchQuery
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
@@ -24,6 +26,7 @@ import javax.inject.Inject
 
 class RoomMemoRepository @Inject constructor(
     private val memoDao: MemoDao,
+    private val memoBulkDao: MemoBulkDao,
     private val memoImageStore: MemoImageStore
 ) : MemoRepository {
 
@@ -66,6 +69,15 @@ class RoomMemoRepository @Inject constructor(
         return memo.toDomain()
     }
 
+    override suspend fun getActiveMemos(ids: List<MemoId>): List<Memo> {
+        val distinctIds = ids.distinct()
+        if (distinctIds.isEmpty()) return emptyList()
+
+        val memoById = memoBulkDao.getActiveMemosWithRefs(distinctIds.map { it.value })
+            .associateBy { it.memo.id }
+        return distinctIds.mapNotNull { id -> memoById[id.value]?.toDomain() }
+    }
+
     override suspend fun saveMemo(memo: Memo) {
         val removedFileNames = memoDao.upsertMemoWithRefsAndCollectRemovedFileNames(
             memo = memo.toEntity(),
@@ -75,9 +87,41 @@ class RoomMemoRepository @Inject constructor(
         memoImageStore.deleteImageFiles(removedFileNames)
     }
 
+    override suspend fun saveAllActiveMemos(expectedActiveIds: List<MemoId>, memos: List<Memo>) {
+        val distinctExpectedActiveIds = expectedActiveIds.distinct()
+        val distinctMemos = memos.distinctBy { it.id }
+        val expectedActiveIdSet = distinctExpectedActiveIds.toSet()
+        require(distinctMemos.all { it.id in expectedActiveIdSet }) {
+            "Every saved memo must be included in expectedActiveIds."
+        }
+        require(distinctMemos.all { it.deletedAt == null }) {
+            "Only active memos can be saved through saveAllActiveMemos."
+        }
+        if (distinctExpectedActiveIds.isEmpty()) return
+
+        val removedFileNames = memoBulkDao.upsertAllActiveMemosWithRefsAndCollectRemovedFileNames(
+            expectedActiveIds = distinctExpectedActiveIds.map { it.value },
+            memos = distinctMemos.map { it.toEntity() },
+            tagRefsByMemoId = distinctMemos.toTagRefsByMemoId(),
+            imageRefsByMemoId = distinctMemos.toImageRefsByMemoId()
+        )
+        memoImageStore.deleteImageFiles(removedFileNames.distinct())
+    }
+
     override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) {
         val affected = memoDao.moveMemoToTrash(id.value, deletedAt.value)
         check(affected > 0) { "Memo not found or already trashed: ${id.value}" }
+    }
+
+    override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) {
+        val distinctUpdates = updates.distinctBy { it.memoId }
+        if (distinctUpdates.isEmpty()) return
+
+        memoBulkDao.moveMemosToTrash(
+            distinctUpdates.associate { update ->
+                update.memoId.value to update.deletedAt.value
+            }
+        )
     }
 
     override suspend fun restoreMemoFromTrash(id: MemoId) {
@@ -85,9 +129,25 @@ class RoomMemoRepository @Inject constructor(
         check(affected > 0) { "Memo not found or not in trash: ${id.value}" }
     }
 
+    override suspend fun restoreMemosFromTrash(ids: List<MemoId>) {
+        val distinctIds = ids.distinct()
+        if (distinctIds.isEmpty()) return
+        memoBulkDao.restoreMemosFromTrash(distinctIds.map { it.value })
+    }
+
     override suspend fun deleteMemoPermanently(id: MemoId) {
         val fileNames = memoDao.deleteMemoPermanentlyAndCollectImageFileNames(id.value)
         memoImageStore.deleteImageFiles(fileNames)
+    }
+
+    override suspend fun deleteMemosPermanently(ids: List<MemoId>) {
+        val distinctIds = ids.distinct()
+        if (distinctIds.isEmpty()) return
+
+        val fileNames = memoBulkDao.deleteMemosPermanentlyAndCollectImageFileNames(
+            distinctIds.map { it.value }
+        )
+        memoImageStore.deleteImageFiles(fileNames.distinct())
     }
 
     override suspend fun discardMemo(id: MemoId) {

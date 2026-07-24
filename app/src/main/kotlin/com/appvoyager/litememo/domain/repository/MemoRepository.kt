@@ -2,6 +2,7 @@ package com.appvoyager.litememo.domain.repository
 
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoSummary
+import com.appvoyager.litememo.domain.model.MemoTrashUpdate
 import com.appvoyager.litememo.domain.model.value.MemoId
 import com.appvoyager.litememo.domain.model.value.SearchQuery
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
@@ -22,13 +23,23 @@ interface MemoRepository {
 
     suspend fun getActiveMemo(id: MemoId): Memo?
 
+    suspend fun getActiveMemos(ids: List<MemoId>): List<Memo>
+
     suspend fun saveMemo(memo: Memo)
+
+    suspend fun saveAllActiveMemos(expectedActiveIds: List<MemoId>, memos: List<Memo>)
 
     suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis)
 
+    suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>)
+
     suspend fun restoreMemoFromTrash(id: MemoId)
 
+    suspend fun restoreMemosFromTrash(ids: List<MemoId>)
+
     suspend fun deleteMemoPermanently(id: MemoId)
+
+    suspend fun deleteMemosPermanently(ids: List<MemoId>)
 
     suspend fun discardMemo(id: MemoId)
 

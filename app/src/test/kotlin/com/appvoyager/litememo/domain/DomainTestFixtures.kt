@@ -4,6 +4,7 @@ import com.appvoyager.litememo.domain.model.ExportData
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoImage
 import com.appvoyager.litememo.domain.model.MemoSummary
+import com.appvoyager.litememo.domain.model.MemoTrashUpdate
 import com.appvoyager.litememo.domain.model.StagedMemoImport
 import com.appvoyager.litememo.domain.model.Tag
 import com.appvoyager.litememo.domain.model.value.ExportFileReference
@@ -93,6 +94,7 @@ class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepositor
 
     private val memos = MutableStateFlow(initialMemos)
     val savedMemos = mutableListOf<Memo>()
+    val activeBulkSaveExpectedIdBatches = mutableListOf<List<MemoId>>()
     val movedToTrash = mutableListOf<TrashMoveRecord>()
     val restoredIds = mutableListOf<MemoId>()
     val permanentlyDeletedIds = mutableListOf<MemoId>()
@@ -147,15 +149,66 @@ class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepositor
     override suspend fun getActiveMemo(id: MemoId): Memo? =
         memos.value.firstOrNull { it.id == id && it.deletedAt == null }
 
+    override suspend fun getActiveMemos(ids: List<MemoId>): List<Memo> {
+        val activeMemosById = memos.value
+            .filter { it.deletedAt == null }
+            .associateBy { it.id }
+        return ids.distinct().mapNotNull(activeMemosById::get)
+    }
+
     override suspend fun saveMemo(memo: Memo) {
         savedMemos += memo
         memos.value = memos.value.filterNot { it.id == memo.id } + memo
+    }
+
+    override suspend fun saveAllActiveMemos(expectedActiveIds: List<MemoId>, memos: List<Memo>) {
+        val distinctExpectedActiveIds = expectedActiveIds.distinct()
+        val distinctMemos = memos.distinctBy { it.id }
+        val currentMemos = this.memos.value
+        val activeMemoIds = currentMemos
+            .filter { it.deletedAt == null }
+            .mapTo(mutableSetOf()) { it.id }
+        distinctExpectedActiveIds.forEach { id ->
+            require(id in activeMemoIds) {
+                "Memo not found or not active: ${id.value}"
+            }
+        }
+        val expectedActiveIdSet = distinctExpectedActiveIds.toSet()
+        require(distinctMemos.all { it.id in expectedActiveIdSet }) {
+            "Every saved memo must be included in expectedActiveIds."
+        }
+
+        activeBulkSaveExpectedIdBatches += distinctExpectedActiveIds
+        savedMemos += distinctMemos
+        val updatesById = distinctMemos.associateBy { it.id }
+        this.memos.value = currentMemos.map { memo -> updatesById[memo.id] ?: memo }
     }
 
     override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) {
         movedToTrash += TrashMoveRecord(memoId = id, deletedAt = deletedAt)
         memos.value = memos.value.map { memo ->
             if (memo.id == id && memo.deletedAt == null) memo.copy(deletedAt = deletedAt) else memo
+        }
+    }
+
+    override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) {
+        val distinctUpdates = updates.distinctBy { it.memoId }
+        val currentMemos = memos.value
+        val activeMemoIds = currentMemos
+            .filter { it.deletedAt == null }
+            .mapTo(mutableSetOf()) { it.id }
+        distinctUpdates.forEach { update ->
+            require(update.memoId in activeMemoIds) {
+                "Memo not found or not active: ${update.memoId.value}"
+            }
+        }
+
+        movedToTrash += distinctUpdates.map { update ->
+            TrashMoveRecord(memoId = update.memoId, deletedAt = update.deletedAt)
+        }
+        val updatesById = distinctUpdates.associateBy { it.memoId }
+        memos.value = currentMemos.map { memo ->
+            updatesById[memo.id]?.let { update -> memo.copy(deletedAt = update.deletedAt) } ?: memo
         }
     }
 
@@ -166,12 +219,48 @@ class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepositor
         }
     }
 
+    override suspend fun restoreMemosFromTrash(ids: List<MemoId>) {
+        val distinctIds = ids.distinct()
+        val currentMemos = memos.value
+        val trashedMemoIds = currentMemos
+            .filter { it.deletedAt != null }
+            .mapTo(mutableSetOf()) { it.id }
+        distinctIds.forEach { id ->
+            require(id in trashedMemoIds) {
+                "Memo not found or not in trash: ${id.value}"
+            }
+        }
+
+        restoredIds += distinctIds
+        val restoredIdSet = distinctIds.toSet()
+        memos.value = currentMemos.map { memo ->
+            if (memo.id in restoredIdSet) memo.copy(deletedAt = null) else memo
+        }
+    }
+
     override suspend fun deleteMemoPermanently(id: MemoId) {
         val memo = requireNotNull(memos.value.firstOrNull { it.id == id && it.deletedAt != null }) {
             "Memo not found or not in trash: ${id.value}"
         }
         permanentlyDeletedIds += id
         memos.value = memos.value.filterNot { it.id == memo.id }
+    }
+
+    override suspend fun deleteMemosPermanently(ids: List<MemoId>) {
+        val distinctIds = ids.distinct()
+        val currentMemos = memos.value
+        val trashedMemoIds = currentMemos
+            .filter { it.deletedAt != null }
+            .mapTo(mutableSetOf()) { it.id }
+        distinctIds.forEach { id ->
+            require(id in trashedMemoIds) {
+                "Memo not found or not in trash: ${id.value}"
+            }
+        }
+
+        permanentlyDeletedIds += distinctIds
+        val deletedIdSet = distinctIds.toSet()
+        memos.value = currentMemos.filterNot { it.id in deletedIdSet }
     }
 
     override suspend fun discardMemo(id: MemoId) {

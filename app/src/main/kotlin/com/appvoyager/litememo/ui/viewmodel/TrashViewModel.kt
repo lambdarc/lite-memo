@@ -5,11 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.Tag
 import com.appvoyager.litememo.domain.model.value.MemoId
-import com.appvoyager.litememo.domain.usecase.DeleteMemoPermanentlyUseCase
+import com.appvoyager.litememo.domain.usecase.DeleteMemosPermanentlyUseCase
 import com.appvoyager.litememo.domain.usecase.ObserveTagsUseCase
 import com.appvoyager.litememo.domain.usecase.ObserveTrashedMemosUseCase
 import com.appvoyager.litememo.domain.usecase.PurgeExpiredTrashedMemosUseCase
-import com.appvoyager.litememo.domain.usecase.RestoreMemoFromTrashUseCase
+import com.appvoyager.litememo.domain.usecase.RestoreMemosFromTrashUseCase
 import com.appvoyager.litememo.ui.model.TagUiModel
 import com.appvoyager.litememo.ui.model.TrashedMemoUiModel
 import com.appvoyager.litememo.ui.state.TrashSelectionUiState
@@ -36,8 +36,8 @@ import javax.inject.Inject
 class TrashViewModel @Inject constructor(
     private val observeTrashedMemosUseCase: ObserveTrashedMemosUseCase,
     private val observeTagsUseCase: ObserveTagsUseCase,
-    private val restoreMemoFromTrashUseCase: RestoreMemoFromTrashUseCase,
-    private val deleteMemoPermanentlyUseCase: DeleteMemoPermanentlyUseCase,
+    private val restoreMemosFromTrashUseCase: RestoreMemosFromTrashUseCase,
+    private val deleteMemosPermanentlyUseCase: DeleteMemosPermanentlyUseCase,
     private val purgeExpiredTrashedMemosUseCase: PurgeExpiredTrashedMemosUseCase
 ) : ViewModel() {
 
@@ -125,7 +125,7 @@ class TrashViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                memoIds.forEach { id -> restoreMemoFromTrashUseCase(id) }
+                restoreMemosFromTrashUseCase(memoIds)
                 clearSelection()
             } catch (e: CancellationException) {
                 throw e
@@ -157,7 +157,7 @@ class TrashViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                memoIds.forEach { id -> deleteMemoPermanentlyUseCase(id) }
+                deleteMemosPermanentlyUseCase(memoIds)
                 showEmptyTrashDialog.value = false
             } catch (e: CancellationException) {
                 throw e
