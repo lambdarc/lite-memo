@@ -20,9 +20,9 @@ import com.appvoyager.litememo.ui.model.MemoUiModel
 import com.appvoyager.litememo.ui.model.TagUiModel
 import com.appvoyager.litememo.ui.state.HomeBulkTagDialogUiState
 import com.appvoyager.litememo.ui.state.HomeFilterUiState
-import com.appvoyager.litememo.ui.state.HomeSelectionUiState
 import com.appvoyager.litememo.ui.state.HomeUiState
 import com.appvoyager.litememo.ui.state.MemoSearchUiStateHolder
+import com.appvoyager.litememo.ui.state.MemoSelectionUiState
 import com.appvoyager.litememo.ui.state.SearchUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -55,7 +56,7 @@ class HomeViewModel @Inject constructor(
 
     private val selectedFilter = MutableStateFlow<HomeFilterUiState>(HomeFilterUiState.All)
     private val memoSearch = MemoSearchUiStateHolder(searchMemosUseCase)
-    private val selection = MutableStateFlow(HomeSelectionUiState())
+    private val selection = MutableStateFlow(MemoSelectionUiState())
     private val bulkTagDialog = MutableStateFlow(HomeBulkTagDialogUiState())
     private val retryTrigger = MutableStateFlow(false)
     private var isBulkActionInFlight = false
@@ -169,24 +170,18 @@ class HomeViewModel @Inject constructor(
 
     fun startSelection(memoId: MemoId) {
         bulkTagDialog.value = HomeBulkTagDialogUiState()
-        selection.value = HomeSelectionUiState(selectedMemoIds = setOf(memoId))
+        selection.update { it.selectOnly(memoId) }
     }
 
     fun toggleMemoSelection(memoId: MemoId) {
-        val current = selection.value.selectedMemoIds
-        val next = if (memoId in current) {
-            current - memoId
-        } else {
-            current + memoId
-        }
-        selection.value = HomeSelectionUiState(selectedMemoIds = next)
-        if (next.isEmpty()) {
+        val next = selection.updateAndGet { it.toggle(memoId) }
+        if (!next.isActive) {
             bulkTagDialog.value = HomeBulkTagDialogUiState()
         }
     }
 
     fun clearSelection() {
-        selection.value = HomeSelectionUiState()
+        selection.update { it.clear() }
         bulkTagDialog.value = HomeBulkTagDialogUiState()
     }
 
@@ -278,6 +273,6 @@ class HomeViewModel @Inject constructor(
 private data class HomeUiControls(
     val filter: HomeFilterUiState,
     val search: SearchUiState,
-    val selection: HomeSelectionUiState,
+    val selection: MemoSelectionUiState,
     val tagDialog: HomeBulkTagDialogUiState
 )

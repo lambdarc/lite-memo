@@ -1,6 +1,5 @@
 package com.appvoyager.litememo.ui.state
 
-import com.appvoyager.litememo.domain.model.value.MemoId
 import com.appvoyager.litememo.domain.model.value.TagId
 import com.appvoyager.litememo.ui.model.MemoUiModel
 import com.appvoyager.litememo.ui.model.TagUiModel
@@ -10,7 +9,7 @@ data class HomeUiState(
     val hasError: Boolean = false,
     val selectedFilter: HomeFilterUiState = HomeFilterUiState.All,
     val search: SearchUiState = SearchUiState(),
-    val selection: HomeSelectionUiState = HomeSelectionUiState(),
+    val selection: MemoSelectionUiState = MemoSelectionUiState(),
     val allSelectedFavorite: Boolean = false,
     val allSelectedTagIds: Set<TagId> = emptySet(),
     val bulkTagDialog: HomeBulkTagDialogUiState = HomeBulkTagDialogUiState(),
@@ -23,16 +22,6 @@ sealed interface HomeFilterUiState {
     data object Unorganized : HomeFilterUiState
     data object Favorite : HomeFilterUiState
     data class ByTag(val tagId: TagId) : HomeFilterUiState
-}
-
-data class HomeSelectionUiState(val selectedMemoIds: Set<MemoId> = emptySet()) {
-    val isActive: Boolean
-        get() = selectedMemoIds.isNotEmpty()
-
-    val selectedCount: Int
-        get() = selectedMemoIds.size
-
-    fun contains(memoId: MemoId): Boolean = memoId in selectedMemoIds
 }
 
 data class HomeBulkTagDialogUiState(val isVisible: Boolean = false)
