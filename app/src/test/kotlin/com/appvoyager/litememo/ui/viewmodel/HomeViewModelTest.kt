@@ -367,6 +367,49 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun stateTransitionStartSelectionClosesBulkTagDialog() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = homeViewModel(
+            memos = listOf(memoFixture(id = "memo-1"), memoFixture(id = "memo-2"))
+        )
+        advanceUntilIdle()
+        viewModel.startSelection(MemoId("memo-1"))
+        viewModel.requestToggleTagForSelectedMemos()
+        viewModel.uiState.first { it.bulkTagDialog.isVisible }
+
+        // Act
+        // StateTransition: starting a new selection closes the bulk tag dialog.
+        viewModel.startSelection(MemoId("memo-2"))
+        advanceUntilIdle()
+        val state = viewModel.uiState.first {
+            it.selection.selectedMemoIds == setOf(MemoId("memo-2"))
+        }
+
+        // Assert
+        assertEquals(false, state.bulkTagDialog.isVisible)
+    }
+
+    @Test
+    fun stateTransitionToggleMemoSelectionClosesBulkTagDialogWhenSelectionBecomesEmpty() =
+        runTest(dispatcher) {
+            // Arrange
+            val viewModel = homeViewModel(memos = listOf(memoFixture(id = "memo-1")))
+            advanceUntilIdle()
+            viewModel.startSelection(MemoId("memo-1"))
+            viewModel.requestToggleTagForSelectedMemos()
+            viewModel.uiState.first { it.bulkTagDialog.isVisible }
+
+            // Act
+            // StateTransition: deselecting the last memo closes the bulk tag dialog.
+            viewModel.toggleMemoSelection(MemoId("memo-1"))
+            advanceUntilIdle()
+            val state = viewModel.uiState.first { !it.selection.isActive }
+
+            // Assert
+            assertEquals(false, state.bulkTagDialog.isVisible)
+        }
+
+    @Test
     fun toggleMemoSelectionClearsSelectionWhenLastSelectedMemoIsToggled() = runTest(dispatcher) {
         // Arrange
         val viewModel = homeViewModel(memos = listOf(memoFixture(id = "memo-1")))
