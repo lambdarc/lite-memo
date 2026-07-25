@@ -466,7 +466,7 @@ class RoomDaoInstrumentedTest {
     }
 
     @Test
-    fun errorSaveAllActiveMemosRejectsMixedStateBeforeReplacingAnyMemo() = runTest {
+    fun errorSaveActiveMemoBulkWritesRejectsMixedStateBeforeReplacingAnyMemo() = runTest {
         // Arrange
         memoDao.upsertMemo(memoEntity(id = "memo-active", title = "Active before"))
         memoDao.upsertMemo(
@@ -476,8 +476,11 @@ class RoomDaoInstrumentedTest {
         // Act
         // Error: every memo must still be active before any replacement begins
         val error = runCatching {
-            memoBulkDao.upsertAllActiveMemosWithRefsAndCollectRemovedFileNames(
-                expectedActiveIds = listOf("memo-active", "memo-trashed"),
+            memoBulkDao.upsertActiveMemosWithVersionCheckAndCollectRemovedFileNames(
+                expectedVersions = mapOf(
+                    "memo-active" to 1_000L,
+                    "memo-trashed" to 1_000L
+                ),
                 memos = listOf(
                     memoEntity(id = "memo-active", title = "Active after")
                 ),
