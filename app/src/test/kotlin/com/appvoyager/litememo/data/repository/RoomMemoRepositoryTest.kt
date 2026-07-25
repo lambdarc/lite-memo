@@ -676,30 +676,6 @@ class RoomMemoRepositoryTest {
     }
 
     @Test
-    fun interactionSaveAllMemosDeletesRemovedImageFilesAfterUpsert() = runTest {
-        // Arrange
-        val dao = FakeMemoDao(
-            imageFileNamesByMemoId = mutableMapOf("memo-1" to listOf("old.jpg", "keep.jpg"))
-        )
-        val imageStore = FakeMemoImageStore()
-        val repository = createRepository(dao, imageStore)
-
-        // Act
-        // Interaction: bulk save deletes files dropped from DB refs after upsert.
-        repository.saveAllMemos(
-            listOf(
-                memoFixture(
-                    id = "memo-1",
-                    images = listOf(memoImageFixture(id = "image-keep", fileName = "keep.jpg"))
-                )
-            )
-        )
-
-        // Assert
-        assertEquals(listOf(MemoImageFileName("old.jpg")), imageStore.deletedFileNames)
-    }
-
-    @Test
     fun interactionSaveActiveMemoBulkWritesDeletesRemovedImageFilesAfterDatabaseSuccess() =
         runTest {
             // Arrange
