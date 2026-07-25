@@ -7,16 +7,11 @@ import com.appvoyager.litememo.domain.MutableTimeProvider
 import com.appvoyager.litememo.domain.epochMillis
 import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.memoImageFixture
-import com.appvoyager.litememo.domain.model.ActiveMemoBulkWrite
 import com.appvoyager.litememo.domain.model.Memo
-import com.appvoyager.litememo.domain.model.MemoSummary
-import com.appvoyager.litememo.domain.model.MemoTrashUpdate
 import com.appvoyager.litememo.domain.model.Tag
-import com.appvoyager.litememo.domain.model.value.MemoId
 import com.appvoyager.litememo.domain.model.value.SearchQuery
 import com.appvoyager.litememo.domain.model.value.TagId
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
-import com.appvoyager.litememo.domain.model.value.TimestampRange
 import com.appvoyager.litememo.domain.repository.FakeUserSettingsRepository
 import com.appvoyager.litememo.domain.repository.MemoRepository
 import com.appvoyager.litememo.domain.tagFixture
@@ -341,7 +336,7 @@ class CalendarViewModelTest {
     }
 
     private class RetryableSearchMemoRepository(private val delegate: FakeMemoRepository) :
-        MemoRepository {
+        MemoRepository by delegate {
 
         private var searchFails = true
 
@@ -349,57 +344,11 @@ class CalendarViewModelTest {
             searchFails = false
         }
 
-        override fun observeActiveMemos(): Flow<List<Memo>> = delegate.observeActiveMemos()
-
-        override fun observeRecentActiveMemos(limit: Int): Flow<List<MemoSummary>> =
-            delegate.observeRecentActiveMemos(limit)
-
         override fun observeActiveMemosBySearchQuery(query: SearchQuery): Flow<List<Memo>> =
             if (searchFails) {
                 flow { throw IllegalStateException("Search failed.") }
             } else {
                 delegate.observeActiveMemosBySearchQuery(query)
             }
-
-        override fun observeActiveMemosCreatedBetween(range: TimestampRange): Flow<List<Memo>> =
-            delegate.observeActiveMemosCreatedBetween(range)
-
-        override fun observeTrashedMemos(): Flow<List<Memo>> = delegate.observeTrashedMemos()
-
-        override suspend fun getActiveMemo(id: MemoId): Memo? = delegate.getActiveMemo(id)
-
-        override suspend fun getActiveMemos(ids: List<MemoId>): List<Memo> =
-            delegate.getActiveMemos(ids)
-
-        override suspend fun saveMemo(memo: Memo) = delegate.saveMemo(memo)
-
-        override suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>) =
-            delegate.saveActiveMemoBulkWrites(writes)
-
-        override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) =
-            delegate.moveMemoToTrash(id, deletedAt)
-
-        override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) =
-            delegate.moveMemosToTrash(updates)
-
-        override suspend fun restoreMemoFromTrash(id: MemoId) = delegate.restoreMemoFromTrash(id)
-
-        override suspend fun restoreMemosFromTrash(ids: List<MemoId>) =
-            delegate.restoreMemosFromTrash(ids)
-
-        override suspend fun deleteMemoPermanently(id: MemoId) = delegate.deleteMemoPermanently(id)
-
-        override suspend fun deleteMemosPermanently(ids: List<MemoId>) =
-            delegate.deleteMemosPermanently(ids)
-
-        override suspend fun discardMemo(id: MemoId) = delegate.discardMemo(id)
-
-        override suspend fun deleteTrashedMemosDeletedAtOrBefore(cutoff: TimestampMillis) =
-            delegate.deleteTrashedMemosDeletedAtOrBefore(cutoff)
-
-        override suspend fun getAllActiveMemos(): List<Memo> = delegate.getAllActiveMemos()
-
-        override suspend fun saveAllMemos(memos: List<Memo>) = delegate.saveAllMemos(memos)
-
     }
 }
