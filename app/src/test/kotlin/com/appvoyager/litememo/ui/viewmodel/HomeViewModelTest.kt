@@ -10,6 +10,7 @@ import com.appvoyager.litememo.domain.memoImageFixture
 import com.appvoyager.litememo.domain.model.ActiveMemoBulkWrite
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoSummary
+import com.appvoyager.litememo.domain.model.MemoTrashUpdate
 import com.appvoyager.litememo.domain.model.Tag
 import com.appvoyager.litememo.domain.model.value.MemoId
 import com.appvoyager.litememo.domain.model.value.SearchQuery
@@ -34,6 +35,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -847,8 +849,7 @@ class HomeViewModelTest {
         )
     }
 
-    private class FailingMemoRepository(private val throwable: Throwable) :
-        MemoRepository by FakeMemoRepository() {
+    private class FailingMemoRepository(private val throwable: Throwable) : MemoRepository {
 
         override fun observeActiveMemos(): Flow<List<Memo>> = flow {
             throw throwable
@@ -865,14 +866,89 @@ class HomeViewModelTest {
         override fun observeActiveMemosCreatedBetween(range: TimestampRange): Flow<List<Memo>> =
             flow { throw throwable }
 
+        override fun observeTrashedMemos(): Flow<List<Memo>> = flowOf(emptyList())
+
+        override suspend fun getActiveMemo(id: MemoId): Memo? = null
+
+        override suspend fun getActiveMemos(ids: List<MemoId>): List<Memo> = emptyList()
+
+        override suspend fun saveMemo(memo: Memo) = Unit
+
+        override suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>) = Unit
+
+        override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) = Unit
+
+        override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) = Unit
+
+        override suspend fun restoreMemoFromTrash(id: MemoId) = Unit
+
+        override suspend fun restoreMemosFromTrash(ids: List<MemoId>) = Unit
+
+        override suspend fun deleteMemoPermanently(id: MemoId) = Unit
+
+        override suspend fun deleteMemosPermanently(ids: List<MemoId>) = Unit
+
+        override suspend fun discardMemo(id: MemoId) = Unit
+
+        override suspend fun deleteTrashedMemosDeletedAtOrBefore(cutoff: TimestampMillis) = Unit
+
+        override suspend fun getAllActiveMemos(): List<Memo> = emptyList()
+
+        override suspend fun saveAllMemos(memos: List<Memo>) = Unit
+
     }
 
-    private class SaveFailingMemoRepository(memo: Memo) :
-        MemoRepository by FakeMemoRepository(listOf(memo)) {
+    private class SaveFailingMemoRepository(private val memo: Memo) : MemoRepository {
+
+        override fun observeActiveMemos(): Flow<List<Memo>> = flowOf(listOf(memo))
+
+        override fun observeRecentActiveMemos(limit: Int): Flow<List<MemoSummary>> = flowOf(
+            listOf(memo).take(limit).map { item ->
+                MemoSummary(
+                    id = item.id,
+                    title = item.title,
+                    body = item.body,
+                    isFavorite = item.isFavorite
+                )
+            }
+        )
+
+        override fun observeActiveMemosBySearchQuery(query: SearchQuery): Flow<List<Memo>> =
+            flowOf(emptyList())
+
+        override fun observeActiveMemosCreatedBetween(range: TimestampRange): Flow<List<Memo>> =
+            flowOf(emptyList())
+
+        override fun observeTrashedMemos(): Flow<List<Memo>> = flowOf(emptyList())
+
+        override suspend fun getActiveMemo(id: MemoId): Memo? = memo.takeIf { it.id == id }
+
+        override suspend fun getActiveMemos(ids: List<MemoId>): List<Memo> =
+            listOf(memo).filter { it.id in ids }
 
         override suspend fun saveMemo(memo: Memo): Unit = error("Failed to save memo.")
 
         override suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>): Unit =
             error("Failed to save active memos.")
+
+        override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) = Unit
+
+        override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) = Unit
+
+        override suspend fun restoreMemoFromTrash(id: MemoId) = Unit
+
+        override suspend fun restoreMemosFromTrash(ids: List<MemoId>) = Unit
+
+        override suspend fun deleteMemoPermanently(id: MemoId) = Unit
+
+        override suspend fun deleteMemosPermanently(ids: List<MemoId>) = Unit
+
+        override suspend fun discardMemo(id: MemoId) = Unit
+
+        override suspend fun deleteTrashedMemosDeletedAtOrBefore(cutoff: TimestampMillis) = Unit
+
+        override suspend fun getAllActiveMemos(): List<Memo> = emptyList()
+
+        override suspend fun saveAllMemos(memos: List<Memo>): Unit = error("Failed to save memos.")
     }
 }
