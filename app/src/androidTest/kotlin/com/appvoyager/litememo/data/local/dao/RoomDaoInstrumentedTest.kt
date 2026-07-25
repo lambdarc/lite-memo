@@ -498,47 +498,42 @@ class RoomDaoInstrumentedTest {
     }
 
     @Test
-    fun errorRestoreMemosFromTrashRejectsMixedStateBeforeWriting() = runTest {
+    fun boundaryRestoreMemosFromTrashSkipsActiveMembers() = runTest {
         // Arrange
         memoDao.upsertMemo(memoEntity(id = "memo-trashed", deletedAt = 500L))
         memoDao.upsertMemo(memoEntity(id = "memo-active"))
 
         // Act
-        // Error: an active member rejects the whole restore operation
-        val error = runCatching {
-            memoBulkDao.restoreMemosFromTrash(listOf("memo-trashed", "memo-active"))
-        }.exceptionOrNull()
+        // Boundary: active members are skipped while trashed members are restored
+        memoBulkDao.restoreMemosFromTrash(listOf("memo-trashed", "memo-active"))
+        val activeIds = memoDao.observeActiveMemosWithRefs().first().map { it.memo.id }.sorted()
         val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
 
         // Assert
         assertEquals(
-            IllegalStateException::class.java to listOf("memo-trashed"),
-            error?.javaClass to trashedIds
+            listOf("memo-active", "memo-trashed") to emptyList<String>(),
+            activeIds to trashedIds
         )
     }
 
     @Test
-    fun errorDeleteMemosPermanentlyRejectsMixedStateBeforeWriting() = runTest {
+    fun boundaryDeleteMemosPermanentlySkipsActiveMembers() = runTest {
         // Arrange
         memoDao.upsertMemo(memoEntity(id = "memo-trashed", deletedAt = 500L))
         memoDao.upsertMemo(memoEntity(id = "memo-active"))
 
         // Act
-        // Error: an active member rejects the whole permanent delete operation
-        val error = runCatching {
-            memoBulkDao.deleteMemosPermanentlyAndCollectImageFileNames(
-                listOf("memo-trashed", "memo-active")
-            )
-        }.exceptionOrNull()
-        val remainingIds = (
-            memoDao.observeActiveMemosWithRefs().first() +
-                memoDao.observeTrashedMemosWithRefs().first()
-            ).map { it.memo.id }.sorted()
+        // Boundary: active members are preserved while trashed members are deleted
+        memoBulkDao.deleteMemosPermanentlyAndCollectImageFileNames(
+            listOf("memo-trashed", "memo-active")
+        )
+        val activeIds = memoDao.observeActiveMemosWithRefs().first().map { it.memo.id }
+        val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
 
         // Assert
         assertEquals(
-            IllegalStateException::class.java to listOf("memo-active", "memo-trashed"),
-            error?.javaClass to remainingIds
+            listOf("memo-active") to emptyList<String>(),
+            activeIds to trashedIds
         )
     }
 

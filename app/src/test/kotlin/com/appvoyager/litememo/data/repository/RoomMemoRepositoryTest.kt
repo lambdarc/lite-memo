@@ -960,6 +960,7 @@ class RoomMemoRepositoryTest {
 
         override suspend fun getActiveMemosWithRefsBatch(ids: List<String>): List<MemoWithRefs> {
             activeMemoReadCount += 1
+            // Roomの行順は保証されないため、意図的に反転して入力順への復元を検証する。
             return memosWithRefs.value
                 .filter { it.memo.id in ids && it.memo.deletedAt == null }
                 .asReversed()

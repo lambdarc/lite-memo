@@ -22,6 +22,7 @@ import io.mockk.confirmVerified
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -572,20 +573,25 @@ class ApplyMemoBulkActionUseCaseTest {
 
         // Act
         // Error: a per-item write regression would apply memo-1/memo-2 or issue multiple calls.
-        runCatching {
+        val error = runCatching {
             useCase(
                 ApplyMemoBulkActionCommand(
                     memoIds = listOf(MemoId("memo-1"), MemoId("memo-2"), MemoId("memo-3")),
                     action = MemoBulkAction.setFavorite(true)
                 )
             )
-        }
+        }.exceptionOrNull()
 
         // Assert
-        assertEquals(
-            1 to listOf(false, false, false),
-            repository.bulkWriteCallCount to
-                delegate.currentMemos().sortedBy { it.id.value }.map { it.isFavorite }
+        assertAll(
+            { assertEquals(IllegalStateException::class.java, error?.javaClass) },
+            {
+                assertEquals(
+                    1 to listOf(false, false, false),
+                    repository.bulkWriteCallCount to
+                        delegate.currentMemos().sortedBy { it.id.value }.map { it.isFavorite }
+                )
+            }
         )
     }
 
@@ -607,20 +613,25 @@ class ApplyMemoBulkActionUseCaseTest {
 
         // Act
         // Error: a per-item trash regression would trash memo-1/memo-2 or issue multiple calls.
-        runCatching {
+        val error = runCatching {
             useCase(
                 ApplyMemoBulkActionCommand(
                     memoIds = listOf(MemoId("memo-1"), MemoId("memo-2"), MemoId("memo-3")),
                     action = MemoBulkAction.moveToTrash()
                 )
             )
-        }
+        }.exceptionOrNull()
 
         // Assert
-        assertEquals(
-            1 to listOf<TimestampMillis?>(null, null, null),
-            repository.bulkTrashCallCount to
-                delegate.currentMemos().sortedBy { it.id.value }.map { it.deletedAt }
+        assertAll(
+            { assertEquals(IllegalStateException::class.java, error?.javaClass) },
+            {
+                assertEquals(
+                    1 to listOf<TimestampMillis?>(null, null, null),
+                    repository.bulkTrashCallCount to
+                        delegate.currentMemos().sortedBy { it.id.value }.map { it.deletedAt }
+                )
+            }
         )
     }
 

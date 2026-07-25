@@ -159,9 +159,9 @@ interface MemoBulkDao : MemoDao {
         return distinctIds.filter { it in trashedIdSet }
     }
 
-}
+    private fun sameImageRefs(
+        current: List<MemoImageEntity>,
+        incoming: List<MemoImageEntity>
+    ): Boolean = current.sortedBy { it.position } == incoming.sortedBy { it.position }
 
-private fun sameImageRefs(
-    current: List<MemoImageEntity>,
-    incoming: List<MemoImageEntity>
-): Boolean = current.sortedBy { it.position } == incoming.sortedBy { it.position }
+}

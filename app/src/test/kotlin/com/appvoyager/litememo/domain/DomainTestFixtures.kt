@@ -164,6 +164,13 @@ class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepositor
 
     override suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>) {
         if (writes.isEmpty()) return
+        val updatedMemos = writes
+            .filterIsInstance<ActiveMemoBulkWrite.Update>()
+            .map { it.updatedMemo }
+        require(updatedMemos.all { it.deletedAt == null }) {
+            "Only active memos can be written through the active bulk write."
+        }
+
         val currentMemos = this.memos.value
         val activeMemoById = currentMemos
             .filter { it.deletedAt == null }
@@ -175,12 +182,6 @@ class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepositor
             check(current.updatedAt == write.expectedUpdatedAt) {
                 "Memo was modified since it was read: ${write.memoId.value}"
             }
-        }
-        val updatedMemos = writes
-            .filterIsInstance<ActiveMemoBulkWrite.Update>()
-            .map { it.updatedMemo }
-        require(updatedMemos.all { it.deletedAt == null }) {
-            "Only active memos can be written through the active bulk write."
         }
 
         activeBulkSaveExpectedIdBatches += writes.map { it.memoId }
@@ -197,6 +198,9 @@ class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepositor
     }
 
     override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) {
+        require(updates.map { it.memoId }.toSet().size == updates.size) {
+            "Duplicate memo IDs are not allowed."
+        }
         val currentMemos = memos.value
         val activeMemoIds = currentMemos
             .filter { it.deletedAt == null }
@@ -220,6 +224,9 @@ class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepositor
     }
 
     override suspend fun restoreMemosFromTrash(ids: List<MemoId>) {
+        require(ids.toSet().size == ids.size) {
+            "Duplicate memo IDs are not allowed."
+        }
         val currentMemos = memos.value
         val trashedMemoIds = currentMemos
             .filter { it.deletedAt != null }
@@ -242,6 +249,9 @@ class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepositor
     }
 
     override suspend fun deleteMemosPermanently(ids: List<MemoId>) {
+        require(ids.toSet().size == ids.size) {
+            "Duplicate memo IDs are not allowed."
+        }
         val currentMemos = memos.value
         val trashedMemoIds = currentMemos
             .filter { it.deletedAt != null }

@@ -15,7 +15,8 @@ class MemoBulkDaoTest {
             activeMemosById = mapOf(
                 "memo-1" to memoWithRefs(id = "memo-1"),
                 "memo-2" to memoWithRefs(id = "memo-2")
-            )
+            ),
+            reverseActiveMemoQueryResults = true
         )
 
         // Act

@@ -82,7 +82,7 @@ class ApplyMemoBulkActionUseCase @Inject constructor(
 
     private suspend fun setFavorite(memos: List<Memo>, isFavorite: Boolean) {
         val now = currentTimeProvider.now()
-        saveBulkWrites(memos) { memo ->
+        saveActiveMemoBulkWrites(memos) { memo ->
             if (memo.isFavorite == isFavorite) {
                 null
             } else {
@@ -96,7 +96,7 @@ class ApplyMemoBulkActionUseCase @Inject constructor(
 
     private suspend fun addTag(memos: List<Memo>, tagId: TagId) {
         val now = currentTimeProvider.now()
-        saveBulkWrites(memos) { memo ->
+        saveActiveMemoBulkWrites(memos) { memo ->
             if (tagId in memo.tagIds) {
                 null
             } else {
@@ -110,7 +110,7 @@ class ApplyMemoBulkActionUseCase @Inject constructor(
 
     private suspend fun removeTag(memos: List<Memo>, tagId: TagId) {
         val now = currentTimeProvider.now()
-        saveBulkWrites(memos) { memo ->
+        saveActiveMemoBulkWrites(memos) { memo ->
             if (tagId !in memo.tagIds) {
                 null
             } else {
@@ -122,9 +122,12 @@ class ApplyMemoBulkActionUseCase @Inject constructor(
         }
     }
 
-    private suspend fun saveBulkWrites(memos: List<Memo>, transform: (Memo) -> Memo?) {
+    private suspend fun saveActiveMemoBulkWrites(
+        memos: List<Memo>,
+        updatedMemoOrNullIfUnchanged: (Memo) -> Memo?
+    ) {
         val writes = memos.map { memo ->
-            val updatedMemo = transform(memo)
+            val updatedMemo = updatedMemoOrNullIfUnchanged(memo)
             if (updatedMemo == null) {
                 ActiveMemoBulkWrite.CheckOnly(
                     memoId = memo.id,

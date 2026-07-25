@@ -13,7 +13,8 @@ internal class RecordingMemoBulkDao(
     private val failOnWrite: Boolean = false,
     private val activeMemoIds: Set<String>? = null,
     private val trashedMemoIds: Set<String>? = null,
-    private val activeMemosById: Map<String, MemoWithRefs> = emptyMap()
+    private val activeMemosById: Map<String, MemoWithRefs> = emptyMap(),
+    private val reverseActiveMemoQueryResults: Boolean = false
 ) : MemoBulkDao {
 
     val calls = mutableListOf<String>()
@@ -34,8 +35,10 @@ internal class RecordingMemoBulkDao(
 
     override suspend fun getActiveMemoWithRefs(id: String): MemoWithRefs? = null
 
-    override suspend fun getActiveMemosWithRefsBatch(ids: List<String>): List<MemoWithRefs> =
-        ids.asReversed().mapNotNull(activeMemosById::get)
+    override suspend fun getActiveMemosWithRefsBatch(ids: List<String>): List<MemoWithRefs> {
+        val memos = ids.mapNotNull(activeMemosById::get)
+        return if (reverseActiveMemoQueryResults) memos.asReversed() else memos
+    }
 
     override suspend fun getActiveMemoIdsBatch(ids: List<String>): List<String> {
         activeMemoIdReads += ids
