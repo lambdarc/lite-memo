@@ -1,8 +1,10 @@
 package com.appvoyager.litememo.domain.usecase
 
+import com.appvoyager.litememo.domain.model.ActiveMemoBulkWrite
 import com.appvoyager.litememo.domain.model.ApplyMemoBulkActionCommand
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoBulkAction
+import com.appvoyager.litememo.domain.model.MemoTrashUpdate
 import com.appvoyager.litememo.domain.model.updatedAtFrom
 import com.appvoyager.litememo.domain.model.value.TagId
 import com.appvoyager.litememo.domain.provider.CurrentTimeProvider
@@ -20,8 +22,9 @@ class ApplyMemoBulkActionUseCase @Inject constructor(
         val memoIds = command.memoIds.distinct()
         if (memoIds.isEmpty()) return
 
+        val memoById = memoRepository.getActiveMemos(memoIds).associateBy { it.id }
         val memos = memoIds.map { id ->
-            requireNotNull(memoRepository.getActiveMemo(id)) {
+            requireNotNull(memoById[id]) {
                 "Memo not found: ${id.value}"
             }
         }
@@ -67,51 +70,78 @@ class ApplyMemoBulkActionUseCase @Inject constructor(
 
     private suspend fun moveToTrash(memos: List<Memo>) {
         val now = currentTimeProvider.now()
-        memos.forEach { memo ->
-            memoRepository.moveMemoToTrash(
-                id = memo.id,
-                deletedAt = memo.updatedAtFrom(now)
-            )
-        }
+        memoRepository.moveMemosToTrash(
+            memos.map { memo ->
+                MemoTrashUpdate(
+                    memoId = memo.id,
+                    deletedAt = memo.updatedAtFrom(now)
+                )
+            }
+        )
     }
 
     private suspend fun setFavorite(memos: List<Memo>, isFavorite: Boolean) {
         val now = currentTimeProvider.now()
-        val updated = memos
-            .filter { it.isFavorite != isFavorite }
-            .map { memo ->
+        saveActiveMemoBulkWrites(memos) { memo ->
+            if (memo.isFavorite == isFavorite) {
+                null
+            } else {
                 memo.copy(
                     updatedAt = memo.updatedAtFrom(now),
                     isFavorite = isFavorite
                 )
             }
-        memoRepository.saveAllMemos(updated)
+        }
     }
 
     private suspend fun addTag(memos: List<Memo>, tagId: TagId) {
         val now = currentTimeProvider.now()
-        val updated = memos
-            .filter { tagId !in it.tagIds }
-            .map { memo ->
+        saveActiveMemoBulkWrites(memos) { memo ->
+            if (tagId in memo.tagIds) {
+                null
+            } else {
                 memo.copy(
                     updatedAt = memo.updatedAtFrom(now),
                     tagIds = memo.tagIds + tagId
                 )
             }
-        memoRepository.saveAllMemos(updated)
+        }
     }
 
     private suspend fun removeTag(memos: List<Memo>, tagId: TagId) {
         val now = currentTimeProvider.now()
-        val updated = memos
-            .filter { tagId in it.tagIds }
-            .map { memo ->
+        saveActiveMemoBulkWrites(memos) { memo ->
+            if (tagId !in memo.tagIds) {
+                null
+            } else {
                 memo.copy(
                     updatedAt = memo.updatedAtFrom(now),
                     tagIds = memo.tagIds.filterNot { it == tagId }
                 )
             }
-        memoRepository.saveAllMemos(updated)
+        }
+    }
+
+    private suspend fun saveActiveMemoBulkWrites(
+        memos: List<Memo>,
+        updatedMemoOrNullIfUnchanged: (Memo) -> Memo?
+    ) {
+        val writes = memos.map { memo ->
+            val updatedMemo = updatedMemoOrNullIfUnchanged(memo)
+            if (updatedMemo == null) {
+                ActiveMemoBulkWrite.CheckOnly(
+                    memoId = memo.id,
+                    expectedUpdatedAt = memo.updatedAt
+                )
+            } else {
+                ActiveMemoBulkWrite.Update(
+                    memoId = memo.id,
+                    expectedUpdatedAt = memo.updatedAt,
+                    updatedMemo = updatedMemo
+                )
+            }
+        }
+        memoRepository.saveActiveMemoBulkWrites(writes)
     }
 
 }

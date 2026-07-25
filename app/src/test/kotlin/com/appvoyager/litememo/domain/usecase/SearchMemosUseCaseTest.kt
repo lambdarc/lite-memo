@@ -2,9 +2,11 @@ package com.appvoyager.litememo.domain.usecase
 
 import com.appvoyager.litememo.domain.FakeMemoRepository
 import com.appvoyager.litememo.domain.memoFixture
+import com.appvoyager.litememo.domain.model.ActiveMemoBulkWrite
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoSortOrder
 import com.appvoyager.litememo.domain.model.MemoSummary
+import com.appvoyager.litememo.domain.model.MemoTrashUpdate
 import com.appvoyager.litememo.domain.model.value.MemoId
 import com.appvoyager.litememo.domain.model.value.SearchQuery
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
@@ -110,13 +112,23 @@ class SearchMemosUseCaseTest {
 
         override suspend fun getActiveMemo(id: MemoId): Memo? = null
 
+        override suspend fun getActiveMemos(ids: List<MemoId>): List<Memo> = emptyList()
+
         override suspend fun saveMemo(memo: Memo) = Unit
+
+        override suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>) = Unit
 
         override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) = Unit
 
+        override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) = Unit
+
         override suspend fun restoreMemoFromTrash(id: MemoId) = Unit
 
+        override suspend fun restoreMemosFromTrash(ids: List<MemoId>) = Unit
+
         override suspend fun deleteMemoPermanently(id: MemoId) = Unit
+
+        override suspend fun deleteMemosPermanently(ids: List<MemoId>) = Unit
 
         override suspend fun discardMemo(id: MemoId) = Unit
 

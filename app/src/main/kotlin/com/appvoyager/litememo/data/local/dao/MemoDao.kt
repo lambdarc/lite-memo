@@ -202,8 +202,4 @@ interface MemoDao {
         return fileNames
     }
 
-    private companion object {
-        const val SQLITE_QUERY_PARAMETER_BATCH_SIZE = 900
-    }
-
 }
