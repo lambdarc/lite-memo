@@ -20,7 +20,4 @@ data class MemoSelectionUiState(val selectedMemoIds: Set<MemoId> = emptySet()) {
 
     fun clear(): MemoSelectionUiState = MemoSelectionUiState()
 
-    fun retain(visibleMemoIds: Set<MemoId>): MemoSelectionUiState =
-        MemoSelectionUiState(selectedMemoIds intersect visibleMemoIds)
-
 }

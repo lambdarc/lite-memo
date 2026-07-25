@@ -202,3 +202,6 @@ class TrashViewModel @Inject constructor(
 }
 
 private data class ObservedTrashData(val memos: List<Memo>?, val tags: List<Tag>?)
+
+private fun MemoSelectionUiState.retain(visibleMemoIds: Set<MemoId>): MemoSelectionUiState =
+    MemoSelectionUiState(selectedMemoIds intersect visibleMemoIds)

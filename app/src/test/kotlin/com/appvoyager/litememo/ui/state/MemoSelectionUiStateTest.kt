@@ -101,32 +101,6 @@ class MemoSelectionUiStateTest {
     }
 
     @Test
-    fun normalRetainKeepsOnlyVisibleMemoIds() {
-        // Arrange
-        val selection = MemoSelectionUiState(setOf(memoId("memo-1"), memoId("memo-2")))
-
-        // Act
-        // Normal: retain drops ids that are no longer visible
-        val retained = selection.retain(setOf(memoId("memo-2"), memoId("memo-3")))
-
-        // Assert
-        assertEquals(setOf(memoId("memo-2")), retained.selectedMemoIds)
-    }
-
-    @Test
-    fun boundaryRetainWithoutVisibleMemoIdsClearsSelection() {
-        // Arrange
-        val selection = MemoSelectionUiState(setOf(memoId("memo-1")))
-
-        // Act
-        // Boundary: no visible id leaves nothing selected
-        val retained = selection.retain(emptySet())
-
-        // Assert
-        assertEquals(MemoSelectionUiState(), retained)
-    }
-
-    @Test
     fun stateTransitionTransitionsKeepSourceStateUnchanged() {
         // Arrange
         val selection = MemoSelectionUiState(setOf(memoId("memo-1")))
@@ -136,7 +110,6 @@ class MemoSelectionUiStateTest {
         selection.selectOnly(memoId("memo-2"))
         selection.toggle(memoId("memo-2"))
         selection.clear()
-        selection.retain(emptySet())
 
         // Assert
         assertEquals(setOf(memoId("memo-1")), selection.selectedMemoIds)

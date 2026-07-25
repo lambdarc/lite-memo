@@ -120,6 +120,27 @@ class TrashViewModelTest {
     }
 
     @Test
+    fun boundaryUiStateClearsSelectionWhenTrashBecomesEmpty() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val repository = FakeMemoRepository(listOf(memo))
+        val viewModel = trashViewModel(memoRepository = repository)
+        advanceUntilIdle()
+        viewModel.uiState.first { it.memos.size == 1 }
+        viewModel.startSelection(memo.id)
+        viewModel.uiState.first { it.selection.isActive }
+
+        // Act
+        // Boundary: an empty trash leaves nothing selected.
+        repository.deleteMemosPermanently(listOf(memo.id))
+        advanceUntilIdle()
+        val state = viewModel.uiState.first { it.memos.isEmpty() }
+
+        // Assert
+        assertEquals(emptySet<MemoId>(), state.selection.selectedMemoIds)
+    }
+
+    @Test
     fun toggleMemoSelectionRemovesSelectedMemo() = runTest(dispatcher) {
         // Arrange
         val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
