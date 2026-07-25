@@ -45,7 +45,7 @@ class RestoreMemosFromTrashUseCaseTest {
     }
 
     @Test
-    fun errorInvalidIdLeavesAllMemosInTrash() = runTest {
+    fun boundaryAbsentIdsAreSkippedWhileValidMemosAreRestored() = runTest {
         // Arrange
         val first = memoFixture(id = "memo-1", deletedAt = 2_000L)
         val second = memoFixture(id = "memo-2", deletedAt = 3_000L)
@@ -53,15 +53,13 @@ class RestoreMemosFromTrashUseCaseTest {
         val useCase = RestoreMemosFromTrashUseCase(repository)
 
         // Act
-        // Error: validation completes before any restore is applied.
-        val error = runCatching {
-            useCase(listOf(first.id, MemoId("missing"), second.id))
-        }.exceptionOrNull()
+        // Boundary: an id no longer in trash is skipped instead of failing the whole batch.
+        useCase(listOf(first.id, MemoId("missing"), second.id))
 
         // Assert
         assertEquals(
-            IllegalArgumentException::class.java to listOf(first.deletedAt, second.deletedAt),
-            error?.javaClass to repository.currentMemos().map { it.deletedAt }
+            listOf(first.id, second.id) to listOf<Long?>(null, null),
+            repository.restoredIds to repository.currentMemos().map { it.deletedAt?.value }
         )
     }
 }

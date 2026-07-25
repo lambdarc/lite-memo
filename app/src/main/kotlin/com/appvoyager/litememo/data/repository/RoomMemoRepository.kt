@@ -10,6 +10,7 @@ import com.appvoyager.litememo.data.mapper.toTagRefs
 import com.appvoyager.litememo.data.mapper.toTagRefsByMemoId
 import com.appvoyager.litememo.data.util.deleteImageFiles
 import com.appvoyager.litememo.data.util.requireNoDuplicateIds
+import com.appvoyager.litememo.domain.model.ActiveMemoBulkWrite
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoSummary
 import com.appvoyager.litememo.domain.model.MemoTrashUpdate
@@ -19,9 +20,11 @@ import com.appvoyager.litememo.domain.model.value.TimestampMillis
 import com.appvoyager.litememo.domain.model.value.TimestampRange
 import com.appvoyager.litememo.domain.repository.MemoImageStore
 import com.appvoyager.litememo.domain.repository.MemoRepository
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 class RoomMemoRepository @Inject constructor(
@@ -87,25 +90,25 @@ class RoomMemoRepository @Inject constructor(
         memoImageStore.deleteImageFiles(removedFileNames)
     }
 
-    override suspend fun saveAllActiveMemos(expectedActiveIds: List<MemoId>, memos: List<Memo>) {
-        val distinctExpectedActiveIds = expectedActiveIds.distinct()
-        val distinctMemos = memos.distinctBy { it.id }
-        val expectedActiveIdSet = distinctExpectedActiveIds.toSet()
-        require(distinctMemos.all { it.id in expectedActiveIdSet }) {
-            "Every saved memo must be included in expectedActiveIds."
-        }
-        require(distinctMemos.all { it.deletedAt == null }) {
-            "Only active memos can be saved through saveAllActiveMemos."
-        }
-        if (distinctExpectedActiveIds.isEmpty()) return
+    override suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>) {
+        if (writes.isEmpty()) return
+        writes.requireNoDuplicateIds(label = "memo") { it.memoId }
 
-        val removedFileNames = memoBulkDao.upsertAllActiveMemosWithRefsAndCollectRemovedFileNames(
-            expectedActiveIds = distinctExpectedActiveIds.map { it.value },
-            memos = distinctMemos.map { it.toEntity() },
-            tagRefsByMemoId = distinctMemos.toTagRefsByMemoId(),
-            imageRefsByMemoId = distinctMemos.toImageRefsByMemoId()
-        )
-        memoImageStore.deleteImageFiles(removedFileNames.distinct())
+        val updatedMemos = writes
+            .filterIsInstance<ActiveMemoBulkWrite.Update>()
+            .map { it.updatedMemo }
+        val removedFileNames = memoBulkDao
+            .upsertActiveMemosWithVersionCheckAndCollectRemovedFileNames(
+                expectedVersions = writes.associate {
+                    it.memoId.value to it.expectedUpdatedAt.value
+                },
+                memos = updatedMemos.map { it.toEntity() },
+                tagRefsByMemoId = updatedMemos.toTagRefsByMemoId(),
+                imageRefsByMemoId = updatedMemos.toImageRefsByMemoId()
+            )
+        withContext(NonCancellable) {
+            memoImageStore.deleteImageFiles(removedFileNames.distinct())
+        }
     }
 
     override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) {
@@ -114,11 +117,11 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) {
-        val distinctUpdates = updates.distinctBy { it.memoId }
-        if (distinctUpdates.isEmpty()) return
+        if (updates.isEmpty()) return
+        updates.requireNoDuplicateIds(label = "memo") { it.memoId }
 
         memoBulkDao.moveMemosToTrash(
-            distinctUpdates.associate { update ->
+            updates.associate { update ->
                 update.memoId.value to update.deletedAt.value
             }
         )
@@ -130,9 +133,9 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override suspend fun restoreMemosFromTrash(ids: List<MemoId>) {
-        val distinctIds = ids.distinct()
-        if (distinctIds.isEmpty()) return
-        memoBulkDao.restoreMemosFromTrash(distinctIds.map { it.value })
+        if (ids.isEmpty()) return
+        ids.requireNoDuplicateIds(label = "memo") { it }
+        memoBulkDao.restoreMemosFromTrash(ids.map { it.value })
     }
 
     override suspend fun deleteMemoPermanently(id: MemoId) {
@@ -141,13 +144,15 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override suspend fun deleteMemosPermanently(ids: List<MemoId>) {
-        val distinctIds = ids.distinct()
-        if (distinctIds.isEmpty()) return
+        if (ids.isEmpty()) return
+        ids.requireNoDuplicateIds(label = "memo") { it }
 
         val fileNames = memoBulkDao.deleteMemosPermanentlyAndCollectImageFileNames(
-            distinctIds.map { it.value }
+            ids.map { it.value }
         )
-        memoImageStore.deleteImageFiles(fileNames.distinct())
+        withContext(NonCancellable) {
+            memoImageStore.deleteImageFiles(fileNames.distinct())
+        }
     }
 
     override suspend fun discardMemo(id: MemoId) {

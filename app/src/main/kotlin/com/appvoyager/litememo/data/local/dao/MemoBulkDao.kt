@@ -1,17 +1,16 @@
 package com.appvoyager.litememo.data.local.dao
 
 import androidx.room.Dao
-import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
-import androidx.room.Upsert
 import com.appvoyager.litememo.data.local.entity.MemoEntity
 import com.appvoyager.litememo.data.local.entity.MemoImageEntity
 import com.appvoyager.litememo.data.local.entity.MemoTagRefEntity
+import com.appvoyager.litememo.data.local.model.MemoVersionProjection
 import com.appvoyager.litememo.data.local.model.MemoWithRefs
 
 @Dao
-interface MemoBulkDao {
+interface MemoBulkDao : MemoDao {
 
     @Transaction
     @Query("SELECT * FROM memos WHERE id IN (:ids) AND deletedAt IS NULL")
@@ -20,29 +19,17 @@ interface MemoBulkDao {
     @Query("SELECT id FROM memos WHERE id IN (:ids) AND deletedAt IS NULL")
     suspend fun getActiveMemoIdsBatch(ids: List<String>): List<String>
 
+    @Query("SELECT id, updatedAt FROM memos WHERE id IN (:ids) AND deletedAt IS NULL")
+    suspend fun getActiveMemoVersionsBatch(ids: List<String>): List<MemoVersionProjection>
+
     @Query("SELECT id FROM memos WHERE id IN (:ids) AND deletedAt IS NOT NULL")
     suspend fun getTrashedMemoIdsBatch(ids: List<String>): List<String>
 
-    @Query("SELECT fileName FROM memo_images WHERE memoId IN (:memoIds)")
-    suspend fun getImageFileNamesForMemosBatch(memoIds: List<String>): List<String>
+    @Query("SELECT * FROM memo_images WHERE memoId IN (:memoIds)")
+    suspend fun getImageRefsForMemosBatch(memoIds: List<String>): List<MemoImageEntity>
 
-    @Upsert
-    suspend fun upsertMemo(memo: MemoEntity)
-
-    @Insert
-    suspend fun insertTagRefs(tagRefs: List<MemoTagRefEntity>)
-
-    @Insert
-    suspend fun insertImageRefs(imageRefs: List<MemoImageEntity>)
-
-    @Query("DELETE FROM memo_tag_refs WHERE memoId = :memoId")
-    suspend fun deleteTagRefsForMemo(memoId: String)
-
-    @Query("DELETE FROM memo_images WHERE memoId = :memoId")
-    suspend fun deleteImageRefsForMemo(memoId: String)
-
-    @Query("UPDATE memos SET deletedAt = :deletedAt WHERE id = :id AND deletedAt IS NULL")
-    suspend fun moveMemoToTrash(id: String, deletedAt: Long): Int
+    @Query("UPDATE memos SET deletedAt = :deletedAt WHERE id IN (:ids) AND deletedAt IS NULL")
+    suspend fun moveMemosToTrashBatch(ids: List<String>, deletedAt: Long): Int
 
     @Query("UPDATE memos SET deletedAt = NULL WHERE id IN (:ids) AND deletedAt IS NOT NULL")
     suspend fun restoreMemosFromTrashBatch(ids: List<String>): Int
@@ -62,33 +49,41 @@ interface MemoBulkDao {
     }
 
     @Transaction
-    suspend fun upsertAllActiveMemosWithRefsAndCollectRemovedFileNames(
-        expectedActiveIds: List<String>,
+    suspend fun upsertActiveMemosWithVersionCheckAndCollectRemovedFileNames(
+        expectedVersions: Map<String, Long>,
         memos: List<MemoEntity>,
         tagRefsByMemoId: Map<String, List<MemoTagRefEntity>>,
         imageRefsByMemoId: Map<String, List<MemoImageEntity>>
     ): List<String> {
-        val distinctExpectedActiveIds = expectedActiveIds.distinct()
-        val distinctMemos = memos.distinctBy { it.id }
-        val expectedActiveIdSet = distinctExpectedActiveIds.toSet()
-        require(distinctMemos.all { it.id in expectedActiveIdSet }) {
-            "Every saved memo must be included in expectedActiveIds."
+        if (expectedVersions.isEmpty()) return emptyList()
+        require(memos.all { it.deletedAt == null }) {
+            "Only active memos can be written through the active bulk write."
         }
-        if (distinctExpectedActiveIds.isEmpty()) return emptyList()
+        require(memos.all { it.id in expectedVersions }) {
+            "Every written memo must be included in expectedVersions."
+        }
 
-        val activeMemoIds = distinctExpectedActiveIds
+        val currentVersionById = expectedVersions.keys
             .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
-            .flatMap { batch -> getActiveMemoIdsBatch(batch) }
-            .toSet()
-        check(activeMemoIds == expectedActiveIdSet) {
+            .flatMap { batch -> getActiveMemoVersionsBatch(batch) }
+            .associate { it.id to it.updatedAt }
+        check(currentVersionById.keys == expectedVersions.keys) {
             "Some memos were not found or are no longer active."
         }
+        check(expectedVersions.all { (id, version) -> currentVersionById[id] == version }) {
+            "Some memos were modified since they were read."
+        }
 
-        val memoIds = distinctMemos.map { it.id }
-        val before = memoIds
+        val updatedMemoIds = memos.map { it.id }
+        val before = updatedMemoIds
             .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
-            .flatMap { batch -> getImageFileNamesForMemosBatch(batch) }
-        distinctMemos.forEach { memo ->
+            .flatMap { batch -> getImageFileNamesForMemos(batch) }
+        val currentImageRefsByMemoId = updatedMemoIds
+            .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
+            .flatMap { batch -> getImageRefsForMemosBatch(batch) }
+            .groupBy { it.memoId }
+
+        memos.forEach { memo ->
             val tagRefs = tagRefsByMemoId[memo.id].orEmpty()
             val imageRefs = imageRefsByMemoId[memo.id].orEmpty()
             require(tagRefs.all { it.memoId == memo.id }) {
@@ -100,8 +95,11 @@ interface MemoBulkDao {
             upsertMemo(memo)
             deleteTagRefsForMemo(memo.id)
             if (tagRefs.isNotEmpty()) insertTagRefs(tagRefs)
-            deleteImageRefsForMemo(memo.id)
-            if (imageRefs.isNotEmpty()) insertImageRefs(imageRefs)
+            val currentImageRefs = currentImageRefsByMemoId[memo.id].orEmpty()
+            if (!sameImageRefs(currentImageRefs, imageRefs)) {
+                deleteImageRefsForMemo(memo.id)
+                if (imageRefs.isNotEmpty()) insertImageRefs(imageRefs)
+            }
         }
         val after = imageRefsByMemoId.values.flatten().map { it.fileName }.toSet()
         return before - after
@@ -111,19 +109,18 @@ interface MemoBulkDao {
     suspend fun moveMemosToTrash(updates: Map<String, Long>) {
         if (updates.isEmpty()) return
 
-        val memoIds = updates.keys.toList()
-        val activeMemoIds = memoIds
+        val activeMemoIds = updates.keys.toList()
             .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
             .flatMap { batch -> getActiveMemoIdsBatch(batch) }
-            .toSet()
-        check(activeMemoIds == memoIds.toSet()) {
-            "Some memos were not found or are already trashed."
-        }
+        if (activeMemoIds.isEmpty()) return
 
-        updates.forEach { (memoId, deletedAt) ->
-            val affected = moveMemoToTrash(memoId, deletedAt)
-            check(affected == 1) { "Memo could not be moved to trash: $memoId" }
-        }
+        activeMemoIds
+            .groupBy { memoId -> updates.getValue(memoId) }
+            .forEach { (deletedAt, memoIds) ->
+                memoIds.chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE).forEach { batch ->
+                    moveMemosToTrashBatch(batch, deletedAt)
+                }
+            }
     }
 
     @Transaction
@@ -131,45 +128,40 @@ interface MemoBulkDao {
         val distinctIds = ids.distinct()
         if (distinctIds.isEmpty()) return
 
-        val trashedMemoIds = distinctIds
-            .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
-            .flatMap { batch -> getTrashedMemoIdsBatch(batch) }
-            .toSet()
-        check(trashedMemoIds == distinctIds.toSet()) {
-            "Some memos were not found or are not in trash."
-        }
+        val trashedMemoIds = trashedMemoIdsPreservingOrder(distinctIds)
+        if (trashedMemoIds.isEmpty()) return
 
-        distinctIds.chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE).forEach { batch ->
-            val affected = restoreMemosFromTrashBatch(batch)
-            check(affected == batch.size) { "Some memos could not be restored from trash." }
+        trashedMemoIds.chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE).forEach { batch ->
+            restoreMemosFromTrashBatch(batch)
         }
     }
 
     @Transaction
     suspend fun deleteMemosPermanentlyAndCollectImageFileNames(ids: List<String>): List<String> {
         val distinctIds = ids.distinct()
-        if (distinctIds.isEmpty()) return emptyList()
+        val trashedMemoIds = trashedMemoIdsPreservingOrder(distinctIds)
+        if (trashedMemoIds.isEmpty()) return emptyList()
 
-        val trashedMemoIds = distinctIds
+        val fileNames = trashedMemoIds
             .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
-            .flatMap { batch -> getTrashedMemoIdsBatch(batch) }
-            .toSet()
-        check(trashedMemoIds == distinctIds.toSet()) {
-            "Some memos were not found or are not in trash."
-        }
-
-        val fileNames = distinctIds
-            .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
-            .flatMap { batch -> getImageFileNamesForMemosBatch(batch) }
-        distinctIds.chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE).forEach { batch ->
-            val affected = deleteMemosPermanentlyBatch(batch)
-            check(affected == batch.size) { "Some memos could not be permanently deleted." }
+            .flatMap { batch -> getImageFileNamesForMemos(batch) }
+        trashedMemoIds.chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE).forEach { batch ->
+            deleteMemosPermanentlyBatch(batch)
         }
         return fileNames
     }
 
-    private companion object {
-        const val SQLITE_QUERY_PARAMETER_BATCH_SIZE = 900
+    private suspend fun trashedMemoIdsPreservingOrder(distinctIds: List<String>): List<String> {
+        val trashedIdSet = distinctIds
+            .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
+            .flatMap { batch -> getTrashedMemoIdsBatch(batch) }
+            .toSet()
+        return distinctIds.filter { it in trashedIdSet }
     }
 
 }
+
+private fun sameImageRefs(
+    current: List<MemoImageEntity>,
+    incoming: List<MemoImageEntity>
+): Boolean = current.sortedBy { it.position } == incoming.sortedBy { it.position }

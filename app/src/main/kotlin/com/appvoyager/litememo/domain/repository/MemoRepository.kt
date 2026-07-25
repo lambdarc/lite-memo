@@ -1,5 +1,6 @@
 package com.appvoyager.litememo.domain.repository
 
+import com.appvoyager.litememo.domain.model.ActiveMemoBulkWrite
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoSummary
 import com.appvoyager.litememo.domain.model.MemoTrashUpdate
@@ -27,7 +28,7 @@ interface MemoRepository {
 
     suspend fun saveMemo(memo: Memo)
 
-    suspend fun saveAllActiveMemos(expectedActiveIds: List<MemoId>, memos: List<Memo>)
+    suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>)
 
     suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis)
 

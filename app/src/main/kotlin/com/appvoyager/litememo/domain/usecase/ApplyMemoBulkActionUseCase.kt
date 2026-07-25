@@ -1,5 +1,6 @@
 package com.appvoyager.litememo.domain.usecase
 
+import com.appvoyager.litememo.domain.model.ActiveMemoBulkWrite
 import com.appvoyager.litememo.domain.model.ApplyMemoBulkActionCommand
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoBulkAction
@@ -81,50 +82,63 @@ class ApplyMemoBulkActionUseCase @Inject constructor(
 
     private suspend fun setFavorite(memos: List<Memo>, isFavorite: Boolean) {
         val now = currentTimeProvider.now()
-        val updated = memos
-            .filter { it.isFavorite != isFavorite }
-            .map { memo ->
+        saveBulkWrites(memos) { memo ->
+            if (memo.isFavorite == isFavorite) {
+                null
+            } else {
                 memo.copy(
                     updatedAt = memo.updatedAtFrom(now),
                     isFavorite = isFavorite
                 )
             }
-        memoRepository.saveAllActiveMemos(
-            expectedActiveIds = memos.map { it.id },
-            memos = updated
-        )
+        }
     }
 
     private suspend fun addTag(memos: List<Memo>, tagId: TagId) {
         val now = currentTimeProvider.now()
-        val updated = memos
-            .filter { tagId !in it.tagIds }
-            .map { memo ->
+        saveBulkWrites(memos) { memo ->
+            if (tagId in memo.tagIds) {
+                null
+            } else {
                 memo.copy(
                     updatedAt = memo.updatedAtFrom(now),
                     tagIds = memo.tagIds + tagId
                 )
             }
-        memoRepository.saveAllActiveMemos(
-            expectedActiveIds = memos.map { it.id },
-            memos = updated
-        )
+        }
     }
 
     private suspend fun removeTag(memos: List<Memo>, tagId: TagId) {
         val now = currentTimeProvider.now()
-        val updated = memos
-            .filter { tagId in it.tagIds }
-            .map { memo ->
+        saveBulkWrites(memos) { memo ->
+            if (tagId !in memo.tagIds) {
+                null
+            } else {
                 memo.copy(
                     updatedAt = memo.updatedAtFrom(now),
                     tagIds = memo.tagIds.filterNot { it == tagId }
                 )
             }
-        memoRepository.saveAllActiveMemos(
-            expectedActiveIds = memos.map { it.id },
-            memos = updated
-        )
+        }
+    }
+
+    private suspend fun saveBulkWrites(memos: List<Memo>, transform: (Memo) -> Memo?) {
+        val writes = memos.map { memo ->
+            val updatedMemo = transform(memo)
+            if (updatedMemo == null) {
+                ActiveMemoBulkWrite.CheckOnly(
+                    memoId = memo.id,
+                    expectedUpdatedAt = memo.updatedAt
+                )
+            } else {
+                ActiveMemoBulkWrite.Update(
+                    memoId = memo.id,
+                    expectedUpdatedAt = memo.updatedAt,
+                    updatedMemo = updatedMemo
+                )
+            }
+        }
+        memoRepository.saveActiveMemoBulkWrites(writes)
     }
 
 }

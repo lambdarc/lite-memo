@@ -404,27 +404,26 @@ class RoomDaoInstrumentedTest {
     }
 
     @Test
-    fun errorMoveMemosToTrashRejectsMixedStateBeforeWriting() = runTest {
+    fun boundaryMoveMemosToTrashSkipsAlreadyTrashedMembers() = runTest {
         // Arrange
         memoDao.upsertMemo(memoEntity(id = "memo-active"))
         memoDao.upsertMemo(memoEntity(id = "memo-trashed", deletedAt = 500L))
 
         // Act
-        // Error: an already-trashed member rejects the whole active bulk operation
-        val error = runCatching {
-            memoBulkDao.moveMemosToTrash(
-                linkedMapOf(
-                    "memo-active" to 1_000L,
-                    "memo-trashed" to 2_000L
-                )
+        // Boundary: an already-trashed member is skipped while active members are trashed
+        memoBulkDao.moveMemosToTrash(
+            linkedMapOf(
+                "memo-active" to 1_000L,
+                "memo-trashed" to 2_000L
             )
-        }.exceptionOrNull()
+        )
         val activeIds = memoDao.observeActiveMemosWithRefs().first().map { it.memo.id }
+        val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
 
         // Assert
         assertEquals(
-            IllegalStateException::class.java to listOf("memo-active"),
-            error?.javaClass to activeIds
+            emptyList<String>() to listOf("memo-active", "memo-trashed"),
+            activeIds to trashedIds.sorted()
         )
     }
 

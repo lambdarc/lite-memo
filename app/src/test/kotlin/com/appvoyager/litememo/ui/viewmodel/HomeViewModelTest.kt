@@ -7,6 +7,7 @@ import com.appvoyager.litememo.domain.FakeTagRepository
 import com.appvoyager.litememo.domain.MutableTimeProvider
 import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.memoImageFixture
+import com.appvoyager.litememo.domain.model.ActiveMemoBulkWrite
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoSummary
 import com.appvoyager.litememo.domain.model.Tag
@@ -871,9 +872,7 @@ class HomeViewModelTest {
 
         override suspend fun saveMemo(memo: Memo): Unit = error("Failed to save memo.")
 
-        override suspend fun saveAllActiveMemos(
-            expectedActiveIds: List<MemoId>,
-            memos: List<Memo>
-        ): Unit = error("Failed to save active memos.")
+        override suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>): Unit =
+            error("Failed to save active memos.")
     }
 }
