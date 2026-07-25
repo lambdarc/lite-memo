@@ -48,6 +48,4 @@ interface MemoRepository {
 
     suspend fun getAllActiveMemos(): List<Memo>
 
-    suspend fun saveAllMemos(memos: List<Memo>)
-
 }

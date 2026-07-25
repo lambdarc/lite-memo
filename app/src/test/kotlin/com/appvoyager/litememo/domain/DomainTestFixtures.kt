@@ -279,10 +279,6 @@ class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepositor
     override suspend fun getAllActiveMemos(): List<Memo> =
         memos.value.filter { it.deletedAt == null }
 
-    override suspend fun saveAllMemos(memos: List<Memo>) {
-        memos.forEach { saveMemo(it) }
-    }
-
     fun currentMemos(): List<Memo> = memos.value
 
 }

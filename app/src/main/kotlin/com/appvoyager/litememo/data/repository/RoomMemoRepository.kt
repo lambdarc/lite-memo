@@ -170,18 +170,6 @@ class RoomMemoRepository @Inject constructor(
     override suspend fun getAllActiveMemos(): List<Memo> =
         memoDao.getAllActiveMemosWithRefs().map { it.toDomain() }
 
-    override suspend fun saveAllMemos(memos: List<Memo>) {
-        memos.requireNoDuplicateIds(label = "memo") { it.id }
-
-        val entities = memos.map { it.toEntity() }
-        val removedFileNames = memoDao.upsertAllMemosWithRefsAndCollectRemovedFileNames(
-            entities,
-            memos.toTagRefsByMemoId(),
-            memos.toImageRefsByMemoId()
-        )
-        memoImageStore.deleteImageFiles(removedFileNames)
-    }
-
     private fun String.toEscapedLikePattern(): String = buildString {
         append(LIKE_MULTI_CHARACTER_WILDCARD)
         this@toEscapedLikePattern.forEach { char ->
