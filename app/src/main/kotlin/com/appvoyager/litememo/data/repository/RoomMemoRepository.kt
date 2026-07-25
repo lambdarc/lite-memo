@@ -87,7 +87,9 @@ class RoomMemoRepository @Inject constructor(
             tagRefs = memo.toTagRefs(),
             imageRefs = memo.toImageRefs()
         )
-        memoImageStore.deleteImageFiles(removedFileNames)
+        withContext(NonCancellable) {
+            memoImageStore.deleteImageFiles(removedFileNames)
+        }
     }
 
     override suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>) {
@@ -140,7 +142,9 @@ class RoomMemoRepository @Inject constructor(
 
     override suspend fun deleteMemoPermanently(id: MemoId) {
         val fileNames = memoDao.deleteMemoPermanentlyAndCollectImageFileNames(id.value)
-        memoImageStore.deleteImageFiles(fileNames)
+        withContext(NonCancellable) {
+            memoImageStore.deleteImageFiles(fileNames)
+        }
     }
 
     override suspend fun deleteMemosPermanently(ids: List<MemoId>) {
@@ -157,14 +161,18 @@ class RoomMemoRepository @Inject constructor(
 
     override suspend fun discardMemo(id: MemoId) {
         val fileNames = memoDao.discardMemoAndCollectImageFileNames(id.value)
-        memoImageStore.deleteImageFiles(fileNames)
+        withContext(NonCancellable) {
+            memoImageStore.deleteImageFiles(fileNames)
+        }
     }
 
     override suspend fun deleteTrashedMemosDeletedAtOrBefore(cutoff: TimestampMillis) {
         val fileNames = memoDao.deleteTrashedMemosDeletedAtOrBeforeAndCollectImageFileNames(
             cutoff.value
         )
-        memoImageStore.deleteImageFiles(fileNames)
+        withContext(NonCancellable) {
+            memoImageStore.deleteImageFiles(fileNames)
+        }
     }
 
     override suspend fun getAllActiveMemos(): List<Memo> =
