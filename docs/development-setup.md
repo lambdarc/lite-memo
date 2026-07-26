@@ -82,7 +82,7 @@ bundle exec fastlane android android_test
 draft ではない Pull Request は、base branch にかかわらず CI の対象です。
 `develop` / `main` を base にする Pull Request では、静的解析と JVM Unit Test に加えて
 release / R8 build を検証します。coverage は draft ではない Pull Request と、
-`main` / `develop` への push で計測します。
+`main` への push で計測します。
 GitHub Actions では Static Analysis、Unit Test、Android Test を別 job で並列実行します。
 
 Pull Request の `closed` event は workflow の起動対象に含めません。
@@ -149,8 +149,8 @@ UI 層は `*ViewModel*` / `*UiState*` / `*UiResult*` / `*UiModel*` / `*UiDirecti
 
 ## CI キャッシュ
 
-GitHub Actions の Gradle / AVD キャッシュは、長期運用する `main` / `develop` の push で作成します。
-`main` / `develop` では通常の CI が未作成のキャッシュを作成します。
+GitHub Actions の Gradle / AVD キャッシュは、長期運用する `main` の push で作成します。
+`main` では通常の CI が未作成のキャッシュを作成します。
 Pull Request では base branch 側の既存キャッシュを復元するだけとし、PR 固有の `refs/pull/.../merge` にはキャッシュを作成しません。
 通常の CI と CodeQL の Gradle キャッシュは Enhanced Caching を使い、job ごとの build state を別々に保存します。
 job と commit を区別した cache key と共有 artifact により、並列 job が同じ不変 key への保存を競合しないようにします。
@@ -158,5 +158,5 @@ AVD キャッシュの key には API level、target、architecture、設定版�
 エミュレーター設定を変えた場合は末尾の設定版を更新して、新しい snapshot を作成します。
 AVD キャッシュでは `restore-keys` による部分一致を使いません。
 設定版を上げた意味がなくなり、古い設定の snapshot を復元してしまうためです。
-設定版を上げた直後は cache miss になりますが、次の `main` / `develop` への push で作り直されます。
+設定版を上げた直後は cache miss になりますが、次の `main` への push で作り直されます。
 push の run はキャッシュを作成できる唯一の経路のため、concurrency では push を中断しません。
