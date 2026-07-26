@@ -114,7 +114,8 @@ Gradle Wrapper Validation、skill 同期、actionlint、CodeQL などの workflo
 ## カバレッジ計測（Kover）
 
 Kover の集計対象は `app/build.gradle.kts` の `kover` ブロックで指定しています。
-domain / data 層は `domain.model` / `domain.usecase` / `data.mapper` / `data.repository` のようにパッケージ単位で選びます。
+domain / data 層は `domain.model` / `domain.usecase` / `data.mapper` / `data.repository` などをパッケージ単位で選びます。
+ここで挙げたパッケージは代表例であり、正確な集計対象は `classes(...)` の設定を確認します。
 UI 層は `*ViewModel*` / `*UiState*` / `*UiResult*` / `*UiModel*` / `*UiDirection*` / `*UiMessage*` / `*UiStatus*` / `*UiType*` と、
 役割を表す接尾語のパターンで選びます。
 接尾語のパターンで選ぶため、UI 層はパッケージを移動しても集計対象は変わりません。
