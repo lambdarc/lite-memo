@@ -107,7 +107,7 @@ Room / DataStore の使い分けは [`docs/architecture.md`](architecture.md) �
 - GitHub Actions
   - CI: Static Analysis（KtLint / detekt / Android Lint）/ Unit Test / Android Test
   - Gradle Wrapper Validation（wrapper の改ざん検知）
-  - actionlint（ワークフロー検査）
+  - GitHub Actions Validation（actionlint によるワークフロー検査）
   - CodeQL、Dependabot
 - fastlane（ローカル / CI の検証コマンドを実行）
 

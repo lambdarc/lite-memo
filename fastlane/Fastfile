@@ -31,13 +31,12 @@ platform :android do
 
   desc "Run static analysis (KtLint + detekt + Android Lint)"
   lane :static_analysis do
-    ktlint
-    detekt
-    lint
+    gradle(
+      tasks: ["app:ktlintCheck", "app:detekt", "app:lintProdDebug"],
+      flags: "--no-daemon --continue"
+    )
   end
 
-  # unit test は JVM 上で実行され R8/minify を通らないため debug variant のみで全テストをカバーする。
-  # release:true のときは R8/minify ビルドが壊れていないかを assembleProdRelease で追加検証する。
   desc "Run unit tests (debug only by default; pass release:true to also verify the release build)"
   lane :unit_test do |options|
     tasks = ["app:testProdDebugUnitTest"]

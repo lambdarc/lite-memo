@@ -4,10 +4,17 @@ on:
   push:
     branches:
       - main
+      - develop
   pull_request:
     branches:
       - main
       - develop
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - converted_to_draft
 
 permissions:
   actions: read
@@ -16,12 +23,16 @@ permissions:
 
 concurrency:
   group: codeql-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  analyze:
-    name: Analyze
+  codeql-analysis:
+    name: CodeQL Analysis (${{ matrix.language }})
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       CODEQL_OVERLAY_DATABASE_MODE: none
 
@@ -35,17 +46,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
-      - name: Set up JDK
+      - name: Set Up JDK
         uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Gradle
+      - name: Set Up Gradle
         uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
         with:
-          cache-provider: basic
+          cache-provider: enhanced
           cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}
 
       - name: Initialize CodeQL
@@ -54,11 +67,11 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
 
-      - name: Ensure gradlew is executable
+      - name: Make gradlew Executable
         run: chmod +x ./gradlew
 
-      - name: Build
+      - name: Build App for CodeQL
         run: ./gradlew clean :app:assembleDebug --no-daemon --no-build-cache -Dkotlin.compiler.execution.strategy=in-process
 
-      - name: Perform CodeQL Analysis
+      - name: Run CodeQL Analysis
         uses: github/codeql-action/analyze@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
