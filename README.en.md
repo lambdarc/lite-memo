@@ -11,19 +11,23 @@ It is built around Kotlin / Jetpack Compose / Material 3, following Clean Archit
 
 ## Features
 
-- Create, edit, and list memos (persisted with Room)
+- Create, edit, list, and search memos (persisted with Room)
+- Favorites and trash
 - Organize with tags
 - Calendar view
+- Attach images to memos
+- Home screen widgets (new memo / recent memos)
 - App lock (biometric authentication / `androidx.biometric`)
 - Theme and display settings (light / dark mode)
-- Export / import memos (JSON)
+- Export / import memos (ZIP archive including images; the manifest inside is JSON)
 - Localized in Japanese and English
 
 ## Tech Stack
 
 | Area | Technology |
 | --- | --- |
-| UI | Kotlin, Jetpack Compose, Material 3, Navigation Compose |
+| UI | Kotlin, Jetpack Compose, Material 3, Navigation Compose, Coil |
+| Widgets | Jetpack Glance |
 | Architecture | Clean Architecture + MVVM |
 | DI | Hilt |
 | State / Async | StateFlow, Coroutines |
@@ -31,8 +35,9 @@ It is built around Kotlin / Jetpack Compose / Material 3, following Clean Archit
 | Security | androidx.biometric |
 | Observability | Firebase Crashlytics |
 | Ads | Google Mobile Ads SDK (AdMob) |
-| Testing | JUnit 5, kotlinx-coroutines-test, Compose UI Test / Espresso |
-| Build | JDK 17, compileSdk 36 / minSdk 28 / targetSdk 36, R8 + ProGuard |
+| Testing | JUnit 5, MockK, Turbine, kotlinx-coroutines-test, Compose UI Test / Espresso |
+| Static analysis / Coverage | KtLint, detekt (including Compose rules), Android Lint, Kover |
+| Build | JDK 17, compileSdk 36.1 / minSdk 28 / targetSdk 36, R8 + ProGuard |
 | CI | GitHub Actions, fastlane, CodeQL, Dependabot |
 
 > For exact versions, see `app/build.gradle.kts` and `gradle/libs.versions.toml`.
@@ -74,8 +79,8 @@ git config core.hooksPath .githooks
 ### Test / Lint
 
 ```sh
-# Unit tests
-./gradlew :app:testDevDebugUnitTest
+# Unit tests (prod flavor, same as CI)
+./gradlew :app:testProdDebugUnitTest
 
 # KtLint
 ./gradlew :app:ktlintCheck

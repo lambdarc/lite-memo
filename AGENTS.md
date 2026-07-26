@@ -16,14 +16,32 @@ Lite Memo で AI エージェントが最初に読む入口です。
 ## AI作業用 Skill
 
 作業の種類に応じて、必要な Skill を最初に確認します。
-skill の正本は `.agents/skills/`。`.claude/skills/` は同期生成物なので直接編集しない（詳細: [`docs/claude-code.md`](docs/claude-code.md)）。
+skill を変更するときは `.agents/skills/` を編集する。`.claude/skills/` は同期生成物なので直接編集しない（詳細: [`docs/claude-code.md`](docs/claude-code.md)）。
 
-- [`.agents/skills/ui-implementation/SKILL.md`](.agents/skills/ui-implementation/SKILL.md): Compose / ViewModel / UI state / 画面テスト
-- [`.agents/skills/domain-implementation/SKILL.md`](.agents/skills/domain-implementation/SKILL.md): model / value object / UseCase / Repository interface
-- [`.agents/skills/data-implementation/SKILL.md`](.agents/skills/data-implementation/SKILL.md): Repository 実装 / mapper / DataStore / export-import
-- [`.agents/skills/db-implementation/SKILL.md`](.agents/skills/db-implementation/SKILL.md): Room entity / DAO / migration / schema
-- [`.agents/skills/test-implementation/SKILL.md`](.agents/skills/test-implementation/SKILL.md): Unit Test / androidTest / coroutine / Flow 検証
-- [`.agents/skills/implementation-review/SKILL.md`](.agents/skills/implementation-review/SKILL.md): 実装後レビューと指摘整理
+- `ui-implementation`: Compose / ViewModel / UI state / 画面テスト
+  - [`.agents/skills/ui-implementation/SKILL.md`](.agents/skills/ui-implementation/SKILL.md)
+  - [`.claude/skills/ui-implementation/SKILL.md`](.claude/skills/ui-implementation/SKILL.md)
+- `domain-implementation`: model / value object / UseCase / Repository interface
+  - [`.agents/skills/domain-implementation/SKILL.md`](.agents/skills/domain-implementation/SKILL.md)
+  - [`.claude/skills/domain-implementation/SKILL.md`](.claude/skills/domain-implementation/SKILL.md)
+- `data-implementation`: Repository 実装 / mapper / DataStore / export-import
+  - [`.agents/skills/data-implementation/SKILL.md`](.agents/skills/data-implementation/SKILL.md)
+  - [`.claude/skills/data-implementation/SKILL.md`](.claude/skills/data-implementation/SKILL.md)
+- `db-implementation`: Room entity / DAO / migration / schema
+  - [`.agents/skills/db-implementation/SKILL.md`](.agents/skills/db-implementation/SKILL.md)
+  - [`.claude/skills/db-implementation/SKILL.md`](.claude/skills/db-implementation/SKILL.md)
+- `test-implementation`: Unit Test / androidTest / coroutine / Flow 検証
+  - [`.agents/skills/test-implementation/SKILL.md`](.agents/skills/test-implementation/SKILL.md)
+  - [`.claude/skills/test-implementation/SKILL.md`](.claude/skills/test-implementation/SKILL.md)
+- `implementation-review`: 実装後レビューと指摘整理
+  - [`.agents/skills/implementation-review/SKILL.md`](.agents/skills/implementation-review/SKILL.md)
+  - [`.claude/skills/implementation-review/SKILL.md`](.claude/skills/implementation-review/SKILL.md)
+
+## コーディング規約
+
+実装前に、対象へ該当する規約を確認します。
+
+- [`.claude/rules/comments.md`](.claude/rules/comments.md): コメントの方針（本番コードには書かない / テストは AAA ラベルと検証観点のみ）
 
 ## 最低限の前提
 

@@ -80,7 +80,7 @@ class MemoTitleTest {
 - 基本は `// Arrange`、`// Act`、`// Assert` コメントを入れる
 - Arrange が不要な場合は `// Arrange` を省略してよい
 - Act と Assert は原則として分け、必要なラベルを別の表現へ置き換えない
-- Turbine の `.test {}` のように操作と検証が構造上交錯する場合に限り、`// Act & Assert` を使う
+- `assertThrows { ... }` や Turbine の `.test {}` のように、操作と検証が1つの式で構造上交錯する場合に限り、`// Act & Assert` を使う
 - 検証観点は、`// Act` または `// Act & Assert` の直下に `// <観点>: <意図>` の形で1行添える
 
 ## テスト観点（命名とコメント）
