@@ -1,15 +1,21 @@
 package com.appvoyager.litememo.domain.usecase
 
+import com.appvoyager.litememo.domain.FakeMemoImportArchiveRepository
+import com.appvoyager.litememo.domain.FakeMemoImportRepository
+import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.model.ExportData
+import com.appvoyager.litememo.domain.model.StagedMemoImport
 import com.appvoyager.litememo.domain.model.value.ExportFileReference
+import com.appvoyager.litememo.domain.model.value.MemoImportSessionToken
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
-import com.appvoyager.litememo.domain.repository.ExportFileRepository
+import com.appvoyager.litememo.domain.repository.MemoImportArchiveRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.coVerifySequence
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
@@ -17,90 +23,137 @@ import org.junit.jupiter.api.Test
 class ImportMemosFromFileUseCaseTest {
 
     @Test
-    fun interactionInvokeReadsFileBeforeApplyingData() = runTest {
+    fun normalInvokeImportsStagedArchiveData() = runTest {
         // Arrange
         val data = exportData()
-        val reference = ExportFileReference("content://import")
-        val exportFileRepository = mockk<ExportFileRepository>()
-        val importMemosUseCase = mockk<ImportMemosUseCase>()
-        coEvery { exportFileRepository.read(reference) } returns data
-        coEvery { importMemosUseCase(data) } returns Unit
-        val useCase = ImportMemosFromFileUseCase(exportFileRepository, importMemosUseCase)
+        val archiveRepository = FakeMemoImportArchiveRepository(stagedData = data)
+        val importRepository = FakeMemoImportRepository()
+        val useCase = useCase(archiveRepository, ImportMemosUseCase(importRepository))
 
         // Act
-        // Interaction: file reading completes before validation and application run once.
-        useCase(reference)
+        // Normal: ZIP data is staged before persistence.
+        useCase(REFERENCE)
 
         // Assert
-        coVerifySequence {
-            exportFileRepository.read(reference)
-            importMemosUseCase(data)
-        }
+        assertEquals(data, importRepository.importedData.single())
     }
 
     @Test
-    fun interactionReadFailureSkipsDataApplication() = runTest {
+    fun interactionInvokeCompletesStagedImportAfterPersistence() = runTest {
         // Arrange
-        val exportFileRepository = mockk<ExportFileRepository>()
-        val importMemosUseCase = mockk<ImportMemosUseCase>(relaxed = true)
-        coEvery { exportFileRepository.read(any()) } throws IllegalStateException("read failed")
-        val useCase = ImportMemosFromFileUseCase(exportFileRepository, importMemosUseCase)
+        val archiveRepository = FakeMemoImportArchiveRepository(stagedData = exportData())
+        val useCase = useCase(archiveRepository, ImportMemosUseCase(FakeMemoImportRepository()))
 
         // Act
-        // Interaction/Error: a file read failure prevents DB import.
-        runCatching { useCase(ExportFileReference("content://import")) }
+        // Interaction: a successful import completes its staging session.
+        useCase(REFERENCE)
 
         // Assert
-        coVerify(exactly = 0) { importMemosUseCase(any()) }
+        assertEquals(
+            listOf(FakeMemoImportArchiveRepository.TOKEN),
+            archiveRepository.completedTokens
+        )
     }
 
     @Test
-    fun errorApplicationFailurePropagatesToCaller() {
+    fun errorInvokeRollsBackWhenPersistenceFails() = runTest {
         // Arrange
-        val data = exportData()
-        val reference = ExportFileReference("content://import")
-        val error = IllegalArgumentException("invalid data")
-        val exportFileRepository = mockk<ExportFileRepository>()
-        val importMemosUseCase = mockk<ImportMemosUseCase>()
-        coEvery { exportFileRepository.read(reference) } returns data
-        coEvery { importMemosUseCase(data) } throws error
-        val useCase = ImportMemosFromFileUseCase(exportFileRepository, importMemosUseCase)
+        val archiveRepository = FakeMemoImportArchiveRepository(stagedData = exportData())
+        val importUseCase = mockk<ImportMemosUseCase>()
+        coEvery { importUseCase(any()) } throws IllegalStateException("db failed")
+        val useCase = useCase(archiveRepository, importUseCase)
 
         // Act
-        // Error: validation and application failures remain visible to the caller.
-        val actual = assertThrows(IllegalArgumentException::class.java) {
-            runTest { useCase(reference) }
-        }
+        // Error: persistence failure rolls back staged images.
+        runCatching { useCase(REFERENCE) }
 
         // Assert
-        assertSame(error, actual)
+        assertEquals(
+            listOf(FakeMemoImportArchiveRepository.TOKEN),
+            archiveRepository.rolledBackTokens
+        )
     }
 
     @Test
-    fun coroutineCancellationPropagatesToCaller() {
+    fun errorPersistenceFailureRemainsPrimaryWhenRollbackFails() {
         // Arrange
-        val reference = ExportFileReference("content://import")
+        val persistenceFailure = IllegalStateException("db failed")
+        val rollbackFailure = IllegalStateException("rollback failed")
+        val archiveRepository = mockk<MemoImportArchiveRepository>()
+        val importUseCase = mockk<ImportMemosUseCase>()
+        coEvery { archiveRepository.stageImportImages(REFERENCE) } returns staged(exportData())
+        coEvery { importUseCase(any()) } throws persistenceFailure
+        coEvery { archiveRepository.rollbackStagedImport(any()) } answers { throw rollbackFailure }
+        val useCase = useCase(archiveRepository, importUseCase)
+
+        // Act
+        // Error: cleanup diagnostics do not replace the import failure.
+        val actual =
+            assertThrows(IllegalStateException::class.java) { runTest { useCase(REFERENCE) } }
+
+        // Assert
+        assertAll(
+            { assertSame(persistenceFailure, actual) },
+            { assertEquals(rollbackFailure.message, actual.suppressed.single().message) }
+        )
+    }
+
+    @Test
+    fun coroutineCancellationRemainsPrimaryWhenRollbackFails() {
+        // Arrange
         val cancellation = CancellationException("cancelled")
-        val exportFileRepository = mockk<ExportFileRepository>()
-        val importMemosUseCase = mockk<ImportMemosUseCase>()
-        coEvery { exportFileRepository.read(reference) } throws cancellation
-        val useCase = ImportMemosFromFileUseCase(exportFileRepository, importMemosUseCase)
+        val archiveRepository = mockk<MemoImportArchiveRepository>()
+        val importUseCase = mockk<ImportMemosUseCase>()
+        coEvery { archiveRepository.stageImportImages(REFERENCE) } returns staged(exportData())
+        coEvery { importUseCase(any()) } throws cancellation
+        coEvery { archiveRepository.rollbackStagedImport(any()) } throws IllegalStateException()
+        val useCase = useCase(archiveRepository, importUseCase)
 
         // Act
-        // Coroutine: cancellation from file reading is not converted into an import failure.
-        val actual = assertThrows(CancellationException::class.java) {
-            runTest { useCase(reference) }
-        }
+        // Coroutine: cancellation is preserved after best-effort rollback.
+        val actual =
+            assertThrows(CancellationException::class.java) { runTest { useCase(REFERENCE) } }
 
         // Assert
         assertSame(cancellation, actual)
     }
 
+    @Test
+    fun errorStagingFailureSkipsPersistenceAndCompletion() = runTest {
+        // Arrange
+        val archiveRepository = FakeMemoImportArchiveRepository(stagedData = exportData())
+        archiveRepository.stageError = IllegalStateException("staging failed")
+        val importUseCase = mockk<ImportMemosUseCase>(relaxed = true)
+        val useCase = useCase(archiveRepository, importUseCase)
+
+        // Act
+        // Error/Interaction: failed ZIP staging starts neither DB import nor completion.
+        runCatching { useCase(REFERENCE) }
+
+        // Assert
+        coVerify(exactly = 0) { importUseCase(any()) }
+        assertEquals(emptyList<MemoImportSessionToken>(), archiveRepository.completedTokens)
+    }
+
+    private fun useCase(
+        repository: MemoImportArchiveRepository,
+        importUseCase: ImportMemosUseCase
+    ) = ImportMemosFromFileUseCase(repository, importUseCase)
+
     private fun exportData() = ExportData(
-        version = ExportMemosUseCase.CURRENT_VERSION,
+        version = 1,
         exportedAt = TimestampMillis(1_000L),
         tags = emptyList(),
-        memos = emptyList()
+        memos = listOf(memoFixture())
     )
+
+    private fun staged(data: ExportData) = StagedMemoImport(
+        token = FakeMemoImportArchiveRepository.TOKEN,
+        data = data
+    )
+
+    private companion object {
+        val REFERENCE = ExportFileReference("content://import.zip")
+    }
 
 }

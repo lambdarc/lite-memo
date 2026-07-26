@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -28,9 +29,11 @@ import java.time.format.DateTimeFormatter
 
 private const val PRIVACY_POLICY_URL = "https://mshi-04.github.io/lite-memo/privacy/"
 
+private val IMPORT_MIME_TYPES = arrayOf("application/zip")
+
 private fun defaultExportFileName(): String {
     val formatter = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
-    return "lite-memo-export-${LocalDateTime.now().format(formatter)}.json"
+    return "lite-memo-export-${LocalDateTime.now().format(formatter)}.zip"
 }
 
 @Composable
@@ -48,9 +51,13 @@ fun SettingsRoute(
     val coroutineScope = rememberCoroutineScope()
 
     val exportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
+        contract = ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: Uri? ->
-        uri?.let { viewModel.exportMemos(it.toExportFileReference()) }
+        if (uri == null) {
+            viewModel.cancelPreparedExport()
+        } else {
+            viewModel.writePreparedExport(uri.toExportFileReference())
+        }
     }
 
     val importLauncher = rememberLauncherForActivityResult(
@@ -61,6 +68,8 @@ fun SettingsRoute(
 
     val exportSuccessMessage = stringResource(R.string.settings_export_success)
     val exportErrorMessage = stringResource(R.string.settings_export_error)
+    val exportDestinationWriteErrorMessage =
+        stringResource(R.string.settings_export_destination_write_error)
     val importSuccessMessage = stringResource(R.string.settings_import_success)
     val appLockAuthenticationFailedMessage = stringResource(R.string.app_lock_auth_failed)
     val appLockAuthenticationCanceledMessage =
@@ -91,6 +100,7 @@ fun SettingsRoute(
     val snackbarMessages = SettingsSnackbarMessages(
         exportSuccess = exportSuccessMessage,
         exportError = exportErrorMessage,
+        exportDestinationWriteError = exportDestinationWriteErrorMessage,
         importSuccess = importSuccessMessage,
         appLockAuthFailed = appLockAuthenticationFailedMessage,
         appLockAuthCanceled = appLockAuthenticationCanceledMessage,
@@ -105,6 +115,25 @@ fun SettingsRoute(
                 withDismissAction = true
             )
         }
+    }
+
+    LaunchedEffect(uiState.exportPickerRequestId) {
+        val requestId = uiState.exportPickerRequestId ?: return@LaunchedEffect
+        try {
+            exportLauncher.launch(defaultExportFileName())
+            viewModel.onExportPickerRequestHandled(requestId)
+        } catch (_: ActivityNotFoundException) {
+            viewModel.onExportPickerRequestHandled(requestId)
+            viewModel.cancelPreparedExport()
+            snackbarHostState.showSnackbar(
+                message = filePickerNotFoundMessage,
+                withDismissAction = true
+            )
+        }
+    }
+
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.onExportPickerHostStopped() }
     }
 
     SettingsScreen(
@@ -128,8 +157,8 @@ fun SettingsRoute(
         onCollapseSortOrder = { viewModel.collapseSortOrder() },
         onTagManageClick = onTagManageClick,
         onTrashClick = onTrashClick,
-        onExportClick = { launchFilePicker { exportLauncher.launch(defaultExportFileName()) } },
-        onImportClick = { launchFilePicker { importLauncher.launch(arrayOf("application/json")) } },
+        onExportClick = { viewModel.prepareExport() },
+        onImportClick = { launchFilePicker { importLauncher.launch(IMPORT_MIME_TYPES) } },
         onConfirmImport = { viewModel.confirmImport() },
         onDismissImportConfirmDialog = { viewModel.dismissImportConfirmDialog() },
         onDismissImportErrorDialog = { viewModel.dismissImportErrorDialog() },
@@ -153,6 +182,7 @@ private fun SettingsSnackbarUiEvent.toMessage(messages: SettingsSnackbarMessages
     when (this) {
         SettingsSnackbarUiEvent.ExportSuccess -> messages.exportSuccess
         SettingsSnackbarUiEvent.ExportError -> messages.exportError
+        SettingsSnackbarUiEvent.ExportDestinationWriteError -> messages.exportDestinationWriteError
         SettingsSnackbarUiEvent.ImportSuccess -> messages.importSuccess
         SettingsSnackbarUiEvent.AppLockAuthenticationFailed -> messages.appLockAuthFailed
         SettingsSnackbarUiEvent.AppLockAuthenticationCanceled -> messages.appLockAuthCanceled
@@ -163,6 +193,7 @@ private fun SettingsSnackbarUiEvent.toMessage(messages: SettingsSnackbarMessages
 private data class SettingsSnackbarMessages(
     val exportSuccess: String,
     val exportError: String,
+    val exportDestinationWriteError: String,
     val importSuccess: String,
     val appLockAuthFailed: String,
     val appLockAuthCanceled: String,

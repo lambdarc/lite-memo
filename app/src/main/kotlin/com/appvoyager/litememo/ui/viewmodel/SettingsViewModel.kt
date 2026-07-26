@@ -3,15 +3,20 @@ package com.appvoyager.litememo.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.appvoyager.litememo.di.AppVersion
+import com.appvoyager.litememo.di.ApplicationScope
 import com.appvoyager.litememo.domain.exception.ImportTagNameConflictException
+import com.appvoyager.litememo.domain.exception.MemoImportException
+import com.appvoyager.litememo.domain.exception.MemoImportFailureReason
 import com.appvoyager.litememo.domain.model.MemoSortOrder
 import com.appvoyager.litememo.domain.model.ThemeMode
 import com.appvoyager.litememo.domain.model.value.ExportFileReference
-import com.appvoyager.litememo.domain.usecase.ExportMemosToFileUseCase
+import com.appvoyager.litememo.domain.model.value.MemoExportToken
+import com.appvoyager.litememo.domain.repository.MemoExportArchiveRepository
 import com.appvoyager.litememo.domain.usecase.ImportMemosFromFileUseCase
 import com.appvoyager.litememo.domain.usecase.ObserveAppLockEnabledUseCase
 import com.appvoyager.litememo.domain.usecase.ObserveMemoSortOrderUseCase
 import com.appvoyager.litememo.domain.usecase.ObserveThemeModeUseCase
+import com.appvoyager.litememo.domain.usecase.PrepareMemoExportUseCase
 import com.appvoyager.litememo.domain.usecase.SetAppLockEnabledUseCase
 import com.appvoyager.litememo.domain.usecase.SetMemoSortOrderUseCase
 import com.appvoyager.litememo.domain.usecase.SetThemeModeUseCase
@@ -20,6 +25,8 @@ import com.appvoyager.litememo.ui.state.SettingsImportErrorDialogUiState
 import com.appvoyager.litememo.ui.state.SettingsUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +36,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -39,18 +47,23 @@ class SettingsViewModel @Inject constructor(
     private val setThemeModeUseCase: SetThemeModeUseCase,
     private val setMemoSortOrderUseCase: SetMemoSortOrderUseCase,
     private val setAppLockEnabledUseCase: SetAppLockEnabledUseCase,
-    private val exportMemosToFileUseCase: ExportMemosToFileUseCase,
+    private val prepareMemoExportUseCase: PrepareMemoExportUseCase,
+    private val memoExportArchiveRepository: MemoExportArchiveRepository,
     private val importMemosFromFileUseCase: ImportMemosFromFileUseCase,
+    @param:ApplicationScope private val applicationScope: CoroutineScope,
     @param:AppVersion private val appVersion: String
 ) : ViewModel() {
 
     private val themeDropdownExpanded = MutableStateFlow(false)
     private val sortOrderExpanded = MutableStateFlow(false)
     private val isExporting = MutableStateFlow(false)
+    private val exportPickerRequestId = MutableStateFlow<Long?>(null)
     private val isImporting = MutableStateFlow(false)
     private val showImportConfirmDialog = MutableStateFlow(false)
     private val importErrorDialog = MutableStateFlow<SettingsImportErrorDialogUiState?>(null)
     private var pendingImportReference: ExportFileReference? = null
+    private var pendingExportToken: MemoExportToken? = null
+    private var nextExportPickerRequestId = 0L
     private var isAppLockAuthenticating = false
 
     private val _snackbarEvent = Channel<SettingsSnackbarUiEvent>(Channel.BUFFERED)
@@ -68,6 +81,8 @@ class SettingsViewModel @Inject constructor(
             showImportConfirmDialog
         ) { themeExpanded, expanded, exporting, importing, importDialog ->
             SettingsUiFlags(themeExpanded, expanded, exporting, importing, importDialog)
+        }.combine(exportPickerRequestId) { flags, requestId ->
+            flags.copy(exportPickerRequestId = requestId)
         },
         importErrorDialog
     ) { themeMode, sortOrder, appLockEnabled, flags, importError ->
@@ -79,6 +94,7 @@ class SettingsViewModel @Inject constructor(
             themeDropdownExpanded = flags.themeDropdownExpanded,
             sortOrderExpanded = flags.sortOrderExpanded,
             isExporting = flags.isExporting,
+            exportPickerRequestId = flags.exportPickerRequestId,
             isImporting = flags.isImporting,
             showImportConfirmDialog = flags.showImportConfirmDialog,
             importErrorDialog = importError
@@ -149,19 +165,64 @@ class SettingsViewModel @Inject constructor(
         sortOrderExpanded.value = false
     }
 
-    fun exportMemos(reference: ExportFileReference) {
+    fun prepareExport() {
         if (isExporting.value || isImporting.value) return
+        isExporting.value = true
         viewModelScope.launch {
-            isExporting.value = true
             try {
-                exportMemosToFileUseCase(reference)
-                _snackbarEvent.trySend(SettingsSnackbarUiEvent.ExportSuccess)
+                pendingExportToken = prepareMemoExportUseCase()
+                nextExportPickerRequestId++
+                exportPickerRequestId.value = nextExportPickerRequestId
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Throwable) {
                 _snackbarEvent.trySend(SettingsSnackbarUiEvent.ExportError)
-            } finally {
                 isExporting.value = false
+            }
+        }
+    }
+
+    fun onExportPickerRequestHandled(requestId: Long) {
+        if (exportPickerRequestId.value == requestId) {
+            exportPickerRequestId.value = null
+        }
+    }
+
+    fun writePreparedExport(reference: ExportFileReference) {
+        val token = pendingExportToken?.takeIf { isExporting.value }
+        if (token == null) {
+            _snackbarEvent.trySend(SettingsSnackbarUiEvent.ExportError)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                memoExportArchiveRepository.write(token, reference)
+                _snackbarEvent.trySend(SettingsSnackbarUiEvent.ExportSuccess)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                _snackbarEvent.trySend(SettingsSnackbarUiEvent.ExportDestinationWriteError)
+            } finally {
+                withContext(NonCancellable) {
+                    runCatching { memoExportArchiveRepository.discard(token) }
+                }
+                clearPreparedExport(token)
+            }
+        }
+    }
+
+    fun onExportPickerHostStopped() {
+        if (exportPickerRequestId.value != null) cancelPreparedExport()
+    }
+
+    fun cancelPreparedExport() {
+        val token = pendingExportToken ?: return
+        pendingExportToken = null
+        exportPickerRequestId.value = null
+        isExporting.value = false
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                runCatching { memoExportArchiveRepository.discard(token) }
             }
         }
     }
@@ -188,6 +249,8 @@ class SettingsViewModel @Inject constructor(
                 importErrorDialog.value = SettingsImportErrorDialogUiState.TagNameConflict(
                     tagNames = e.tagNames.map { it.value }
                 )
+            } catch (e: MemoImportException) {
+                importErrorDialog.value = e.reason.toImportErrorDialogUiState()
             } catch (_: Throwable) {
                 importErrorDialog.value = SettingsImportErrorDialogUiState.Generic
             } finally {
@@ -205,6 +268,27 @@ class SettingsViewModel @Inject constructor(
         importErrorDialog.value = null
     }
 
+    override fun onCleared() {
+        val token = pendingExportToken
+        pendingExportToken = null
+        exportPickerRequestId.value = null
+        isExporting.value = false
+        if (token != null) {
+            applicationScope.launch {
+                runCatching { memoExportArchiveRepository.discard(token) }
+            }
+        }
+        super.onCleared()
+    }
+
+    private fun clearPreparedExport(token: MemoExportToken) {
+        if (pendingExportToken == token) {
+            pendingExportToken = null
+            exportPickerRequestId.value = null
+            isExporting.value = false
+        }
+    }
+
     private companion object {
         const val STOP_TIMEOUT_MILLIS = 5_000L
     }
@@ -213,6 +297,7 @@ class SettingsViewModel @Inject constructor(
 sealed interface SettingsSnackbarUiEvent {
     data object ExportSuccess : SettingsSnackbarUiEvent
     data object ExportError : SettingsSnackbarUiEvent
+    data object ExportDestinationWriteError : SettingsSnackbarUiEvent
     data object ImportSuccess : SettingsSnackbarUiEvent
     data object AppLockAuthenticationFailed : SettingsSnackbarUiEvent
     data object AppLockAuthenticationCanceled : SettingsSnackbarUiEvent
@@ -220,10 +305,27 @@ sealed interface SettingsSnackbarUiEvent {
     data object AppLockUnavailable : SettingsSnackbarUiEvent
 }
 
+private fun MemoImportFailureReason.toImportErrorDialogUiState(): SettingsImportErrorDialogUiState =
+    when (this) {
+        MemoImportFailureReason.UNSUPPORTED_VERSION ->
+            SettingsImportErrorDialogUiState.UnsupportedVersion
+
+        MemoImportFailureReason.INVALID_ARCHIVE -> SettingsImportErrorDialogUiState.InvalidArchive
+
+        MemoImportFailureReason.INVALID_IMAGE -> SettingsImportErrorDialogUiState.InvalidImage
+
+        MemoImportFailureReason.SIZE_LIMIT_EXCEEDED ->
+            SettingsImportErrorDialogUiState.SizeLimitExceeded
+
+        MemoImportFailureReason.INSUFFICIENT_STORAGE ->
+            SettingsImportErrorDialogUiState.InsufficientStorage
+    }
+
 private data class SettingsUiFlags(
     val themeDropdownExpanded: Boolean,
     val sortOrderExpanded: Boolean,
     val isExporting: Boolean,
     val isImporting: Boolean,
-    val showImportConfirmDialog: Boolean
+    val showImportConfirmDialog: Boolean,
+    val exportPickerRequestId: Long? = null
 )

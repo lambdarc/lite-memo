@@ -525,6 +525,21 @@ private fun SettingsImportErrorDialogUiState.toMessage(): String = when (this) {
     is SettingsImportErrorDialogUiState.TagNameConflict ->
         stringResource(R.string.settings_import_error_tag_conflict_message)
 
+    SettingsImportErrorDialogUiState.UnsupportedVersion ->
+        stringResource(R.string.settings_import_error_unsupported_version)
+
+    SettingsImportErrorDialogUiState.InvalidArchive ->
+        stringResource(R.string.settings_import_error_invalid_archive)
+
+    SettingsImportErrorDialogUiState.InvalidImage ->
+        stringResource(R.string.settings_import_error_invalid_image)
+
+    SettingsImportErrorDialogUiState.SizeLimitExceeded ->
+        stringResource(R.string.settings_import_error_size_limit)
+
+    SettingsImportErrorDialogUiState.InsufficientStorage ->
+        stringResource(R.string.settings_import_error_insufficient_storage)
+
     SettingsImportErrorDialogUiState.Generic -> stringResource(R.string.settings_import_error)
 }
 

@@ -2,7 +2,10 @@ package com.appvoyager.litememo.domain.usecase
 
 import com.appvoyager.litememo.domain.FakeMemoImportRepository
 import com.appvoyager.litememo.domain.exception.ImportTagNameConflictException
+import com.appvoyager.litememo.domain.exception.MemoImportException
+import com.appvoyager.litememo.domain.exception.MemoImportFailureReason
 import com.appvoyager.litememo.domain.memoFixture
+import com.appvoyager.litememo.domain.memoImageFixture
 import com.appvoyager.litememo.domain.model.ExportData
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.Tag
@@ -75,11 +78,75 @@ class ImportMemosUseCaseTest {
             memos = emptyList()
         )
 
-        // Act & Assert
+        // Act
         // Error: unsupported format versions are rejected before persistence.
-        assertThrows(IllegalArgumentException::class.java) {
+        val failure = assertThrows(MemoImportException::class.java) {
             runTest { useCase(data) }
         }
+
+        // Assert
+        assertEquals(MemoImportFailureReason.UNSUPPORTED_VERSION, failure.reason)
+    }
+
+    @Test
+    fun errorInvokeRejectsMemoWithoutTitleBodyAndImages() = runTest {
+        // Arrange
+        val importRepository = FakeMemoImportRepository()
+        val useCase = importMemosUseCase(importRepository)
+        val data = exportData(memos = listOf(memoFixture(id = "m1", title = "", body = "")))
+
+        // Act
+        // Error: a memo carrying no content at all is rejected before persistence.
+        val failure = runCatching { useCase(data) }.exceptionOrNull()
+
+        // Assert
+        assertEquals(
+            MemoImportFailureReason.INVALID_ARCHIVE to emptyList<ExportData>(),
+            (failure as? MemoImportException)?.reason to importRepository.importedData
+        )
+    }
+
+    @Test
+    fun boundaryInvokeAcceptsMemoThatOnlyHasImages() = runTest {
+        // Arrange
+        val importRepository = FakeMemoImportRepository()
+        val useCase = importMemosUseCase(importRepository)
+        val data = exportData(
+            memos = listOf(
+                memoFixture(id = "m1", title = "", body = "", images = listOf(memoImageFixture()))
+            )
+        )
+
+        // Act
+        // Boundary: an image-only memo is valid import content.
+        useCase(data)
+
+        // Assert
+        assertEquals(data, importRepository.importedData.single())
+    }
+
+    @Test
+    fun errorInvokeRejectsImageIdUsedByMoreThanOneMemo() = runTest {
+        // Arrange
+        val importRepository = FakeMemoImportRepository()
+        val useCase = importMemosUseCase(importRepository)
+        val image = memoImageFixture(id = "shared-image")
+        val data = exportData(
+            memos = listOf(
+                memoFixture(id = "m1", images = listOf(image)),
+                memoFixture(id = "m2", images = listOf(image))
+            )
+        )
+
+        // Act
+        // Error: image ids are a global primary key, so archive-wide duplicates are rejected.
+        val failure = runCatching { useCase(data) }.exceptionOrNull()
+
+        // Assert
+        assertEquals(
+            MemoImportFailureReason.INVALID_ARCHIVE to emptyList<ExportData>(),
+            (failure as? MemoImportException)?.reason to importRepository.importedData
+        )
     }
 
     @Test

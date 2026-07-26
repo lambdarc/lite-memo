@@ -8,9 +8,7 @@ import com.appvoyager.litememo.domain.epochMillis
 import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.memoImageFixture
 import com.appvoyager.litememo.domain.model.Memo
-import com.appvoyager.litememo.domain.model.MemoSummary
 import com.appvoyager.litememo.domain.model.Tag
-import com.appvoyager.litememo.domain.model.value.MemoId
 import com.appvoyager.litememo.domain.model.value.SearchQuery
 import com.appvoyager.litememo.domain.model.value.TagId
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
@@ -310,6 +308,71 @@ class CalendarViewModelTest {
         assertEquals(listOf("Shopping"), state.search.results.map { it.title })
     }
 
+    @Test
+    fun stateTransitionChangingQueryRecoversSearchAfterError() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = RetryableSearchMemoRepository(
+            delegate = FakeMemoRepository(
+                listOf(
+                    memoFixture(
+                        id = "memo-1",
+                        title = "Coffee",
+                        createdAt = epochMillis("2026-05-15T10:00:00Z")
+                    )
+                )
+            )
+        )
+        val viewModel = calendarViewModel(memoRepository = memoRepository)
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("Shopping")
+        advanceUntilIdle()
+        viewModel.uiState.first { it.search.hasError }
+
+        // Act
+        // StateTransition/Error: a changed query starts a fresh search after the source recovers.
+        memoRepository.allowSearch()
+        viewModel.updateSearchQuery("Coffee")
+        advanceUntilIdle()
+        val state = viewModel.uiState.first {
+            !it.search.hasError && it.search.query == "Coffee" && it.search.results.isNotEmpty()
+        }
+
+        // Assert
+        assertEquals(listOf("Coffee"), state.search.results.map { it.title })
+    }
+
+    @Test
+    fun stateTransitionRetryReloadsCalendarAfterLoadError() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = RetryableCalendarMemoRepository(
+            delegate = FakeMemoRepository(
+                listOf(
+                    memoFixture(
+                        id = "memo-1",
+                        title = "Recovered memo",
+                        createdAt = epochMillis("2026-05-15T10:00:00Z")
+                    )
+                )
+            )
+        )
+        val viewModel = calendarViewModel(memoRepository = memoRepository)
+        viewModel.uiState.first { !it.isLoading && it.hasError }
+
+        // Act
+        // StateTransition/Error: retry resubscribes failed calendar data and restores the content.
+        memoRepository.allowCalendarLoad()
+        viewModel.retry()
+        advanceUntilIdle()
+        val state = viewModel.uiState.first {
+            !it.hasError && it.memos.isNotEmpty()
+        }
+
+        // Assert
+        assertEquals(listOf("Recovered memo"), state.memos.map { it.title })
+        assertEquals(YearMonth.of(2026, 5), state.selectedMonth)
+        assertEquals(LocalDate.of(2026, 5, 15), state.selectedDate)
+    }
+
     private fun calendarViewModel(
         memoRepository: MemoRepository = FakeMemoRepository(),
         tags: List<Tag> = emptyList(),
@@ -339,7 +402,7 @@ class CalendarViewModelTest {
     }
 
     private class RetryableSearchMemoRepository(private val delegate: FakeMemoRepository) :
-        MemoRepository {
+        MemoRepository by delegate {
 
         private var searchFails = true
 
@@ -347,42 +410,28 @@ class CalendarViewModelTest {
             searchFails = false
         }
 
-        override fun observeActiveMemos(): Flow<List<Memo>> = delegate.observeActiveMemos()
-
-        override fun observeRecentActiveMemos(limit: Int): Flow<List<MemoSummary>> =
-            delegate.observeRecentActiveMemos(limit)
-
         override fun observeActiveMemosBySearchQuery(query: SearchQuery): Flow<List<Memo>> =
             if (searchFails) {
                 flow { throw IllegalStateException("Search failed.") }
             } else {
                 delegate.observeActiveMemosBySearchQuery(query)
             }
+    }
+
+    private class RetryableCalendarMemoRepository(private val delegate: FakeMemoRepository) :
+        MemoRepository by delegate {
+
+        private var calendarLoadFails = true
+
+        fun allowCalendarLoad() {
+            calendarLoadFails = false
+        }
 
         override fun observeActiveMemosCreatedBetween(range: TimestampRange): Flow<List<Memo>> =
-            delegate.observeActiveMemosCreatedBetween(range)
-
-        override fun observeTrashedMemos(): Flow<List<Memo>> = delegate.observeTrashedMemos()
-
-        override suspend fun getActiveMemo(id: MemoId): Memo? = delegate.getActiveMemo(id)
-
-        override suspend fun saveMemo(memo: Memo) = delegate.saveMemo(memo)
-
-        override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) =
-            delegate.moveMemoToTrash(id, deletedAt)
-
-        override suspend fun restoreMemoFromTrash(id: MemoId) = delegate.restoreMemoFromTrash(id)
-
-        override suspend fun deleteMemoPermanently(id: MemoId) = delegate.deleteMemoPermanently(id)
-
-        override suspend fun discardMemo(id: MemoId) = delegate.discardMemo(id)
-
-        override suspend fun deleteTrashedMemosDeletedAtOrBefore(cutoff: TimestampMillis) =
-            delegate.deleteTrashedMemosDeletedAtOrBefore(cutoff)
-
-        override suspend fun getAllActiveMemos(): List<Memo> = delegate.getAllActiveMemos()
-
-        override suspend fun saveAllMemos(memos: List<Memo>) = delegate.saveAllMemos(memos)
-
+            if (calendarLoadFails) {
+                flow { throw IllegalStateException("Calendar load failed.") }
+            } else {
+                delegate.observeActiveMemosCreatedBetween(range)
+            }
     }
 }

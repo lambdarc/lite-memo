@@ -1,23 +1,26 @@
 # export / import
 
-JSON export / import でメモ・タグの構造化データを入出力する。
+ZIP export / import でメモ・タグと画像を一体のarchiveとして入出力する。
 
 ## 確認する対象
 
-- `data/export/`（`ExportFileReader` / `ExportFileWriter`）、`data/model/export/` の DTO、`ExportDataMapper`
+- `data/export/` のarchive codec / session、`data/model/export/` のmanifest DTO、`ExportDataMapper`
 - `ExportMemosUseCase` / `ImportMemosUseCase` と domain の `ExportData`
 
 ## 実装時の注意
 
-- 対象はメモ・タグの構造化データに限り、画像ファイルは対象外とする。
-- import で同一 ID を上書きすると既存の添付画像は失われる前提で扱う。
-- 入出力フォーマットの後方互換（欠損・追加フィールド）を壊さない。
+- 画像本体はBase64化せず、独立したZIP entryとしてstream処理する。
+- AndroidのURI、実path、streamはData層に閉じ、Domain / ViewModelにはopaque tokenとreferenceだけを公開する。
+- Exportはapp-private archiveを完成・検証してから保存先へ書き、成功・失敗・cancelで一時fileをcleanupする。
+- Importは画像staging、DB反映、rollback / recoveryを一連の操作として扱う。
+- version、entry path、size、checksum、重複IDをarchive codecで検証する。
 
 ## テスト判断
 
-- DTO ↔ domain 変換と、往復（export → import）の一致を JVM Unit Test で押さえる。
+- DTO ↔ domain 変換と、ZIP往復（export → import）の一致をUnit Testで押さえる。
+- ContentResolverのtruncateとfilesystem cleanupはandroidTestで押さえる。
 
 ## 検証観点
 
-- 破損・欠損フィールドの入力で無効なデータを作らないか。
-- 画像を対象外とする前提が実装と一致しているか。
+- 破損・欠損画像や不正manifestで部分的なarchive / importを残さないか。
+- 画像ID、順序、metadata、byte列を往復で維持するか。

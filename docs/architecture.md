@@ -11,6 +11,7 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 - UseCase はビジネスルール、複数処理の調停、再利用する操作の境界として置き、単純委譲のためだけには増やさない
 - Android UI と密接な SDK や OS API は UI / app entry 側に閉じ、データ源に関わる Android 依存は domain の抽象を data が実装する
 - 依存注入は Hilt で行い、`LiteMemoApplication` と app 直下の `di` / `data.di` を composition boundary とする。app 直下の `di` はアプリ全体の binding、`data.di` は data 層の binding を担う
+- Glance ウィジェットのように `@AndroidEntryPoint` を使えない UI entry point は、`ui.widget.di` の `@EntryPoint` から `SingletonComponent` の依存を取得する
 
 ## レイヤー構成
 
@@ -84,7 +85,7 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 - Room はメモ・タグ・メモ画像メタデータなどの構造化データの source of truth とする。スキーマは `app/schemas/` にエクスポートし、変更時は migration を追加する
 - DataStore はテーマ、表示設定などの軽量な設定値を扱う
 - メモ画像ファイルはアプリ専用領域に保存し、Room には画像 ID・ファイル名などの参照情報を保持する
-- JSON export/import はメモ・タグの構造化データだけを対象とし、画像ファイルは対象外とする
+- ZIP export/import は manifest のメモ・タグ・画像metadataと画像ファイル本体を対象とする
 - 時刻・ID 生成やデータ源に関わる外部サービスは domain の provider / repository interface 経由で扱い、実装は data 層に閉じる。UI と密接な SDK は前述の UI / app entry 方針に従う
 - data 層の model と domain model がずれる場合は mapper を置く
 

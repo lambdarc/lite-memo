@@ -1,14 +1,17 @@
 package com.appvoyager.litememo.data.repository
 
-import com.appvoyager.litememo.data.local.dao.MemoDao
+import com.appvoyager.litememo.data.local.dao.MemoBulkDao
 import com.appvoyager.litememo.data.local.entity.MemoEntity
 import com.appvoyager.litememo.data.local.entity.MemoImageEntity
 import com.appvoyager.litememo.data.local.entity.MemoTagRefEntity
 import com.appvoyager.litememo.data.local.model.MemoSummaryProjection
+import com.appvoyager.litememo.data.local.model.MemoVersionProjection
 import com.appvoyager.litememo.data.local.model.MemoWithRefs
 import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.memoImageFixture
 import com.appvoyager.litememo.domain.memoSummaryFixture
+import com.appvoyager.litememo.domain.model.ActiveMemoBulkWrite
+import com.appvoyager.litememo.domain.model.MemoTrashUpdate
 import com.appvoyager.litememo.domain.model.value.MemoId
 import com.appvoyager.litememo.domain.model.value.MemoImageFileName
 import com.appvoyager.litememo.domain.model.value.SearchQuery
@@ -228,6 +231,42 @@ class RoomMemoRepositoryTest {
     }
 
     @Test
+    fun boundaryGetActiveMemosReturnsDistinctMemosInRequestedOrder() = runTest {
+        // Arrange
+        val dao = FakeMemoDao(
+            memosWithRefs = listOf(
+                memoWithRefs(memoId = "memo-1"),
+                memoWithRefs(memoId = "memo-2"),
+                memoWithRefs(memoId = "memo-trashed", deletedAt = 2_000L)
+            )
+        )
+        val repository = createRepository(dao)
+
+        // Act
+        // Boundary: duplicate IDs are removed while requested order remains stable
+        val memos = repository.getActiveMemos(
+            listOf(MemoId("memo-2"), MemoId("memo-1"), MemoId("memo-2"))
+        )
+
+        // Assert
+        assertEquals(listOf(MemoId("memo-2"), MemoId("memo-1")), memos.map { it.id })
+    }
+
+    @Test
+    fun boundaryGetActiveMemosSkipsDaoForEmptyInput() = runTest {
+        // Arrange
+        val dao = FakeMemoDao()
+        val repository = createRepository(dao)
+
+        // Act
+        // Boundary/Interaction: empty input is a repository-level no-op
+        val memos = repository.getActiveMemos(emptyList())
+
+        // Assert
+        assertEquals(emptyList<MemoId>() to 0, memos.map { it.id } to dao.activeMemoReadCount)
+    }
+
+    @Test
     fun saveMemoWritesMemoEntityToDao() = runTest {
         // Arrange
         val dao = FakeMemoDao()
@@ -392,13 +431,92 @@ class RoomMemoRepositoryTest {
     }
 
     @Test
+    fun interactionMoveMemosToTrashTrashesActiveMemosGroupedByDeletedAt() = runTest {
+        // Arrange
+        val dao = FakeMemoDao(
+            memosWithRefs = listOf(
+                memoWithRefs(memoId = "memo-1"),
+                memoWithRefs(memoId = "memo-2")
+            )
+        )
+        val repository = createRepository(dao)
+
+        // Act
+        // Interaction: every still-active memo is trashed with its requested deletedAt
+        repository.moveMemosToTrash(
+            listOf(
+                MemoTrashUpdate(MemoId("memo-2"), TimestampMillis(2_000L)),
+                MemoTrashUpdate(MemoId("memo-1"), TimestampMillis(1_000L))
+            )
+        )
+
+        // Assert
+        assertEquals(
+            setOf(
+                MovedToTrashRecord(memoId = "memo-2", deletedAt = 2_000L),
+                MovedToTrashRecord(memoId = "memo-1", deletedAt = 1_000L)
+            ),
+            dao.movedToTrashRecords.toSet()
+        )
+    }
+
+    @Test
+    fun errorMoveMemosToTrashRejectsDuplicateMemoIds() {
+        // Arrange
+        val dao = FakeMemoDao(
+            memosWithRefs = listOf(memoWithRefs(memoId = "memo-1"))
+        )
+        val repository = createRepository(dao)
+
+        // Act & Assert
+        // Error: duplicate memo ids in one bulk request are a caller bug.
+        assertThrows(IllegalArgumentException::class.java) {
+            runTest {
+                repository.moveMemosToTrash(
+                    listOf(
+                        MemoTrashUpdate(MemoId("memo-1"), TimestampMillis(1_000L)),
+                        MemoTrashUpdate(MemoId("memo-1"), TimestampMillis(2_000L))
+                    )
+                )
+            }
+        }
+    }
+
+    @Test
+    fun boundaryMoveMemosToTrashSkipsMemosNoLongerActive() = runTest {
+        // Arrange
+        val dao = FakeMemoDao(
+            memosWithRefs = listOf(
+                memoWithRefs(memoId = "memo-active"),
+                memoWithRefs(memoId = "memo-trashed", deletedAt = 500L)
+            )
+        )
+        val repository = createRepository(dao)
+
+        // Act
+        // Boundary: a concurrently trashed member is skipped instead of failing the batch
+        repository.moveMemosToTrash(
+            listOf(
+                MemoTrashUpdate(MemoId("memo-active"), TimestampMillis(1_000L)),
+                MemoTrashUpdate(MemoId("memo-trashed"), TimestampMillis(2_000L))
+            )
+        )
+
+        // Assert
+        assertEquals(
+            listOf(MovedToTrashRecord(memoId = "memo-active", deletedAt = 1_000L)),
+            dao.movedToTrashRecords
+        )
+    }
+
+    @Test
     fun moveMemoToTrashThrowsWhenDaoDoesNotMoveMemo() {
         // Arrange
         val dao = FakeMemoDao(movedToTrashCount = 0)
         val repository = createRepository(dao)
 
         // Act & Assert
-        // Error/Repository: DAO zero affected rows are exposed as an illegal state.
+        // Error: DAO zero affected rows are exposed as an illegal state.
         assertThrows(IllegalStateException::class.java) {
             runTest { repository.moveMemoToTrash(MemoId("memo-1"), TimestampMillis(2_000L)) }
         }
@@ -411,7 +529,7 @@ class RoomMemoRepositoryTest {
         val repository = createRepository(dao)
 
         // Act & Assert
-        // Error/Repository: DAO zero affected rows are exposed as an illegal state.
+        // Error: DAO zero affected rows are exposed as an illegal state.
         assertThrows(IllegalStateException::class.java) {
             runTest { repository.restoreMemoFromTrash(MemoId("memo-1")) }
         }
@@ -558,33 +676,160 @@ class RoomMemoRepositoryTest {
     }
 
     @Test
-    fun interactionSaveAllMemosDeletesRemovedImageFilesAfterUpsert() = runTest {
+    fun interactionSaveActiveMemoBulkWritesDeletesRemovedImageFilesAfterDatabaseSuccess() =
+        runTest {
+            // Arrange
+            val dao = FakeMemoDao(
+                memosWithRefs = listOf(memoWithRefs(memoId = "memo-1", updatedAt = 1_000L)),
+                imageFileNamesByMemoId = mutableMapOf(
+                    "memo-1" to listOf("old.jpg", "keep.jpg")
+                )
+            )
+            val imageStore = FakeMemoImageStore()
+            val repository = createRepository(dao, imageStore)
+
+            // Act
+            // Interaction: file cleanup starts only after the active-only transaction returns
+            repository.saveActiveMemoBulkWrites(
+                listOf(
+                    ActiveMemoBulkWrite.Update(
+                        memoId = MemoId("memo-1"),
+                        expectedUpdatedAt = TimestampMillis(1_000L),
+                        updatedMemo = memoFixture(
+                            id = "memo-1",
+                            updatedAt = 1_000L,
+                            images = listOf(
+                                memoImageFixture(id = "image-keep", fileName = "keep.jpg")
+                            )
+                        )
+                    )
+                )
+            )
+
+            // Assert
+            assertEquals(listOf(MemoImageFileName("old.jpg")), imageStore.deletedFileNames)
+        }
+
+    @Test
+    fun errorSaveActiveMemoBulkWritesDoesNotDeleteFilesWhenVersionCheckFails() = runTest {
         // Arrange
         val dao = FakeMemoDao(
-            imageFileNamesByMemoId = mutableMapOf("memo-1" to listOf("old.jpg", "keep.jpg"))
+            memosWithRefs = listOf(memoWithRefs(memoId = "memo-1", updatedAt = 5_000L)),
+            imageFileNamesByMemoId = mutableMapOf("memo-1" to listOf("old.jpg"))
         )
         val imageStore = FakeMemoImageStore()
         val repository = createRepository(dao, imageStore)
 
         // Act
-        // Interaction: bulk save deletes files dropped from DB refs after upsert.
-        repository.saveAllMemos(
-            listOf(
-                memoFixture(
-                    id = "memo-1",
-                    images = listOf(memoImageFixture(id = "image-keep", fileName = "keep.jpg"))
+        // Error: a stale expected version aborts the transaction before file cleanup
+        val error = runCatching {
+            repository.saveActiveMemoBulkWrites(
+                listOf(
+                    ActiveMemoBulkWrite.Update(
+                        memoId = MemoId("memo-1"),
+                        expectedUpdatedAt = TimestampMillis(1_000L),
+                        updatedMemo = memoFixture(id = "memo-1", updatedAt = 6_000L)
+                    )
                 )
             )
+        }.exceptionOrNull()
+
+        // Assert
+        assertEquals(
+            IllegalStateException::class.java to emptyList<MemoImageFileName>(),
+            error?.javaClass to imageStore.deletedFileNames
+        )
+    }
+
+    @Test
+    fun errorSaveActiveMemoBulkWritesDoesNotDeleteFilesWhenMemoNoLongerActive() = runTest {
+        // Arrange
+        val dao = FakeMemoDao(
+            imageFileNamesByMemoId = mutableMapOf("memo-missing" to listOf("old.jpg"))
+        )
+        val imageStore = FakeMemoImageStore()
+        val repository = createRepository(dao, imageStore)
+
+        // Act
+        // Error: an absent active memo aborts the transaction before file cleanup
+        val error = runCatching {
+            repository.saveActiveMemoBulkWrites(
+                listOf(
+                    ActiveMemoBulkWrite.CheckOnly(
+                        memoId = MemoId("memo-missing"),
+                        expectedUpdatedAt = TimestampMillis(1_000L)
+                    )
+                )
+            )
+        }.exceptionOrNull()
+
+        // Assert
+        assertEquals(
+            IllegalStateException::class.java to emptyList<MemoImageFileName>(),
+            error?.javaClass to imageStore.deletedFileNames
+        )
+    }
+
+    @Test
+    fun interactionDeleteMemosPermanentlyDeletesImageFilesAfterDatabaseSuccess() = runTest {
+        // Arrange
+        val dao = FakeMemoDao(
+            memosWithRefs = listOf(
+                memoWithRefs(memoId = "memo-1", deletedAt = 1_000L),
+                memoWithRefs(memoId = "memo-2", deletedAt = 2_000L)
+            ),
+            imageFileNamesByMemoId = mutableMapOf(
+                "memo-1" to listOf("image-1.jpg"),
+                "memo-2" to listOf("image-2.jpg")
+            )
+        )
+        val imageStore = FakeMemoImageStore()
+        val repository = createRepository(dao, imageStore)
+
+        // Act
+        // Interaction: files collected by the delete transaction are removed after it returns
+        repository.deleteMemosPermanently(listOf(MemoId("memo-2"), MemoId("memo-1")))
+
+        // Assert
+        assertEquals(
+            listOf(MemoImageFileName("image-2.jpg"), MemoImageFileName("image-1.jpg")),
+            imageStore.deletedFileNames
+        )
+    }
+
+    @Test
+    fun boundaryDeleteMemosPermanentlySkipsMemosNoLongerInTrash() = runTest {
+        // Arrange
+        val dao = FakeMemoDao(
+            memosWithRefs = listOf(
+                memoWithRefs(memoId = "memo-trashed", deletedAt = 1_000L),
+                memoWithRefs(memoId = "memo-active")
+            ),
+            imageFileNamesByMemoId = mutableMapOf(
+                "memo-trashed" to listOf("trashed.jpg"),
+                "memo-active" to listOf("active.jpg")
+            )
+        )
+        val imageStore = FakeMemoImageStore()
+        val repository = createRepository(dao, imageStore)
+
+        // Act
+        // Boundary: only currently-trashed members are deleted and their files removed
+        repository.deleteMemosPermanently(
+            listOf(MemoId("memo-trashed"), MemoId("memo-active"))
         )
 
         // Assert
-        assertEquals(listOf(MemoImageFileName("old.jpg")), imageStore.deletedFileNames)
+        assertEquals(
+            listOf(MemoImageFileName("trashed.jpg")),
+            imageStore.deletedFileNames
+        )
     }
 
     private fun createRepository(
         dao: FakeMemoDao,
         imageStore: FakeMemoImageStore = FakeMemoImageStore()
-    ): RoomMemoRepository = RoomMemoRepository(dao, imageStore)
+    ): RoomMemoRepository = RoomMemoRepository(dao, dao, imageStore)
 
     private fun memoWithRefs(
         memoId: String,
@@ -622,7 +867,7 @@ class RoomMemoRepositoryTest {
         private val movedToTrashCount: Int = 1,
         private val restoredCount: Int = 1,
         private val deletedPermanentlyCount: Int = 1
-    ) : MemoDao {
+    ) : MemoBulkDao {
 
         private val memosWithRefs = MutableStateFlow(memosWithRefs)
         var savedMemo: MemoEntity? = null
@@ -636,6 +881,8 @@ class RoomMemoRepositoryTest {
         var purgeCutoff: Long? = null
         var observedRange: ObservedRange? = null
         var observedSearchPattern: String? = null
+        var activeMemoReadCount: Int = 0
+        val movedToTrashRecords = mutableListOf<MovedToTrashRecord>()
 
         override fun observeActiveMemosWithRefs(): Flow<List<MemoWithRefs>> =
             memosWithRefs.map { list -> list.filter { it.memo.deletedAt == null } }
@@ -687,6 +934,36 @@ class RoomMemoRepositoryTest {
         override suspend fun getActiveMemoWithRefs(id: String): MemoWithRefs? =
             memosWithRefs.value.firstOrNull { it.memo.id == id && it.memo.deletedAt == null }
 
+        override suspend fun getActiveMemosWithRefsBatch(ids: List<String>): List<MemoWithRefs> {
+            activeMemoReadCount += 1
+            // Roomの行順は保証されないため、意図的に反転して入力順への復元を検証する。
+            return memosWithRefs.value
+                .filter { it.memo.id in ids && it.memo.deletedAt == null }
+                .asReversed()
+        }
+
+        override suspend fun getActiveMemoIdsBatch(ids: List<String>): List<String> =
+            memosWithRefs.value
+                .filter { it.memo.id in ids && it.memo.deletedAt == null }
+                .map { it.memo.id }
+
+        override suspend fun getActiveMemoVersionsBatch(
+            ids: List<String>
+        ): List<MemoVersionProjection> = memosWithRefs.value
+            .filter { it.memo.id in ids && it.memo.deletedAt == null }
+            .map { MemoVersionProjection(id = it.memo.id, updatedAt = it.memo.updatedAt) }
+
+        override suspend fun getImageRefsForMemosBatch(
+            memoIds: List<String>
+        ): List<MemoImageEntity> = memosWithRefs.value
+            .filter { it.memo.id in memoIds }
+            .flatMap { it.imageRefs }
+
+        override suspend fun getTrashedMemoIdsBatch(ids: List<String>): List<String> =
+            memosWithRefs.value
+                .filter { it.memo.id in ids && it.memo.deletedAt != null }
+                .map { it.memo.id }
+
         override fun observeTrashedMemosWithRefs(): Flow<List<MemoWithRefs>> =
             memosWithRefs.map { list ->
                 list
@@ -732,18 +1009,55 @@ class RoomMemoRepositoryTest {
         override suspend fun getImageFileNamesForMemos(memoIds: List<String>): List<String> =
             memoIds.flatMap { imageFileNamesByMemoId[it].orEmpty() }
 
+        override suspend fun findReferencedImageFileNames(fileNames: List<String>): List<String> =
+            imageFileNamesByMemoId.values.flatten().filter { it in fileNames }
+
         override suspend fun getImageFileNamesForTrashedMemosDeletedAtOrBefore(
             cutoff: Long
         ): List<String> = imageFileNamesForPurge
 
         override suspend fun moveMemoToTrash(id: String, deletedAt: Long): Int {
             movedToTrash = MovedToTrashRecord(memoId = id, deletedAt = deletedAt)
+            movedToTrashRecords += requireNotNull(movedToTrash)
             return movedToTrashCount
+        }
+
+        override suspend fun moveMemosToTrashBatch(ids: List<String>, deletedAt: Long): Int {
+            val movableIds = memosWithRefs.value
+                .filter { it.memo.id in ids && it.memo.deletedAt == null }
+                .map { it.memo.id }
+                .toSet()
+            movableIds.forEach { id ->
+                movedToTrashRecords += MovedToTrashRecord(memoId = id, deletedAt = deletedAt)
+            }
+            memosWithRefs.value = memosWithRefs.value.map { memo ->
+                if (memo.memo.id in movableIds) {
+                    memo.copy(memo = memo.memo.copy(deletedAt = deletedAt))
+                } else {
+                    memo
+                }
+            }
+            return movableIds.size
         }
 
         override suspend fun restoreMemoFromTrash(id: String): Int {
             restoredMemoId = id
             return restoredCount
+        }
+
+        override suspend fun restoreMemosFromTrashBatch(ids: List<String>): Int {
+            val restoredIds = memosWithRefs.value
+                .filter { it.memo.id in ids && it.memo.deletedAt != null }
+                .map { it.memo.id }
+                .toSet()
+            memosWithRefs.value = memosWithRefs.value.map { memo ->
+                if (memo.memo.id in restoredIds) {
+                    memo.copy(memo = memo.memo.copy(deletedAt = null))
+                } else {
+                    memo
+                }
+            }
+            return restoredIds.size
         }
 
         override suspend fun deleteMemoPermanently(id: String): Int {
@@ -752,6 +1066,16 @@ class RoomMemoRepositoryTest {
                 imageFileNamesByMemoId.remove(id)
             }
             return deletedPermanentlyCount
+        }
+
+        override suspend fun deleteMemosPermanentlyBatch(ids: List<String>): Int {
+            val deletedIds = memosWithRefs.value
+                .filter { it.memo.id in ids && it.memo.deletedAt != null }
+                .map { it.memo.id }
+                .toSet()
+            memosWithRefs.value = memosWithRefs.value.filterNot { it.memo.id in deletedIds }
+            deletedIds.forEach(imageFileNamesByMemoId::remove)
+            return deletedIds.size
         }
 
         override suspend fun discardMemo(id: String): Int {

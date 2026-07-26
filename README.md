@@ -11,19 +11,23 @@ Kotlin / Jetpack Compose / Material 3 を中心に、Clean Architecture + MVVM �
 
 ## 主な機能
 
-- メモの作成・編集・一覧表示（Room による永続化）
+- メモの作成・編集・一覧表示・検索（Room による永続化）
+- お気に入り登録とごみ箱（ごみ箱のメモは 30 日後に自動削除）
 - タグによる整理
 - カレンダー表示
+- メモへの画像添付
+- ホーム画面ウィジェット（新規メモ / 最近のメモ）
 - アプリロック（生体認証 / `androidx.biometric`）
 - テーマ・表示設定（ライト / ダークモード対応）
-- メモのエクスポート / インポート（JSON）
+- メモのエクスポート / インポート（画像を含む ZIP。内部の manifest は JSON）
 - 日本語 / 英語のローカライズ対応
 
 ## 技術スタック
 
 | 領域 | 採用技術 |
 | --- | --- |
-| UI | Kotlin, Jetpack Compose, Material 3, Navigation Compose |
+| UI | Kotlin, Jetpack Compose, Material 3, Navigation Compose, Coil |
+| ウィジェット | Jetpack Glance |
 | アーキテクチャ | Clean Architecture + MVVM |
 | DI | Hilt |
 | 状態 / 非同期 | StateFlow, Coroutines |
@@ -31,8 +35,9 @@ Kotlin / Jetpack Compose / Material 3 を中心に、Clean Architecture + MVVM �
 | セキュリティ | androidx.biometric |
 | 監視 | Firebase Crashlytics |
 | 広告 | Google Mobile Ads SDK (AdMob) |
-| テスト | JUnit 5, kotlinx-coroutines-test, Compose UI Test / Espresso |
-| ビルド | JDK 17, compileSdk 36 / minSdk 28 / targetSdk 36, R8 + ProGuard |
+| テスト | JUnit Jupiter（JVM）, JUnit 4 + AndroidX Test（instrumented）, MockK, Turbine, kotlinx-coroutines-test, Compose UI Test / Espresso |
+| 静的解析 / カバレッジ | KtLint, detekt（Compose ルール含む）, Android Lint, Kover |
+| ビルド | JDK 17, compileSdk 36.1 / minSdk 28 / targetSdk 36, R8 + ProGuard |
 | CI | GitHub Actions, fastlane, CodeQL, Dependabot |
 
 > バージョンの正確な値は `app/build.gradle.kts` と `gradle/libs.versions.toml` を参照してください。
@@ -41,9 +46,11 @@ Kotlin / Jetpack Compose / Material 3 を中心に、Clean Architecture + MVVM �
 
 ```text
 app/src/main/kotlin/com/appvoyager/litememo/
-├── ui/      Compose 画面・ViewModel・UI state・ナビゲーション・テーマ
+├── ui/      Compose 画面・ViewModel・UI state・ナビゲーション・テーマ・ウィジェット
 ├── domain/  model・値オブジェクト・UseCase・Repository interface
-└── data/    Repository 実装・Room・DataStore・mapper・Hilt module・Export/Import
+├── data/    Repository 実装・Room・DataStore・mapper・Hilt module・Export/Import
+├── di/      アプリ全体の Hilt module
+└── *.kt     LiteMemoApplication / MainActivity（entry point）
 ```
 
 ## 開発環境のセットアップ
@@ -74,8 +81,8 @@ git config core.hooksPath .githooks
 ### テスト / Lint
 
 ```sh
-# Unit Test
-./gradlew :app:testDevDebugUnitTest
+# Unit Test（CI と同じ prod フレーバー）
+./gradlew :app:testProdDebugUnitTest
 
 # KtLint
 ./gradlew :app:ktlintCheck

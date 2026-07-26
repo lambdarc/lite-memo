@@ -6,18 +6,15 @@ import com.appvoyager.litememo.domain.FakeTagRepository
 import com.appvoyager.litememo.domain.MutableTimeProvider
 import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.model.Memo
-import com.appvoyager.litememo.domain.model.MemoSummary
 import com.appvoyager.litememo.domain.model.value.MemoId
-import com.appvoyager.litememo.domain.model.value.SearchQuery
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
-import com.appvoyager.litememo.domain.model.value.TimestampRange
 import com.appvoyager.litememo.domain.repository.MemoRepository
 import com.appvoyager.litememo.domain.tagFixture
-import com.appvoyager.litememo.domain.usecase.DeleteMemoPermanentlyUseCase
+import com.appvoyager.litememo.domain.usecase.DeleteMemosPermanentlyUseCase
 import com.appvoyager.litememo.domain.usecase.ObserveTagsUseCase
 import com.appvoyager.litememo.domain.usecase.ObserveTrashedMemosUseCase
 import com.appvoyager.litememo.domain.usecase.PurgeExpiredTrashedMemosUseCase
-import com.appvoyager.litememo.domain.usecase.RestoreMemoFromTrashUseCase
+import com.appvoyager.litememo.domain.usecase.RestoreMemosFromTrashUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -78,6 +75,69 @@ class TrashViewModelTest {
 
         // Assert
         assertEquals(setOf(memo.id), state.selection.selectedMemoIds)
+    }
+
+    @Test
+    fun stateTransitionStartSelectionClosesEmptyTrashDialog() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val viewModel = trashViewModel(memoRepository = FakeMemoRepository(listOf(memo)))
+        advanceUntilIdle()
+        viewModel.uiState.first { it.memos.isNotEmpty() }
+        viewModel.requestEmptyTrash()
+        viewModel.uiState.first { it.showEmptyTrashDialog }
+
+        // Act
+        // StateTransition: starting a selection closes the empty trash dialog.
+        viewModel.startSelection(memo.id)
+        val state = viewModel.uiState.first { it.selection.isActive }
+
+        // Assert
+        assertEquals(false, state.showEmptyTrashDialog)
+    }
+
+    @Test
+    fun stateTransitionUiStateDropsSelectedMemoIdWhenMemoLeavesTrash() = runTest(dispatcher) {
+        // Arrange
+        val memo1 = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val memo2 = memoFixture(id = "memo-2", deletedAt = 3_000L)
+        val repository = FakeMemoRepository(listOf(memo1, memo2))
+        val viewModel = trashViewModel(memoRepository = repository)
+        advanceUntilIdle()
+        viewModel.uiState.first { it.memos.size == 2 }
+        viewModel.startSelection(memo1.id)
+        viewModel.toggleMemoSelection(memo2.id)
+        viewModel.uiState.first { it.selection.selectedMemoIds == setOf(memo1.id, memo2.id) }
+
+        // Act
+        // StateTransition: a memo that is no longer visible leaves the selection.
+        repository.deleteMemosPermanently(listOf(memo1.id))
+        advanceUntilIdle()
+        val state = viewModel.uiState.first { it.memos.size == 1 }
+
+        // Assert
+        assertEquals(setOf(memo2.id), state.selection.selectedMemoIds)
+    }
+
+    @Test
+    fun boundaryUiStateClearsSelectionWhenTrashBecomesEmpty() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val repository = FakeMemoRepository(listOf(memo))
+        val viewModel = trashViewModel(memoRepository = repository)
+        advanceUntilIdle()
+        viewModel.uiState.first { it.memos.size == 1 }
+        viewModel.startSelection(memo.id)
+        viewModel.uiState.first { it.selection.isActive }
+
+        // Act
+        // Boundary: an empty trash leaves nothing selected.
+        repository.deleteMemosPermanently(listOf(memo.id))
+        advanceUntilIdle()
+        val state = viewModel.uiState.first { it.memos.isEmpty() }
+
+        // Assert
+        assertEquals(emptySet<MemoId>(), state.selection.selectedMemoIds)
     }
 
     @Test
@@ -216,26 +276,31 @@ class TrashViewModelTest {
     }
 
     @Test
-    fun flowRestoreSelectedMemosEmitsActionErrorWhenRestoreFails() = runTest(dispatcher) {
-        // Arrange
-        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
-        val viewModel = trashViewModel(
-            memoRepository = RestoreFailingMemoRepository(listOf(memo))
-        )
-        advanceUntilIdle()
-        viewModel.uiState.first { it.memos.isNotEmpty() }
-        viewModel.startSelection(memo.id)
-        viewModel.uiState.first {
-            it.selection.selectedMemoIds == setOf(memo.id)
-        }
-
-        // Act & Assert
-        viewModel.actionErrorEvent.test {
-            viewModel.restoreSelectedMemos()
+    fun flowRestoreSelectedMemosEmitsActionErrorAndKeepsSelectionWhenRestoreFails() =
+        runTest(dispatcher) {
+            // Arrange
+            val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+            val viewModel = trashViewModel(
+                memoRepository = RestoreFailingMemoRepository(listOf(memo))
+            )
             advanceUntilIdle()
-            assertEquals(Unit, awaitItem())
+            viewModel.uiState.first { it.memos.isNotEmpty() }
+            viewModel.startSelection(memo.id)
+            viewModel.uiState.first {
+                it.selection.selectedMemoIds == setOf(memo.id)
+            }
+
+            // Act & Assert
+            // Flow/Error/StateTransition: a failed atomic restore keeps the selection for retry.
+            viewModel.actionErrorEvent.test {
+                viewModel.restoreSelectedMemos()
+                advanceUntilIdle()
+                assertEquals(
+                    Unit to setOf(memo.id),
+                    awaitItem() to viewModel.uiState.value.selection.selectedMemoIds
+                )
+            }
         }
-    }
 
     @Test
     fun flowUiStateHasErrorWhenObserveTrashedMemosFails() = runTest(dispatcher) {
@@ -288,59 +353,24 @@ class TrashViewModelTest {
     ) = TrashViewModel(
         observeTrashedMemosUseCase = ObserveTrashedMemosUseCase(memoRepository),
         observeTagsUseCase = ObserveTagsUseCase(tagRepository),
-        restoreMemoFromTrashUseCase = RestoreMemoFromTrashUseCase(memoRepository),
-        deleteMemoPermanentlyUseCase = DeleteMemoPermanentlyUseCase(memoRepository),
+        restoreMemosFromTrashUseCase = RestoreMemosFromTrashUseCase(memoRepository),
+        deleteMemosPermanentlyUseCase = DeleteMemosPermanentlyUseCase(memoRepository),
         purgeExpiredTrashedMemosUseCase = PurgeExpiredTrashedMemosUseCase(
             memoRepository = memoRepository,
             currentTimeProvider = MutableTimeProvider(TimestampMillis(0L))
         )
     )
 
-    private class RestoreFailingMemoRepository(initialMemos: List<Memo>) : MemoRepository {
-
-        private val repository = FakeMemoRepository(initialMemos)
-
-        override fun observeActiveMemos(): Flow<List<Memo>> = repository.observeActiveMemos()
-
-        override fun observeRecentActiveMemos(limit: Int): Flow<List<MemoSummary>> =
-            repository.observeRecentActiveMemos(limit)
-
-        override fun observeActiveMemosBySearchQuery(query: SearchQuery): Flow<List<Memo>> =
-            repository.observeActiveMemosBySearchQuery(query)
-
-        override fun observeActiveMemosCreatedBetween(range: TimestampRange): Flow<List<Memo>> =
-            repository.observeActiveMemosCreatedBetween(range)
-
-        override fun observeTrashedMemos(): Flow<List<Memo>> = repository.observeTrashedMemos()
-
-        override suspend fun getActiveMemo(id: MemoId): Memo? = repository.getActiveMemo(id)
-
-        override suspend fun saveMemo(memo: Memo) = repository.saveMemo(memo)
-
-        override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) =
-            repository.moveMemoToTrash(id, deletedAt)
-
-        override suspend fun restoreMemoFromTrash(id: MemoId): Unit =
-            error("Failed to restore memo.")
-
-        override suspend fun deleteMemoPermanently(id: MemoId) =
-            repository.deleteMemoPermanently(id)
-
-        override suspend fun discardMemo(id: MemoId) = repository.discardMemo(id)
-
-        override suspend fun deleteTrashedMemosDeletedAtOrBefore(cutoff: TimestampMillis) =
-            repository.deleteTrashedMemosDeletedAtOrBefore(cutoff)
-
-        override suspend fun getAllActiveMemos(): List<Memo> = repository.getAllActiveMemos()
-
-        override suspend fun saveAllMemos(memos: List<Memo>) = repository.saveAllMemos(memos)
-
+    private class RestoreFailingMemoRepository(initialMemos: List<Memo>) :
+        MemoRepository by FakeMemoRepository(initialMemos) {
+        override suspend fun restoreMemosFromTrash(ids: List<MemoId>): Unit =
+            error("Failed to restore memos.")
     }
 
     private class DeleteFailingMemoRepository(initialMemos: List<Memo>) :
         MemoRepository by FakeMemoRepository(initialMemos) {
-        override suspend fun deleteMemoPermanently(id: MemoId): Unit =
-            error("Failed to delete memo.")
+        override suspend fun deleteMemosPermanently(ids: List<MemoId>): Unit =
+            error("Failed to delete memos.")
     }
 
     private class ObserveTrashedFailingMemoRepository : MemoRepository by FakeMemoRepository() {

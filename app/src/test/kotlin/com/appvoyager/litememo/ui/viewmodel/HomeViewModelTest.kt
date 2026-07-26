@@ -7,6 +7,7 @@ import com.appvoyager.litememo.domain.FakeTagRepository
 import com.appvoyager.litememo.domain.MutableTimeProvider
 import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.memoImageFixture
+import com.appvoyager.litememo.domain.model.ActiveMemoBulkWrite
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoSummary
 import com.appvoyager.litememo.domain.model.Tag
@@ -33,7 +34,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -365,6 +365,49 @@ class HomeViewModelTest {
         // Assert
         assertEquals(setOf(MemoId("memo-1")), state.selection.selectedMemoIds)
     }
+
+    @Test
+    fun stateTransitionStartSelectionClosesBulkTagDialog() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = homeViewModel(
+            memos = listOf(memoFixture(id = "memo-1"), memoFixture(id = "memo-2"))
+        )
+        advanceUntilIdle()
+        viewModel.startSelection(MemoId("memo-1"))
+        viewModel.requestToggleTagForSelectedMemos()
+        viewModel.uiState.first { it.bulkTagDialog.isVisible }
+
+        // Act
+        // StateTransition: starting a new selection closes the bulk tag dialog.
+        viewModel.startSelection(MemoId("memo-2"))
+        advanceUntilIdle()
+        val state = viewModel.uiState.first {
+            it.selection.selectedMemoIds == setOf(MemoId("memo-2"))
+        }
+
+        // Assert
+        assertEquals(false, state.bulkTagDialog.isVisible)
+    }
+
+    @Test
+    fun stateTransitionToggleMemoSelectionClosesBulkTagDialogWhenSelectionBecomesEmpty() =
+        runTest(dispatcher) {
+            // Arrange
+            val viewModel = homeViewModel(memos = listOf(memoFixture(id = "memo-1")))
+            advanceUntilIdle()
+            viewModel.startSelection(MemoId("memo-1"))
+            viewModel.requestToggleTagForSelectedMemos()
+            viewModel.uiState.first { it.bulkTagDialog.isVisible }
+
+            // Act
+            // StateTransition: deselecting the last memo closes the bulk tag dialog.
+            viewModel.toggleMemoSelection(MemoId("memo-1"))
+            advanceUntilIdle()
+            val state = viewModel.uiState.first { !it.selection.isActive }
+
+            // Assert
+            assertEquals(false, state.bulkTagDialog.isVisible)
+        }
 
     @Test
     fun toggleMemoSelectionClearsSelectionWhenLastSelectedMemoIsToggled() = runTest(dispatcher) {
@@ -847,7 +890,8 @@ class HomeViewModelTest {
         )
     }
 
-    private class FailingMemoRepository(private val throwable: Throwable) : MemoRepository {
+    private class FailingMemoRepository(private val throwable: Throwable) :
+        MemoRepository by FakeMemoRepository() {
 
         override fun observeActiveMemos(): Flow<List<Memo>> = flow {
             throw throwable
@@ -864,68 +908,14 @@ class HomeViewModelTest {
         override fun observeActiveMemosCreatedBetween(range: TimestampRange): Flow<List<Memo>> =
             flow { throw throwable }
 
-        override fun observeTrashedMemos(): Flow<List<Memo>> = flowOf(emptyList())
-
-        override suspend fun getActiveMemo(id: MemoId): Memo? = null
-
-        override suspend fun saveMemo(memo: Memo) = Unit
-
-        override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) = Unit
-
-        override suspend fun restoreMemoFromTrash(id: MemoId) = Unit
-
-        override suspend fun deleteMemoPermanently(id: MemoId) = Unit
-
-        override suspend fun discardMemo(id: MemoId) = Unit
-
-        override suspend fun deleteTrashedMemosDeletedAtOrBefore(cutoff: TimestampMillis) = Unit
-
-        override suspend fun getAllActiveMemos(): List<Memo> = emptyList()
-
-        override suspend fun saveAllMemos(memos: List<Memo>) = Unit
-
     }
 
-    private class SaveFailingMemoRepository(private val memo: Memo) : MemoRepository {
-
-        override fun observeActiveMemos(): Flow<List<Memo>> = flowOf(listOf(memo))
-
-        override fun observeRecentActiveMemos(limit: Int): Flow<List<MemoSummary>> = flowOf(
-            listOf(memo).take(limit).map { item ->
-                MemoSummary(
-                    id = item.id,
-                    title = item.title,
-                    body = item.body,
-                    isFavorite = item.isFavorite
-                )
-            }
-        )
-
-        override fun observeActiveMemosBySearchQuery(query: SearchQuery): Flow<List<Memo>> =
-            flowOf(emptyList())
-
-        override fun observeActiveMemosCreatedBetween(range: TimestampRange): Flow<List<Memo>> =
-            flowOf(emptyList())
-
-        override fun observeTrashedMemos(): Flow<List<Memo>> = flowOf(emptyList())
-
-        override suspend fun getActiveMemo(id: MemoId): Memo? = memo.takeIf { it.id == id }
+    private class SaveFailingMemoRepository(memo: Memo) :
+        MemoRepository by FakeMemoRepository(listOf(memo)) {
 
         override suspend fun saveMemo(memo: Memo): Unit = error("Failed to save memo.")
 
-        override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) = Unit
-
-        override suspend fun restoreMemoFromTrash(id: MemoId) = Unit
-
-        override suspend fun deleteMemoPermanently(id: MemoId) = Unit
-
-        override suspend fun discardMemo(id: MemoId) = Unit
-
-        override suspend fun deleteTrashedMemosDeletedAtOrBefore(cutoff: TimestampMillis) = Unit
-
-        override suspend fun getAllActiveMemos(): List<Memo> = emptyList()
-
-        override suspend fun saveAllMemos(memos: List<Memo>): Unit = error("Failed to save memos.")
-
+        override suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>): Unit =
+            error("Failed to save active memos.")
     }
 }

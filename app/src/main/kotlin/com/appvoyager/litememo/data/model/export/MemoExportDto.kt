@@ -10,5 +10,6 @@ data class MemoExportDto(
     val createdAt: Long,
     val updatedAt: Long,
     val isFavorite: Boolean,
-    val tagIds: List<String> = emptyList()
+    val tagIds: List<String> = emptyList(),
+    val images: List<MemoImageExportDto> = emptyList()
 )

@@ -18,10 +18,10 @@ Lite Memo は Android 向けの軽量メモアプリです。
 
 ## 現在の主な機能
 
-- メモの作成・編集・検索・お気に入り・ごみ箱
+- メモの作成・編集・検索・お気に入り・ごみ箱（30 日経過で自動削除）
 - タグによる整理とカレンダー表示
 - メモへの画像添付とホーム画面ウィジェット
-- JSON export/import、テーマ設定、アプリロック
+- 画像を含む ZIP export/import、テーマ設定、アプリロック
 - 日本語 / 英語のローカライズ
 
 ## 主な確認先
@@ -67,7 +67,7 @@ Lite Memo は Android 向けの軽量メモアプリです。
 
 - Room
 - DataStore（Preferences）
-- kotlinx.serialization（JSON。Export / Import に使用）
+- kotlinx.serialization（ZIP内のmanifest JSONに使用。単独JSON形式のExport / Importは非対応）
 
 Room / DataStore の使い分けは [`docs/architecture.md`](architecture.md) の Data 方針を正本とします。
 
@@ -107,7 +107,7 @@ Room / DataStore の使い分けは [`docs/architecture.md`](architecture.md) �
 - GitHub Actions
   - CI: Static Analysis（KtLint / detekt / Android Lint）/ Unit Test / Android Test
   - Gradle Wrapper Validation（wrapper の改ざん検知）
-  - actionlint（ワークフロー検査）
+  - GitHub Actions Validation（actionlint によるワークフロー検査）
   - CodeQL、Dependabot
 - fastlane（ローカル / CI の検証コマンドを実行）
 

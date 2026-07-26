@@ -38,6 +38,34 @@ class MemoImageFileDataSource @Inject constructor(
         }
     }
 
+    suspend fun moveIntoImages(source: File, fileName: String) {
+        withContext(ioDispatcher) {
+            imagesDir().mkdirs()
+            val target = File(imagesDir(), fileName)
+            if (!target.createNewFile()) {
+                throw IOException("Image file name is already taken: $fileName")
+            }
+            try {
+                if (!source.renameTo(target)) {
+                    source.inputStream().use { input ->
+                        target.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    source.delete()
+                }
+            } catch (e: IOException) {
+                target.delete()
+                throw e
+            }
+        }
+    }
+
+    suspend fun listImageFileNamesStartingWith(prefix: String): List<String> =
+        withContext(ioDispatcher) {
+            imagesDir().listFiles().orEmpty()
+                .filter { it.isFile && it.name.startsWith(prefix) }
+                .map { it.name }
+        }
+
     suspend fun deleteImage(fileName: String) {
         withContext(ioDispatcher) {
             File(imagesDir(), fileName).delete()
@@ -45,6 +73,8 @@ class MemoImageFileDataSource @Inject constructor(
     }
 
     fun imageFilePath(fileName: String): String = File(imagesDir(), fileName).absolutePath
+
+    fun imageFile(fileName: String): File = File(imagesDir(), fileName)
 
     private fun imagesDir(): File = File(context.filesDir, IMAGES_DIR)
 

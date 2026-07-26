@@ -4,25 +4,29 @@ on:
   push:
     branches:
       - main
-      - develop
   pull_request:
     types:
       - opened
       - synchronize
       - reopened
       - ready_for_review
+      - converted_to_draft
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   static-analysis:
     name: Static Analysis
+    if: &standard-ci-condition >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -30,7 +34,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Android CI
+      - name: Set Up Android CI
         uses: ./.github/actions/setup-android
         with:
           cache-read-only: ${{ github.event_name != 'push' }}
@@ -40,10 +44,9 @@ jobs:
 
   unit-test:
     name: Unit Test
+    if: *standard-ci-condition
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -51,7 +54,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Android CI
+      - name: Set Up Android CI
         uses: ./.github/actions/setup-android
         with:
           cache-read-only: ${{ github.event_name != 'push' }}
@@ -61,35 +64,45 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           REF: ${{ github.ref }}
         run: |
-          if [ "$BASE_REF" = "develop" ] || [ "$BASE_REF" = "main" ] || [ "$REF" = "refs/heads/main" ] || [ "$REF" = "refs/heads/develop" ]; then
+          if [ "$BASE_REF" = "develop" ] || [ "$BASE_REF" = "main" ] || [ "$REF" = "refs/heads/main" ]; then
             bundle exec fastlane android unit_test release:true
           else
             bundle exec fastlane android unit_test
           fi
 
-      - name: Generate Kover coverage reports
+      - name: Generate Kover Coverage Reports
         run: bundle exec fastlane android coverage
 
-      - name: Add coverage summary to job output
-        run: |
-          {
-            echo "## Code Coverage"
-            echo ""
-            echo "Kover XML and HTML reports were generated for the prodDebug unit-test variant."
-            echo "Coverage is scoped to unit-testable domain, data mapping/repository, UI state, and ViewModel layers."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload Kover reports
+      - name: Upload Kover Reports
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kover-prod-debug-report
           path: app/build/reports/kover/**
           if-no-files-found: error
+          retention-days: 7
 
-      - name: Add coverage report to PR
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
+  coverage-comment:
+    name: Coverage Comment
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    needs:
+      - unit-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Download Kover Reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: kover-prod-debug-report
+          path: app/build/reports/kover
+
+      - name: Add Coverage Report to PR
         uses: mi-kas/kover-report@db9938358b8e1e6175dd4136132bf4eb7aa4ae6d # v2.4
         with:
           path: ${{ github.workspace }}/app/build/reports/kover/**/*.xml
@@ -99,6 +112,7 @@ jobs:
 
   android-test:
     name: Android Test
+    if: *standard-ci-condition
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -114,21 +128,21 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Set up Android CI
+      - name: Set Up Android CI
         uses: ./.github/actions/setup-android
         with:
           cache-read-only: ${{ github.event_name != 'push' }}
 
-      - name: Restore AVD cache
+      - name: Restore AVD Cache
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         id: avd-cache
         with:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-33
+          key: avd-api33-google-apis-x86_64-v1
 
-      - name: Create AVD and generate snapshot for caching
+      - name: Create AVD Snapshot for Caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@e89f39f1abbbd05b1113a29cf4db69e7540cae5a # v2.37.0
         with:
@@ -151,21 +165,23 @@ jobs:
           disable-animations: true
           script: bundle exec fastlane android android_test
 
-      - name: Save AVD cache
+      - name: Save AVD Cache
         if: >-
           steps.avd-cache.outputs.cache-hit != 'true' &&
           github.event_name == 'push' &&
-          (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+          github.ref == 'refs/heads/main'
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-33
+          key: avd-api33-google-apis-x86_64-v1
 
-  skill-sync:
+  claude-code-skill-sync:
     name: Claude Code Skill Sync
+    if: *standard-ci-condition
     runs-on: windows-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout
@@ -173,12 +189,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check Claude Code skill synchronization
+      - name: Validate Claude Code Skill Sync
         run: ./scripts/sync-claude-skills.ps1 -Check
 
-  wrapper-validation:
+  gradle-wrapper-validation:
     name: Gradle Wrapper Validation
+    if: *standard-ci-condition
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout
@@ -186,12 +204,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Validate Gradle wrapper
+      - name: Validate Gradle Wrapper
         uses: gradle/actions/wrapper-validation@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
 
-  actionlint:
-    name: Actionlint
+  github-actions-validation:
+    name: GitHub Actions Validation
+    if: *standard-ci-condition
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout
@@ -199,5 +219,5 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run actionlint
+      - name: Validate GitHub Actions Workflows
         uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8 # v2.1.2

@@ -23,6 +23,7 @@ class RoomDaoInstrumentedTest {
 
     private lateinit var database: LiteMemoDatabase
     private lateinit var memoDao: MemoDao
+    private lateinit var memoBulkDao: MemoBulkDao
     private lateinit var tagDao: TagDao
 
     @Before
@@ -30,6 +31,7 @@ class RoomDaoInstrumentedTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         database = Room.inMemoryDatabaseBuilder(context, LiteMemoDatabase::class.java).build()
         memoDao = database.memoDao()
+        memoBulkDao = database.memoBulkDao()
         tagDao = database.tagDao()
     }
 
@@ -383,6 +385,192 @@ class RoomDaoInstrumentedTest {
 
         // Assert
         assertEquals(listOf("memo-1"), memos.map { it.memo.id })
+    }
+
+    @Test
+    fun boundaryGetActiveMemosWithRefsPreservesDistinctRequestedOrder() = runTest {
+        // Arrange
+        memoDao.upsertMemo(memoEntity(id = "memo-1"))
+        memoDao.upsertMemo(memoEntity(id = "memo-2"))
+
+        // Act
+        // Boundary: SQLite result order must not replace the caller's distinct ID order
+        val memos = memoBulkDao.getActiveMemosWithRefs(
+            listOf("memo-2", "memo-1", "memo-2")
+        )
+
+        // Assert
+        assertEquals(listOf("memo-2", "memo-1"), memos.map { it.memo.id })
+    }
+
+    @Test
+    fun boundaryMoveMemosToTrashSkipsAlreadyTrashedMembers() = runTest {
+        // Arrange
+        memoDao.upsertMemo(memoEntity(id = "memo-active"))
+        memoDao.upsertMemo(memoEntity(id = "memo-trashed", deletedAt = 500L))
+
+        // Act
+        // Boundary: an already-trashed member is skipped while active members are trashed
+        memoBulkDao.moveMemosToTrash(
+            linkedMapOf(
+                "memo-active" to 1_000L,
+                "memo-trashed" to 2_000L
+            )
+        )
+        val activeIds = memoDao.observeActiveMemosWithRefs().first().map { it.memo.id }
+        val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
+
+        // Assert
+        assertEquals(
+            emptyList<String>() to listOf("memo-active", "memo-trashed"),
+            activeIds to trashedIds.sorted()
+        )
+    }
+
+    @Test
+    fun errorMoveMemosToTrashRollsBackEarlierUpdatesWhenLaterWriteFails() = runTest {
+        // Arrange
+        memoDao.upsertMemo(memoEntity(id = "memo-1"))
+        memoDao.upsertMemo(memoEntity(id = "memo-2"))
+        database.openHelper.writableDatabase.execSQL(
+            """
+            CREATE TRIGGER fail_second_bulk_trash_update
+            BEFORE UPDATE OF deletedAt ON memos
+            WHEN OLD.id = 'memo-2'
+            BEGIN
+                SELECT RAISE(ABORT, 'forced bulk update failure');
+            END
+            """.trimIndent()
+        )
+
+        // Act
+        // Error: a real SQLite failure rolls the transaction back to its pre-call state
+        val error = runCatching {
+            memoBulkDao.moveMemosToTrash(
+                linkedMapOf(
+                    "memo-1" to 1_000L,
+                    "memo-2" to 2_000L
+                )
+            )
+        }.exceptionOrNull()
+        val activeIds = memoDao.observeActiveMemosWithRefs()
+            .first()
+            .map { it.memo.id }
+            .sorted()
+
+        // Assert
+        assertEquals(
+            SQLiteConstraintException::class.java to listOf("memo-1", "memo-2"),
+            error?.javaClass to activeIds
+        )
+    }
+
+    @Test
+    fun errorSaveActiveMemoBulkWritesRejectsMixedStateBeforeReplacingAnyMemo() = runTest {
+        // Arrange
+        memoDao.upsertMemo(memoEntity(id = "memo-active", title = "Active before"))
+        memoDao.upsertMemo(
+            memoEntity(id = "memo-trashed", title = "Trashed before", deletedAt = 500L)
+        )
+
+        // Act
+        // Error: every memo must still be active before any replacement begins
+        val error = runCatching {
+            memoBulkDao.upsertActiveMemosWithVersionCheckAndCollectRemovedFileNames(
+                expectedVersions = mapOf(
+                    "memo-active" to 1_000L,
+                    "memo-trashed" to 1_000L
+                ),
+                memos = listOf(
+                    memoEntity(id = "memo-active", title = "Active after")
+                ),
+                tagRefsByMemoId = emptyMap(),
+                imageRefsByMemoId = emptyMap()
+            )
+        }.exceptionOrNull()
+        val activeTitle = memoDao.observeActiveMemosWithRefs().first().single().memo.title
+
+        // Assert
+        assertEquals(
+            IllegalStateException::class.java to "Active before",
+            error?.javaClass to activeTitle
+        )
+    }
+
+    @Test
+    fun boundaryRestoreMemosFromTrashSkipsActiveMembers() = runTest {
+        // Arrange
+        memoDao.upsertMemo(memoEntity(id = "memo-trashed", deletedAt = 500L))
+        memoDao.upsertMemo(memoEntity(id = "memo-active"))
+
+        // Act
+        // Boundary: active members are skipped while trashed members are restored
+        memoBulkDao.restoreMemosFromTrash(listOf("memo-trashed", "memo-active"))
+        val activeIds = memoDao.observeActiveMemosWithRefs().first().map { it.memo.id }.sorted()
+        val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
+
+        // Assert
+        assertEquals(
+            listOf("memo-active", "memo-trashed") to emptyList<String>(),
+            activeIds to trashedIds
+        )
+    }
+
+    @Test
+    fun boundaryDeleteMemosPermanentlySkipsActiveMembers() = runTest {
+        // Arrange
+        memoDao.upsertMemo(memoEntity(id = "memo-trashed", deletedAt = 500L))
+        memoDao.upsertMemo(memoEntity(id = "memo-active"))
+
+        // Act
+        // Boundary: active members are preserved while trashed members are deleted
+        memoBulkDao.deleteMemosPermanentlyAndCollectImageFileNames(
+            listOf("memo-trashed", "memo-active")
+        )
+        val activeIds = memoDao.observeActiveMemosWithRefs().first().map { it.memo.id }
+        val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
+
+        // Assert
+        assertEquals(
+            listOf("memo-active") to emptyList<String>(),
+            activeIds to trashedIds
+        )
+    }
+
+    @Test
+    fun normalDeleteMemosPermanentlyCollectsImageNamesAndDeletesRows() = runTest {
+        // Arrange
+        memoDao.upsertMemo(memoEntity(id = "memo-1", deletedAt = 1_000L))
+        memoDao.upsertMemo(memoEntity(id = "memo-2", deletedAt = 2_000L))
+        memoDao.insertImageRefs(
+            listOf(
+                MemoImageEntity(
+                    id = "image-1",
+                    memoId = "memo-1",
+                    fileName = "image-1.jpg",
+                    position = 0
+                ),
+                MemoImageEntity(
+                    id = "image-2",
+                    memoId = "memo-2",
+                    fileName = "image-2.jpg",
+                    position = 0
+                )
+            )
+        )
+
+        // Act
+        // Normal: the transaction returns cleanup inputs after deleting every selected row
+        val fileNames = memoBulkDao.deleteMemosPermanentlyAndCollectImageFileNames(
+            listOf("memo-2", "memo-1")
+        )
+        val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
+
+        // Assert
+        assertEquals(
+            setOf("image-1.jpg", "image-2.jpg") to emptyList<String>(),
+            fileNames.toSet() to trashedIds
+        )
     }
 
     @Test

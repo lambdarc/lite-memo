@@ -620,7 +620,7 @@ class MemoEditViewModelTest {
             expectNoEvents()
         }
 
-        // Assert: the edited draft survives in SavedStateHandle for a later retry.
+        // Assert
         assertEquals("Unsaved", savedStateHandle.get<String>("editTitle"))
     }
 

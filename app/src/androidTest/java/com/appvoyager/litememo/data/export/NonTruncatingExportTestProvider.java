@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
  */
 public final class NonTruncatingExportTestProvider extends ContentProvider {
 
-    private static final String DEFAULT_FILE_NAME = "export.json";
+    private static final String DEFAULT_FILE_NAME = "export.zip";
     private static final Pattern SAFE_FILE_NAME = Pattern.compile("[A-Za-z0-9._-]+");
 
     @Override
@@ -69,7 +69,7 @@ public final class NonTruncatingExportTestProvider extends ContentProvider {
 
     @Override
     public String getType(Uri uri) {
-        return "application/json";
+        return "application/zip";
     }
 
     @Override

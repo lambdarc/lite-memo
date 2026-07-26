@@ -402,9 +402,14 @@ private fun calendarContainerColor(): Color {
 
 @Composable
 private fun selectedDateTitle(date: LocalDate?): String {
-    val pattern = stringResource(R.string.selected_date_title_format)
+    val pattern = stringResource(R.string.selected_date_format)
     val formatter = remember(pattern) { DateTimeFormatter.ofPattern(pattern) }
-    return date?.format(formatter) ?: ""
+    return date?.let { selectedDate ->
+        stringResource(
+            R.string.selected_date_title_format,
+            selectedDate.format(formatter)
+        )
+    } ?: ""
 }
 
 @Composable
