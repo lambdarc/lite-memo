@@ -72,7 +72,6 @@ class RoomTagRepositoryTest {
         assertEquals(emptyList<Tag>(), tags)
     }
 
-    // 空リスト時に不要なDBクエリを発行しない最適化を検証する
     @Test
     fun getTagsByIdsDoesNotCallDaoWhenIdsAreEmpty() = runTest {
         // Arrange
@@ -80,6 +79,7 @@ class RoomTagRepositoryTest {
         val repository = RoomTagRepository(dao)
 
         // Act
+        // Boundary/Interaction: an empty id list skips the DAO query entirely.
         repository.getTagsByIds(emptyList())
 
         // Assert

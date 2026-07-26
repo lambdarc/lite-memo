@@ -516,7 +516,7 @@ class RoomMemoRepositoryTest {
         val repository = createRepository(dao)
 
         // Act & Assert
-        // Error/Repository: DAO zero affected rows are exposed as an illegal state.
+        // Error: DAO zero affected rows are exposed as an illegal state.
         assertThrows(IllegalStateException::class.java) {
             runTest { repository.moveMemoToTrash(MemoId("memo-1"), TimestampMillis(2_000L)) }
         }
@@ -529,7 +529,7 @@ class RoomMemoRepositoryTest {
         val repository = createRepository(dao)
 
         // Act & Assert
-        // Error/Repository: DAO zero affected rows are exposed as an illegal state.
+        // Error: DAO zero affected rows are exposed as an illegal state.
         assertThrows(IllegalStateException::class.java) {
             runTest { repository.restoreMemoFromTrash(MemoId("memo-1")) }
         }
