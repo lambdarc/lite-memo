@@ -49,19 +49,24 @@ jobs:
           workflow_names=("CI" "CodeQL")
 
           for attempt in {1..70}; do
+            echo "Validation attempt ${attempt}/70."
             all_succeeded=true
 
             for index in "${!workflow_files[@]}"; do
               workflow_file="${workflow_files[$index]}"
               workflow_name="${workflow_names[$index]}"
-              response="$(
+              if ! response="$(
                 gh api \
                   --method GET \
                   "repos/${REPOSITORY}/actions/workflows/${workflow_file}/runs" \
                   -f branch=develop \
                   -f event=push \
                   -f per_page=20
-              )"
+              )"; then
+                echo "Could not query ${workflow_name} runs; retrying."
+                all_succeeded=false
+                continue
+              fi
               run="$(
                 jq -c \
                   --arg head_sha "$HEAD_SHA" \
@@ -105,7 +110,7 @@ jobs:
 
   static-analysis:
     name: Static Analysis
-    if: >-
+    if: &standard-ci-condition >-
       github.event_name != 'pull_request' ||
       (
         github.event.pull_request.draft == false &&
@@ -134,16 +139,7 @@ jobs:
 
   unit-test:
     name: Unit Test
-    if: >-
-      github.event_name != 'pull_request' ||
-      (
-        github.event.pull_request.draft == false &&
-        (
-          github.base_ref != 'main' ||
-          github.head_ref != 'develop' ||
-          github.event.pull_request.head.repo.full_name != github.repository
-        )
-      )
+    if: *standard-ci-condition
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -212,16 +208,7 @@ jobs:
 
   android-test:
     name: Android Test
-    if: >-
-      github.event_name != 'pull_request' ||
-      (
-        github.event.pull_request.draft == false &&
-        (
-          github.base_ref != 'main' ||
-          github.head_ref != 'develop' ||
-          github.event.pull_request.head.repo.full_name != github.repository
-        )
-      )
+    if: *standard-ci-condition
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -288,16 +275,7 @@ jobs:
 
   claude-code-skill-sync:
     name: Claude Code Skill Sync
-    if: >-
-      github.event_name != 'pull_request' ||
-      (
-        github.event.pull_request.draft == false &&
-        (
-          github.base_ref != 'main' ||
-          github.head_ref != 'develop' ||
-          github.event.pull_request.head.repo.full_name != github.repository
-        )
-      )
+    if: *standard-ci-condition
     runs-on: windows-latest
     timeout-minutes: 5
 
@@ -312,16 +290,7 @@ jobs:
 
   gradle-wrapper-validation:
     name: Gradle Wrapper Validation
-    if: >-
-      github.event_name != 'pull_request' ||
-      (
-        github.event.pull_request.draft == false &&
-        (
-          github.base_ref != 'main' ||
-          github.head_ref != 'develop' ||
-          github.event.pull_request.head.repo.full_name != github.repository
-        )
-      )
+    if: *standard-ci-condition
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -336,16 +305,7 @@ jobs:
 
   github-actions-validation:
     name: GitHub Actions Validation
-    if: >-
-      github.event_name != 'pull_request' ||
-      (
-        github.event.pull_request.draft == false &&
-        (
-          github.base_ref != 'main' ||
-          github.head_ref != 'develop' ||
-          github.event.pull_request.head.repo.full_name != github.repository
-        )
-      )
+    if: *standard-ci-condition
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
