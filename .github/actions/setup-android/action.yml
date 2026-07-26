@@ -1,4 +1,4 @@
-name: Set up Android CI
+name: Set Up Android CI
 description: Set up JDK, Ruby, Bundler, and Gradle for Android CI jobs
 
 inputs:
@@ -9,23 +9,23 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Ensure gradlew is executable
+    - name: Make gradlew Executable
       shell: bash
       run: chmod +x ./gradlew
 
-    - name: Set up JDK
+    - name: Set Up JDK
       uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
       with:
         distribution: temurin
         java-version: "17"
 
-    - name: Set up Ruby
+    - name: Set Up Ruby
       uses: ruby/setup-ruby@afeafc3d1ab54a631816aba4c914a0081c12ff2f # v1.310.0
       with:
         bundler-cache: true
 
-    - name: Set up Gradle
+    - name: Set Up Gradle
       uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
       with:
-        cache-provider: basic
+        cache-provider: enhanced
         cache-read-only: ${{ inputs.cache-read-only }}
