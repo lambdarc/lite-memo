@@ -81,16 +81,12 @@ bundle exec fastlane android android_test
 
 draft ではない Pull Request は、base branch にかかわらず CI の対象です。
 `develop` / `main` を base にする Pull Request では、静的解析と JVM Unit Test に加えて
-release / R8 build を検証します。coverage はリリース Pull Request を除く draft ではない Pull Request と、
+release / R8 build を検証します。coverage は draft ではない Pull Request と、
 `main` / `develop` への push で計測します。
 GitHub Actions では Static Analysis、Unit Test、Android Test を別 job で並列実行します。
 
-同一 repository の `develop` から `main` への Pull Request だけをリリース Pull Request として扱います。
-リリース Pull Request では通常の CI と CodeQL の job を skip し、
-検証は `develop` push で実行された CI と CodeQL の結果へ一本化します。
-リリース Pull Request を開いたまま `develop` へ merge しても、重い検証を push と Pull Request で二重実行しないためです。
-`main` への merge 後は main push で再度検証します。
-fork 上の同名 branch や `main` へ直接向ける Pull Request はリリース Pull Request として扱わず、通常どおり検証します。
+Pull Request の `closed` event は workflow の起動対象に含めません。
+merge 後は base branch への push だけで検証し、Pull Request と push の二重実行を防ぎます。
 draft の Pull Request は全 job を skip し、ready for review にした時点で CI と CodeQL を開始します。
 ready for review から draft に戻した場合は、実行中の Pull Request の検証を中断します。
 ローカルで主要なアプリ検証を再現するコマンドは次のとおりです。
