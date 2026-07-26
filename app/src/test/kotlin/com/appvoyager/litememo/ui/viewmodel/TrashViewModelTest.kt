@@ -78,6 +78,69 @@ class TrashViewModelTest {
     }
 
     @Test
+    fun stateTransitionStartSelectionClosesEmptyTrashDialog() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val viewModel = trashViewModel(memoRepository = FakeMemoRepository(listOf(memo)))
+        advanceUntilIdle()
+        viewModel.uiState.first { it.memos.isNotEmpty() }
+        viewModel.requestEmptyTrash()
+        viewModel.uiState.first { it.showEmptyTrashDialog }
+
+        // Act
+        // StateTransition: starting a selection closes the empty trash dialog.
+        viewModel.startSelection(memo.id)
+        val state = viewModel.uiState.first { it.selection.isActive }
+
+        // Assert
+        assertEquals(false, state.showEmptyTrashDialog)
+    }
+
+    @Test
+    fun stateTransitionUiStateDropsSelectedMemoIdWhenMemoLeavesTrash() = runTest(dispatcher) {
+        // Arrange
+        val memo1 = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val memo2 = memoFixture(id = "memo-2", deletedAt = 3_000L)
+        val repository = FakeMemoRepository(listOf(memo1, memo2))
+        val viewModel = trashViewModel(memoRepository = repository)
+        advanceUntilIdle()
+        viewModel.uiState.first { it.memos.size == 2 }
+        viewModel.startSelection(memo1.id)
+        viewModel.toggleMemoSelection(memo2.id)
+        viewModel.uiState.first { it.selection.selectedMemoIds == setOf(memo1.id, memo2.id) }
+
+        // Act
+        // StateTransition: a memo that is no longer visible leaves the selection.
+        repository.deleteMemosPermanently(listOf(memo1.id))
+        advanceUntilIdle()
+        val state = viewModel.uiState.first { it.memos.size == 1 }
+
+        // Assert
+        assertEquals(setOf(memo2.id), state.selection.selectedMemoIds)
+    }
+
+    @Test
+    fun boundaryUiStateClearsSelectionWhenTrashBecomesEmpty() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val repository = FakeMemoRepository(listOf(memo))
+        val viewModel = trashViewModel(memoRepository = repository)
+        advanceUntilIdle()
+        viewModel.uiState.first { it.memos.size == 1 }
+        viewModel.startSelection(memo.id)
+        viewModel.uiState.first { it.selection.isActive }
+
+        // Act
+        // Boundary: an empty trash leaves nothing selected.
+        repository.deleteMemosPermanently(listOf(memo.id))
+        advanceUntilIdle()
+        val state = viewModel.uiState.first { it.memos.isEmpty() }
+
+        // Assert
+        assertEquals(emptySet<MemoId>(), state.selection.selectedMemoIds)
+    }
+
+    @Test
     fun toggleMemoSelectionRemovesSelectedMemo() = runTest(dispatcher) {
         // Arrange
         val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)

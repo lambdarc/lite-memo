@@ -20,8 +20,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.appvoyager.litememo.R
 import com.appvoyager.litememo.ui.component.MemoCardTestTags
 import com.appvoyager.litememo.ui.state.HomeBulkTagDialogUiState
-import com.appvoyager.litememo.ui.state.HomeSelectionUiState
 import com.appvoyager.litememo.ui.state.HomeUiState
+import com.appvoyager.litememo.ui.state.MemoSelectionUiState
 import com.appvoyager.litememo.ui.state.SearchUiState
 import org.junit.Rule
 import org.junit.Test
@@ -213,7 +213,7 @@ class HomeScreenComposeTest {
                 isLoading = false,
                 memos = listOf(memo),
                 tags = listOf(tag),
-                selection = HomeSelectionUiState(setOf(memo.id))
+                selection = MemoSelectionUiState(setOf(memo.id))
             )
         )
         composeRule.setContent {

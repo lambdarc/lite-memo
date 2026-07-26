@@ -12,7 +12,7 @@ import com.appvoyager.litememo.domain.usecase.PurgeExpiredTrashedMemosUseCase
 import com.appvoyager.litememo.domain.usecase.RestoreMemosFromTrashUseCase
 import com.appvoyager.litememo.ui.model.TagUiModel
 import com.appvoyager.litememo.ui.model.TrashedMemoUiModel
-import com.appvoyager.litememo.ui.state.TrashSelectionUiState
+import com.appvoyager.litememo.ui.state.MemoSelectionUiState
 import com.appvoyager.litememo.ui.state.TrashUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -47,7 +47,7 @@ class TrashViewModel @Inject constructor(
 
     private val retryTrigger = MutableStateFlow(false)
     private val hasPurgeError = MutableStateFlow(false)
-    private val selection = MutableStateFlow(TrashSelectionUiState())
+    private val selection = MutableStateFlow(MemoSelectionUiState())
     private val showEmptyTrashDialog = MutableStateFlow(false)
     private var isActionInFlight = false
 
@@ -87,9 +87,7 @@ class TrashViewModel @Inject constructor(
             isLoading = false,
             hasError = hasError,
             memos = uiMemos,
-            selection = TrashSelectionUiState(
-                selectedMemoIds = activeSelection.selectedMemoIds intersect visibleMemoIds
-            ),
+            selection = activeSelection.retain(visibleMemoIds),
             showEmptyTrashDialog = showEmptyDialog
         )
     }.stateIn(
@@ -100,21 +98,15 @@ class TrashViewModel @Inject constructor(
 
     fun startSelection(id: MemoId) {
         showEmptyTrashDialog.value = false
-        selection.value = TrashSelectionUiState(selectedMemoIds = setOf(id))
+        selection.update { it.selectOnly(id) }
     }
 
     fun toggleMemoSelection(id: MemoId) {
-        val current = selection.value.selectedMemoIds
-        val next = if (id in current) {
-            current - id
-        } else {
-            current + id
-        }
-        selection.value = TrashSelectionUiState(selectedMemoIds = next)
+        selection.update { it.toggle(id) }
     }
 
     fun clearSelection() {
-        selection.value = TrashSelectionUiState()
+        selection.update { it.clear() }
     }
 
     fun restoreSelectedMemos() {
@@ -210,3 +202,6 @@ class TrashViewModel @Inject constructor(
 }
 
 private data class ObservedTrashData(val memos: List<Memo>?, val tags: List<Tag>?)
+
+private fun MemoSelectionUiState.retain(visibleMemoIds: Set<MemoId>): MemoSelectionUiState =
+    MemoSelectionUiState(selectedMemoIds intersect visibleMemoIds)
