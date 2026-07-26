@@ -80,7 +80,8 @@ bundle exec fastlane android android_test
 ## Pull Request 前の主要なアプリ検証
 
 `develop` / `main` を base にする Pull Request では、静的解析と JVM Unit Test に加えて
-release / R8 build と coverage を検証します。
+release / R8 build を検証します。coverage は base branch にかかわらず、
+すべての Pull Request と `main` / `develop` への push で計測します。
 GitHub Actions では Static Analysis、Unit Test、Android Test を別 job で並列実行します。
 ローカルで主要なアプリ検証を再現するコマンドは次のとおりです。
 
@@ -113,8 +114,11 @@ Gradle Wrapper Validation、skill 同期、actionlint、CodeQL などの workflo
 ## カバレッジ計測（Kover）
 
 Kover の集計対象は `app/build.gradle.kts` の `kover` ブロックで指定しています。
-UI 層は `*ViewModel*` / `*UiState*` / `*UiModel*` のように、役割を表す接尾語のパターンで選びます。
-パターンで選ぶため、パッケージを移動しても集計対象は変わりません。
+domain / data 層は `domain.model` / `domain.usecase` / `data.mapper` / `data.repository` などをパッケージ単位で選びます。
+ここで挙げたパッケージは代表例であり、正確な集計対象は `classes(...)` の設定を確認します。
+UI 層は `*ViewModel*` / `*UiState*` / `*UiResult*` / `*UiModel*` / `*UiDirection*` / `*UiMessage*` / `*UiStatus*` / `*UiType*` と、
+役割を表す接尾語のパターンで選びます。
+接尾語のパターンで選ぶため、UI 層はパッケージを移動しても集計対象は変わりません。
 
 役割の接尾語に合わない名前の型を追加すると、集計対象から外れます。
 外れても失敗しないため、集計したい型は既存の接尾語へ命名をそろえるか、`classes(...)` にパターンを追加します。

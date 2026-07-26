@@ -44,7 +44,6 @@ class DataStoreUserSettingsRepositoryTest {
         assertEquals(ThemeMode.DARK, result)
     }
 
-    // 不正な保存値（enum 名が変わった等）でもデフォルトにフォールバックすることを検証する
     @Test
     fun observeThemeModeReturnsDefaultWhenStoredValueIsInvalid() = runTest {
         // Arrange
@@ -55,6 +54,7 @@ class DataStoreUserSettingsRepositoryTest {
         val repository = DataStoreUserSettingsRepository(dataStore)
 
         // Act
+        // Boundary: an unknown stored name falls back to the default instead of throwing.
         val result = repository.observeThemeMode().first()
 
         // Assert
@@ -86,7 +86,6 @@ class DataStoreUserSettingsRepositoryTest {
         assertEquals(MemoSortOrder.CREATED_NEWEST, result)
     }
 
-    // 不正な保存値でもデフォルトにフォールバックすることを検証する
     @Test
     fun observeMemoSortOrderReturnsDefaultWhenStoredValueIsInvalid() = runTest {
         // Arrange
@@ -97,6 +96,7 @@ class DataStoreUserSettingsRepositoryTest {
         val repository = DataStoreUserSettingsRepository(dataStore)
 
         // Act
+        // Boundary: an unknown stored name falls back to the default instead of throwing.
         val result = repository.observeMemoSortOrder().first()
 
         // Assert

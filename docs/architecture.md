@@ -11,6 +11,7 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 - UseCase はビジネスルール、複数処理の調停、再利用する操作の境界として置き、単純委譲のためだけには増やさない
 - Android UI と密接な SDK や OS API は UI / app entry 側に閉じ、データ源に関わる Android 依存は domain の抽象を data が実装する
 - 依存注入は Hilt で行い、`LiteMemoApplication` と app 直下の `di` / `data.di` を composition boundary とする。app 直下の `di` はアプリ全体の binding、`data.di` は data 層の binding を担う
+- Glance ウィジェットのように `@AndroidEntryPoint` を使えない UI entry point は、`ui.widget.di` の `@EntryPoint` から `SingletonComponent` の依存を取得する
 
 ## レイヤー構成
 

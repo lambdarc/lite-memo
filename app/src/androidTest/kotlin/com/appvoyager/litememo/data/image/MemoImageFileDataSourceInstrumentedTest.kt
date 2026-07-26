@@ -38,7 +38,7 @@ class MemoImageFileDataSourceInstrumentedTest {
         val source = sourceFile("source-copy.txt", "image-bytes")
 
         // Act
-        // 観点: Normal - selected file content is copied into app-managed storage.
+        // Normal: selected file content is copied into app-managed storage.
         dataSource.copyImage(Uri.fromFile(source).toString(), "image-1.img")
 
         // Assert
@@ -54,7 +54,7 @@ class MemoImageFileDataSourceInstrumentedTest {
         }
 
         // Act
-        // 観点: Normal - stored image files can be removed by file name.
+        // Normal: stored image files can be removed by file name.
         dataSource.deleteImage("image-1.img")
 
         // Assert
@@ -67,7 +67,7 @@ class MemoImageFileDataSourceInstrumentedTest {
         val target = File(imagesDir(), "missing.img")
 
         // Act
-        // 観点: Boundary - missing stored files are treated as no-op.
+        // Boundary: missing stored files are treated as no-op.
         dataSource.deleteImage("missing.img")
 
         // Assert
@@ -80,7 +80,7 @@ class MemoImageFileDataSourceInstrumentedTest {
         val expected = File(imagesDir(), "image-1.img").absolutePath
 
         // Act
-        // 観点: Normal - display paths point at app-managed image storage.
+        // Normal: display paths point at app-managed image storage.
         val path = dataSource.imageFilePath("image-1.img")
 
         // Assert
@@ -93,7 +93,7 @@ class MemoImageFileDataSourceInstrumentedTest {
         val source = sourceFile("source-unknown.bin", "image-bytes")
 
         // Act
-        // 観点: Boundary - file URIs without MIME metadata use caller fallback.
+        // Boundary: file URIs without MIME metadata use caller fallback.
         val extension = dataSource.detectExtension(Uri.fromFile(source).toString())
 
         // Assert
@@ -106,7 +106,7 @@ class MemoImageFileDataSourceInstrumentedTest {
         val missing = File(context.cacheDir, "missing-source-file")
 
         // Act
-        // 観点: Error - failed copies do not leave a target file behind.
+        // Error: failed copies do not leave a target file behind.
         runCatching {
             dataSource.copyImage(Uri.fromFile(missing).toString(), "partial.img")
         }
@@ -121,7 +121,7 @@ class MemoImageFileDataSourceInstrumentedTest {
         val source = sourceFile("source-dir.txt", "image-bytes")
 
         // Act
-        // 観点: Normal - copy creates the memo image directory lazily.
+        // Normal: copy creates the memo image directory lazily.
         dataSource.copyImage(Uri.fromFile(source).toString(), "image-1.img")
 
         // Assert
