@@ -64,7 +64,8 @@
     <string name="empty_calendar_title">No memos for this day</string>
     <string name="empty_calendar_body">Choose another date to view memos created on that day.</string>
     <string name="month_title_format">MMMM yyyy</string>
-    <string name="selected_date_title_format">Memos for MMMM d</string>
+    <string name="selected_date_format">MMMM d</string>
+    <string name="selected_date_title_format">Memos for %1$s</string>
     <string name="calendar_day_cell_date_format">MMMM d, yyyy</string>
     <string name="calendar_day_has_memo_description">Has memo</string>
     <string name="calendar_day_cell_description_with_memo">%1$s, %2$s</string>

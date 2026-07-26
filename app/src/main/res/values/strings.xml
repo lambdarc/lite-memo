@@ -63,7 +63,8 @@
     <string name="empty_calendar_title">この日のメモはありません</string>
     <string name="empty_calendar_body">別の日付を選ぶと、その日に作成したメモを確認できます。</string>
     <string name="month_title_format">yyyy年M月</string>
-    <string name="selected_date_title_format">M月d日のメモ</string>
+    <string name="selected_date_format">M月d日</string>
+    <string name="selected_date_title_format">%1$sのメモ</string>
     <string name="calendar_day_cell_date_format">yyyy年M月d日</string>
     <string name="calendar_day_has_memo_description">メモあり</string>
     <string name="calendar_day_cell_description_with_memo">%1$s、%2$s</string>

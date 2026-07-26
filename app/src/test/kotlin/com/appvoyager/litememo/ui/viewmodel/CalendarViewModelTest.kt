@@ -12,6 +12,7 @@ import com.appvoyager.litememo.domain.model.Tag
 import com.appvoyager.litememo.domain.model.value.SearchQuery
 import com.appvoyager.litememo.domain.model.value.TagId
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
+import com.appvoyager.litememo.domain.model.value.TimestampRange
 import com.appvoyager.litememo.domain.repository.FakeUserSettingsRepository
 import com.appvoyager.litememo.domain.repository.MemoRepository
 import com.appvoyager.litememo.domain.tagFixture
@@ -307,6 +308,71 @@ class CalendarViewModelTest {
         assertEquals(listOf("Shopping"), state.search.results.map { it.title })
     }
 
+    @Test
+    fun stateTransitionChangingQueryRecoversSearchAfterError() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = RetryableSearchMemoRepository(
+            delegate = FakeMemoRepository(
+                listOf(
+                    memoFixture(
+                        id = "memo-1",
+                        title = "Coffee",
+                        createdAt = epochMillis("2026-05-15T10:00:00Z")
+                    )
+                )
+            )
+        )
+        val viewModel = calendarViewModel(memoRepository = memoRepository)
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("Shopping")
+        advanceUntilIdle()
+        viewModel.uiState.first { it.search.hasError }
+
+        // Act
+        // StateTransition/Error: a changed query starts a fresh search after the source recovers.
+        memoRepository.allowSearch()
+        viewModel.updateSearchQuery("Coffee")
+        advanceUntilIdle()
+        val state = viewModel.uiState.first {
+            !it.search.hasError && it.search.query == "Coffee" && it.search.results.isNotEmpty()
+        }
+
+        // Assert
+        assertEquals(listOf("Coffee"), state.search.results.map { it.title })
+    }
+
+    @Test
+    fun stateTransitionRetryReloadsCalendarAfterLoadError() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = RetryableCalendarMemoRepository(
+            delegate = FakeMemoRepository(
+                listOf(
+                    memoFixture(
+                        id = "memo-1",
+                        title = "Recovered memo",
+                        createdAt = epochMillis("2026-05-15T10:00:00Z")
+                    )
+                )
+            )
+        )
+        val viewModel = calendarViewModel(memoRepository = memoRepository)
+        viewModel.uiState.first { !it.isLoading && it.hasError }
+
+        // Act
+        // StateTransition/Error: retry resubscribes failed calendar data and restores the content.
+        memoRepository.allowCalendarLoad()
+        viewModel.retry()
+        advanceUntilIdle()
+        val state = viewModel.uiState.first {
+            !it.hasError && it.memos.isNotEmpty()
+        }
+
+        // Assert
+        assertEquals(listOf("Recovered memo"), state.memos.map { it.title })
+        assertEquals(YearMonth.of(2026, 5), state.selectedMonth)
+        assertEquals(LocalDate.of(2026, 5, 15), state.selectedDate)
+    }
+
     private fun calendarViewModel(
         memoRepository: MemoRepository = FakeMemoRepository(),
         tags: List<Tag> = emptyList(),
@@ -349,6 +415,23 @@ class CalendarViewModelTest {
                 flow { throw IllegalStateException("Search failed.") }
             } else {
                 delegate.observeActiveMemosBySearchQuery(query)
+            }
+    }
+
+    private class RetryableCalendarMemoRepository(private val delegate: FakeMemoRepository) :
+        MemoRepository by delegate {
+
+        private var calendarLoadFails = true
+
+        fun allowCalendarLoad() {
+            calendarLoadFails = false
+        }
+
+        override fun observeActiveMemosCreatedBetween(range: TimestampRange): Flow<List<Memo>> =
+            if (calendarLoadFails) {
+                flow { throw IllegalStateException("Calendar load failed.") }
+            } else {
+                delegate.observeActiveMemosCreatedBetween(range)
             }
     }
 }
