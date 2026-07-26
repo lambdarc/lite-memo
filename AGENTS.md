@@ -41,7 +41,7 @@ skill を変更するときは `.agents/skills/` を編集する。`.claude/skil
 
 実装前に、対象へ該当する規約を確認します。
 
-- [`.claude/rules/comments.md`](.claude/rules/comments.md): コメントの方針（本番コードには書かない / テストは AAA ラベルと検証観点のみ）
+- [`.claude/rules/comments.md`](.claude/rules/comments.md): コメントの方針（本番コードは読み取れない制約のみ / テストは AAA ラベルと検証観点）
 
 ## 最低限の前提
 

@@ -12,7 +12,7 @@ Kotlin / Jetpack Compose / Material 3 を中心に、Clean Architecture + MVVM �
 ## 主な機能
 
 - メモの作成・編集・一覧表示・検索（Room による永続化）
-- お気に入り登録とごみ箱
+- お気に入り登録とごみ箱（ごみ箱のメモは 30 日後に自動削除）
 - タグによる整理
 - カレンダー表示
 - メモへの画像添付
@@ -35,7 +35,7 @@ Kotlin / Jetpack Compose / Material 3 を中心に、Clean Architecture + MVVM �
 | セキュリティ | androidx.biometric |
 | 監視 | Firebase Crashlytics |
 | 広告 | Google Mobile Ads SDK (AdMob) |
-| テスト | JUnit 5, MockK, Turbine, kotlinx-coroutines-test, Compose UI Test / Espresso |
+| テスト | JUnit Jupiter（JVM）, JUnit 4 + AndroidX Test（instrumented）, MockK, Turbine, kotlinx-coroutines-test, Compose UI Test / Espresso |
 | 静的解析 / カバレッジ | KtLint, detekt（Compose ルール含む）, Android Lint, Kover |
 | ビルド | JDK 17, compileSdk 36.1 / minSdk 28 / targetSdk 36, R8 + ProGuard |
 | CI | GitHub Actions, fastlane, CodeQL, Dependabot |
@@ -46,9 +46,11 @@ Kotlin / Jetpack Compose / Material 3 を中心に、Clean Architecture + MVVM �
 
 ```text
 app/src/main/kotlin/com/appvoyager/litememo/
-├── ui/      Compose 画面・ViewModel・UI state・ナビゲーション・テーマ
+├── ui/      Compose 画面・ViewModel・UI state・ナビゲーション・テーマ・ウィジェット
 ├── domain/  model・値オブジェクト・UseCase・Repository interface
-└── data/    Repository 実装・Room・DataStore・mapper・Hilt module・Export/Import
+├── data/    Repository 実装・Room・DataStore・mapper・Hilt module・Export/Import
+├── di/      アプリ全体の Hilt module
+└── *.kt     LiteMemoApplication / MainActivity（entry point）
 ```
 
 ## 開発環境のセットアップ

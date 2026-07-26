@@ -12,7 +12,7 @@ It is built around Kotlin / Jetpack Compose / Material 3, following Clean Archit
 ## Features
 
 - Create, edit, list, and search memos (persisted with Room)
-- Favorites and trash
+- Favorites and trash (trashed memos are deleted automatically after 30 days)
 - Organize with tags
 - Calendar view
 - Attach images to memos
@@ -35,7 +35,7 @@ It is built around Kotlin / Jetpack Compose / Material 3, following Clean Archit
 | Security | androidx.biometric |
 | Observability | Firebase Crashlytics |
 | Ads | Google Mobile Ads SDK (AdMob) |
-| Testing | JUnit 5, MockK, Turbine, kotlinx-coroutines-test, Compose UI Test / Espresso |
+| Testing | JUnit Jupiter (JVM), JUnit 4 + AndroidX Test (instrumented), MockK, Turbine, kotlinx-coroutines-test, Compose UI Test / Espresso |
 | Static analysis / Coverage | KtLint, detekt (including Compose rules), Android Lint, Kover |
 | Build | JDK 17, compileSdk 36.1 / minSdk 28 / targetSdk 36, R8 + ProGuard |
 | CI | GitHub Actions, fastlane, CodeQL, Dependabot |
@@ -46,9 +46,11 @@ It is built around Kotlin / Jetpack Compose / Material 3, following Clean Archit
 
 ```text
 app/src/main/kotlin/com/appvoyager/litememo/
-├── ui/      Compose screens, ViewModels, UI state, navigation, theme
+├── ui/      Compose screens, ViewModels, UI state, navigation, theme, widgets
 ├── domain/  models, value objects, use cases, repository interfaces
-└── data/    repository implementations, Room, DataStore, mappers, Hilt modules, export/import
+├── data/    repository implementations, Room, DataStore, mappers, Hilt modules, export/import
+├── di/      app-wide Hilt modules
+└── *.kt     LiteMemoApplication / MainActivity (entry points)
 ```
 
 ## Development Setup

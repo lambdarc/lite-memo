@@ -80,7 +80,8 @@ bundle exec fastlane android android_test
 ## Pull Request 前の主要なアプリ検証
 
 `develop` / `main` を base にする Pull Request では、静的解析と JVM Unit Test に加えて
-release / R8 build を検証します。coverage は base branch にかかわらず、すべての Pull Request と push で計測します。
+release / R8 build を検証します。coverage は base branch にかかわらず、
+すべての Pull Request と `main` / `develop` への push で計測します。
 GitHub Actions では Static Analysis、Unit Test、Android Test を別 job で並列実行します。
 ローカルで主要なアプリ検証を再現するコマンドは次のとおりです。
 
