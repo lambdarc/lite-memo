@@ -87,7 +87,7 @@ GitHub Actions では Static Analysis、Unit Test、Android Test を別 job で�
 
 同一 repository の `develop` から `main` への Pull Request だけをリリース Pull Request として扱います。
 リリース Pull Request では通常の CI と CodeQL の job を skip し、
-Release PR Validation Gate が同じ head SHA に対する `develop` push の CI と CodeQL の成功を確認します。
+検証は `develop` push で実行された CI と CodeQL の結果へ一本化します。
 リリース Pull Request を開いたまま `develop` へ merge しても、重い検証を push と Pull Request で二重実行しないためです。
 `main` への merge 後は main push で再度検証します。
 fork 上の同名 branch や `main` へ直接向ける Pull Request はリリース Pull Request として扱わず、通常どおり検証します。
