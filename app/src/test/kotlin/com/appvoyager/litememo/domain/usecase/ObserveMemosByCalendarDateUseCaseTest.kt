@@ -4,7 +4,7 @@ import com.appvoyager.litememo.domain.FakeMemoRepository
 import com.appvoyager.litememo.domain.epochMillis
 import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.model.CalendarDate
-import com.appvoyager.litememo.domain.repository.FakeUserSettingsRepository
+import com.appvoyager.litememo.domain.repository.FakeDisplaySettingsRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -31,7 +31,7 @@ class ObserveMemosByCalendarDateUseCaseTest {
         // Act
         val memos = ObserveMemosByCalendarDateUseCase(
             repository,
-            FakeUserSettingsRepository(),
+            FakeDisplaySettingsRepository(),
             zoneId
         )(selectedDate).first()
 
@@ -54,7 +54,7 @@ class ObserveMemosByCalendarDateUseCaseTest {
         // Act
         val memos = ObserveMemosByCalendarDateUseCase(
             repository,
-            FakeUserSettingsRepository(),
+            FakeDisplaySettingsRepository(),
             zoneId
         )(selectedDate).first()
 
@@ -88,7 +88,7 @@ class ObserveMemosByCalendarDateUseCaseTest {
         // Act
         val memos = ObserveMemosByCalendarDateUseCase(
             repository,
-            FakeUserSettingsRepository(),
+            FakeDisplaySettingsRepository(),
             zoneId
         )(selectedDate).first()
 
@@ -116,7 +116,7 @@ class ObserveMemosByCalendarDateUseCaseTest {
         // Act
         val memos = ObserveMemosByCalendarDateUseCase(
             memoRepository = repository,
-            userSettingsRepository = FakeUserSettingsRepository(),
+            displaySettingsRepository = FakeDisplaySettingsRepository(),
             zoneId = ZoneId.of("Asia/Tokyo")
         )(selectedDate).first()
 

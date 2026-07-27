@@ -9,14 +9,20 @@ import com.appvoyager.litememo.data.util.dataOrEmptyOnIoError
 import com.appvoyager.litememo.di.UserSettingsDataStore
 import com.appvoyager.litememo.domain.model.MemoSortOrder
 import com.appvoyager.litememo.domain.model.ThemeMode
-import com.appvoyager.litememo.domain.repository.UserSettingsRepository
+import com.appvoyager.litememo.domain.repository.AppLockSettingsRepository
+import com.appvoyager.litememo.domain.repository.DisplaySettingsRepository
+import com.appvoyager.litememo.domain.repository.TutorialProgressRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
+import javax.inject.Singleton
 
+@Singleton
 class DataStoreUserSettingsRepository @Inject constructor(
     @param:UserSettingsDataStore private val dataStore: DataStore<Preferences>
-) : UserSettingsRepository {
+) : DisplaySettingsRepository,
+    AppLockSettingsRepository,
+    TutorialProgressRepository {
 
     private val preferencesFlow: Flow<Preferences> = dataStore.dataOrEmptyOnIoError()
 

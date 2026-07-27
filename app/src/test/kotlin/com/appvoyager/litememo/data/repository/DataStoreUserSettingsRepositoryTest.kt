@@ -3,7 +3,9 @@ package com.appvoyager.litememo.data.repository
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.appvoyager.litememo.domain.model.MemoSortOrder
 import com.appvoyager.litememo.domain.model.ThemeMode
 import kotlinx.coroutines.CoroutineScope
@@ -153,6 +155,66 @@ class DataStoreUserSettingsRepositoryTest {
 
         // Assert
         assertEquals(true, result)
+    }
+
+    @Test
+    fun normalSetThemeModeStoresNameUnderExistingKey() = runTest {
+        // Arrange
+        val dataStore = dataStore(backgroundScope)
+        val repository = DataStoreUserSettingsRepository(dataStore)
+
+        // Act
+        // Normal: split display contract keeps writing the persisted theme_mode key
+        repository.setThemeMode(ThemeMode.DARK)
+        val stored = dataStore.data.first()[stringPreferencesKey("theme_mode")]
+
+        // Assert
+        assertEquals(ThemeMode.DARK.name, stored)
+    }
+
+    @Test
+    fun normalSetMemoSortOrderStoresNameUnderExistingKey() = runTest {
+        // Arrange
+        val dataStore = dataStore(backgroundScope)
+        val repository = DataStoreUserSettingsRepository(dataStore)
+
+        // Act
+        // Normal: split display contract keeps writing the persisted memo_sort_order key
+        repository.setMemoSortOrder(MemoSortOrder.CREATED_NEWEST)
+        val stored = dataStore.data.first()[stringPreferencesKey("memo_sort_order")]
+
+        // Assert
+        assertEquals(MemoSortOrder.CREATED_NEWEST.name, stored)
+    }
+
+    @Test
+    fun normalSetAppLockEnabledStoresFlagUnderExistingKey() = runTest {
+        // Arrange
+        val dataStore = dataStore(backgroundScope)
+        val repository = DataStoreUserSettingsRepository(dataStore)
+
+        // Act
+        // Normal: split app lock contract keeps writing the persisted app_lock_enabled key
+        repository.setAppLockEnabled(true)
+        val stored = dataStore.data.first()[booleanPreferencesKey("app_lock_enabled")]
+
+        // Assert
+        assertEquals(true, stored)
+    }
+
+    @Test
+    fun normalCompleteTutorialStoresFlagUnderExistingKey() = runTest {
+        // Arrange
+        val dataStore = dataStore(backgroundScope)
+        val repository = DataStoreUserSettingsRepository(dataStore)
+
+        // Act
+        // Normal: split tutorial contract keeps writing the persisted tutorial_completed key
+        repository.completeTutorial()
+        val stored = dataStore.data.first()[booleanPreferencesKey("tutorial_completed")]
+
+        // Assert
+        assertEquals(true, stored)
     }
 
     private fun repository(scope: CoroutineScope): DataStoreUserSettingsRepository =

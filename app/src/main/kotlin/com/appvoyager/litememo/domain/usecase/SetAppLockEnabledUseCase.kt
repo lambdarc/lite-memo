@@ -1,13 +1,13 @@
 package com.appvoyager.litememo.domain.usecase
 
-import com.appvoyager.litememo.domain.repository.UserSettingsRepository
+import com.appvoyager.litememo.domain.repository.AppLockSettingsRepository
 import javax.inject.Inject
 
 class SetAppLockEnabledUseCase @Inject constructor(
-    private val userSettingsRepository: UserSettingsRepository
+    private val appLockSettingsRepository: AppLockSettingsRepository
 ) {
 
     suspend operator fun invoke(enabled: Boolean) =
-        userSettingsRepository.setAppLockEnabled(enabled)
+        appLockSettingsRepository.setAppLockEnabled(enabled)
 
 }

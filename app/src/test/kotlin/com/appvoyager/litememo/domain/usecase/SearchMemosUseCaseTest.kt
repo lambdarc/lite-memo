@@ -6,7 +6,7 @@ import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoSortOrder
 import com.appvoyager.litememo.domain.model.MemoSummary
 import com.appvoyager.litememo.domain.model.value.SearchQuery
-import com.appvoyager.litememo.domain.repository.FakeUserSettingsRepository
+import com.appvoyager.litememo.domain.repository.FakeDisplaySettingsRepository
 import com.appvoyager.litememo.domain.repository.MemoRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -23,7 +23,7 @@ class SearchMemosUseCaseTest {
     fun invokeReturnsEmptyListWhenQueryIsBlank() = runTest {
         // Arrange
         val repository = SearchOnlyMemoRepository(failOnSearch = true)
-        val useCase = SearchMemosUseCase(repository, FakeUserSettingsRepository())
+        val useCase = SearchMemosUseCase(repository, FakeDisplaySettingsRepository())
 
         // Act
         val memos = useCase("   ").first()
@@ -36,7 +36,7 @@ class SearchMemosUseCaseTest {
     fun invokePassesTrimmedQueryToRepository() = runTest {
         // Arrange
         val repository = SearchOnlyMemoRepository()
-        val useCase = SearchMemosUseCase(repository, FakeUserSettingsRepository())
+        val useCase = SearchMemosUseCase(repository, FakeDisplaySettingsRepository())
 
         // Act
         useCase("  shopping  ").first()
@@ -52,11 +52,11 @@ class SearchMemosUseCaseTest {
             val older = memoFixture(id = "older", createdAt = 1_000L, updatedAt = 3_000L)
             val newer = memoFixture(id = "newer", createdAt = 2_000L, updatedAt = 2_000L)
             val repository = SearchOnlyMemoRepository(results = listOf(older, newer))
-            val userSettingsRepository = FakeUserSettingsRepository()
-            userSettingsRepository.setMemoSortOrder(MemoSortOrder.CREATED_NEWEST)
+            val displaySettingsRepository = FakeDisplaySettingsRepository()
+            displaySettingsRepository.setMemoSortOrder(MemoSortOrder.CREATED_NEWEST)
 
             // Act
-            val memos = SearchMemosUseCase(repository, userSettingsRepository)("query").first()
+            val memos = SearchMemosUseCase(repository, displaySettingsRepository)("query").first()
 
             // Assert
             assertEquals(listOf(newer.id, older.id), memos.map { it.id })
@@ -68,7 +68,7 @@ class SearchMemosUseCaseTest {
         val active = memoFixture(id = "active", title = "shopping")
         val trashed = memoFixture(id = "trashed", title = "shopping", deletedAt = 2_000L)
         val repository = FakeMemoRepository(listOf(active, trashed))
-        val useCase = SearchMemosUseCase(repository, FakeUserSettingsRepository())
+        val useCase = SearchMemosUseCase(repository, FakeDisplaySettingsRepository())
 
         // Act
         val memos = useCase("shopping").first()

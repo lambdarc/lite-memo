@@ -3,7 +3,7 @@ package com.appvoyager.litememo.domain.usecase
 import com.appvoyager.litememo.domain.FakeMemoRepository
 import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.model.MemoSortOrder
-import com.appvoyager.litememo.domain.repository.FakeUserSettingsRepository
+import com.appvoyager.litememo.domain.repository.FakeDisplaySettingsRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -19,7 +19,7 @@ class ObserveMemosUseCaseTest {
         val repository = FakeMemoRepository(listOf(older, newer))
 
         // Act
-        val memos = ObserveMemosUseCase(repository, FakeUserSettingsRepository())().first()
+        val memos = ObserveMemosUseCase(repository, FakeDisplaySettingsRepository())().first()
 
         // Assert
         assertEquals(listOf(newer.id, older.id), memos.map { it.id })
@@ -33,7 +33,7 @@ class ObserveMemosUseCaseTest {
         val repository = FakeMemoRepository(listOf(active, trashed))
 
         // Act
-        val memos = ObserveMemosUseCase(repository, FakeUserSettingsRepository())().first()
+        val memos = ObserveMemosUseCase(repository, FakeDisplaySettingsRepository())().first()
 
         // Assert
         assertEquals(listOf(active.id), memos.map { it.id })
@@ -47,7 +47,7 @@ class ObserveMemosUseCaseTest {
         val repository = FakeMemoRepository(listOf(normal, favorite))
 
         // Act
-        val memos = ObserveMemosUseCase(repository, FakeUserSettingsRepository())().first()
+        val memos = ObserveMemosUseCase(repository, FakeDisplaySettingsRepository())().first()
 
         // Assert
         assertEquals(listOf(favorite.id, normal.id), memos.map { it.id })
@@ -59,7 +59,7 @@ class ObserveMemosUseCaseTest {
         val normal = memoFixture(id = "normal", createdAt = 2000L)
         val favorite = memoFixture(id = "favorite", createdAt = 1000L, isFavorite = true)
         val repository = FakeMemoRepository(listOf(normal, favorite))
-        val settingsRepository = FakeUserSettingsRepository()
+        val settingsRepository = FakeDisplaySettingsRepository()
         settingsRepository.setMemoSortOrder(MemoSortOrder.CREATED_NEWEST)
 
         // Act

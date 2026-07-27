@@ -3,7 +3,7 @@ package com.appvoyager.litememo.ui.state
 import app.cash.turbine.test
 import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.model.Memo
-import com.appvoyager.litememo.domain.repository.FakeUserSettingsRepository
+import com.appvoyager.litememo.domain.repository.FakeDisplaySettingsRepository
 import com.appvoyager.litememo.domain.repository.MemoRepository
 import com.appvoyager.litememo.domain.usecase.SearchMemosUseCase
 import io.mockk.every
@@ -333,7 +333,7 @@ class MemoSearchUiStateHolderTest {
         MemoSearchUiStateHolder(
             SearchMemosUseCase(
                 memoRepository = repository,
-                userSettingsRepository = FakeUserSettingsRepository()
+                displaySettingsRepository = FakeDisplaySettingsRepository()
             )
         )
 
