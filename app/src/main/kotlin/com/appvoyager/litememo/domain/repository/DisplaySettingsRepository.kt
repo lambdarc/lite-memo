@@ -4,22 +4,14 @@ import com.appvoyager.litememo.domain.model.MemoSortOrder
 import com.appvoyager.litememo.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 
-interface UserSettingsRepository {
+interface DisplaySettingsRepository {
 
     fun observeThemeMode(): Flow<ThemeMode>
 
     fun observeMemoSortOrder(): Flow<MemoSortOrder>
 
-    fun observeAppLockEnabled(): Flow<Boolean>
-
-    fun observeTutorialCompleted(): Flow<Boolean>
-
     suspend fun setThemeMode(mode: ThemeMode)
 
     suspend fun setMemoSortOrder(order: MemoSortOrder)
-
-    suspend fun setAppLockEnabled(enabled: Boolean)
-
-    suspend fun completeTutorial()
 
 }

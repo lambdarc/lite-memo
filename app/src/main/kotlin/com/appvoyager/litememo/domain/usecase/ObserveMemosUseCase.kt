@@ -2,20 +2,20 @@ package com.appvoyager.litememo.domain.usecase
 
 import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.sortedBy
+import com.appvoyager.litememo.domain.repository.DisplaySettingsRepository
 import com.appvoyager.litememo.domain.repository.MemoRepository
-import com.appvoyager.litememo.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 
 class ObserveMemosUseCase @Inject constructor(
     private val memoRepository: MemoRepository,
-    private val userSettingsRepository: UserSettingsRepository
+    private val displaySettingsRepository: DisplaySettingsRepository
 ) {
 
     operator fun invoke(): Flow<List<Memo>> = combine(
         memoRepository.observeActiveMemos(),
-        userSettingsRepository.observeMemoSortOrder()
+        displaySettingsRepository.observeMemoSortOrder()
     ) { memos, sortOrder ->
         memos.sortedBy(sortOrder)
     }

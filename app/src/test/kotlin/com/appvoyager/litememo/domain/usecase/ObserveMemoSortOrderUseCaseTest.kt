@@ -1,7 +1,7 @@
 package com.appvoyager.litememo.domain.usecase
 
 import com.appvoyager.litememo.domain.model.MemoSortOrder
-import com.appvoyager.litememo.domain.repository.FakeUserSettingsRepository
+import com.appvoyager.litememo.domain.repository.FakeDisplaySettingsRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -12,7 +12,7 @@ class ObserveMemoSortOrderUseCaseTest {
     @Test
     fun invokeReturnsDefaultSortOrder() = runTest {
         // Arrange
-        val repository = FakeUserSettingsRepository()
+        val repository = FakeDisplaySettingsRepository()
         val useCase = ObserveMemoSortOrderUseCase(repository)
 
         // Act
@@ -25,7 +25,7 @@ class ObserveMemoSortOrderUseCaseTest {
     @Test
     fun invokeReflectsUpdatedSortOrder() = runTest {
         // Arrange
-        val repository = FakeUserSettingsRepository()
+        val repository = FakeDisplaySettingsRepository()
         val useCase = ObserveMemoSortOrderUseCase(repository)
         repository.setMemoSortOrder(MemoSortOrder.CREATED_NEWEST)
 

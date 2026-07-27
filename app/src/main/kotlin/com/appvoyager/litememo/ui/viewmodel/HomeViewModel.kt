@@ -21,9 +21,9 @@ import com.appvoyager.litememo.ui.model.TagUiModel
 import com.appvoyager.litememo.ui.state.HomeBulkTagDialogUiState
 import com.appvoyager.litememo.ui.state.HomeFilterUiState
 import com.appvoyager.litememo.ui.state.HomeUiState
-import com.appvoyager.litememo.ui.state.MemoSearchUiStateHolder
 import com.appvoyager.litememo.ui.state.MemoSelectionUiState
 import com.appvoyager.litememo.ui.state.SearchUiState
+import com.appvoyager.litememo.ui.state.searchMemoResults
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -55,7 +55,8 @@ class HomeViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val selectedFilter = MutableStateFlow<HomeFilterUiState>(HomeFilterUiState.All)
-    private val memoSearch = MemoSearchUiStateHolder(searchMemosUseCase)
+    private val searchControls = MutableStateFlow(SearchUiState())
+    private val searchResults = searchControls.searchMemoResults(searchMemosUseCase)
     private val selection = MutableStateFlow(MemoSelectionUiState())
     private val bulkTagDialog = MutableStateFlow(HomeBulkTagDialogUiState())
     private val retryTrigger = MutableStateFlow(false)
@@ -66,7 +67,7 @@ class HomeViewModel @Inject constructor(
 
     private val uiControls = combine(
         selectedFilter,
-        memoSearch.controls,
+        searchControls,
         selection,
         bulkTagDialog
     ) { filter, search, activeSelection, tagDialog ->
@@ -83,7 +84,7 @@ class HomeViewModel @Inject constructor(
             observeMemosUseCase(),
             observeTagsUseCase(),
             uiControls,
-            memoSearch.results
+            searchResults
         ) { memos, tags, controls, searchResult ->
             val tagUiModels = tags.map { TagUiModel.fromDomain(it) }
             val effectiveFilter = controls.filter.effectiveFilter(tags)
@@ -99,7 +100,7 @@ class HomeViewModel @Inject constructor(
                 ?.map { memo -> memo.tagIds.toSet() }
                 ?.reduce { commonTagIds, tagIds -> commonTagIds intersect tagIds }
                 ?: emptySet()
-            val search = memoSearch.toUiState(controls.search, searchResult) { searchHits ->
+            val search = controls.search.withResult(searchResult) { searchHits ->
                 MemoUiModel.fromDomain(
                     searchHits,
                     tags,
@@ -128,7 +129,7 @@ class HomeViewModel @Inject constructor(
                     isLoading = false,
                     hasError = true,
                     selectedFilter = selectedFilter.value,
-                    search = memoSearch.controls.value,
+                    search = searchControls.value,
                     selection = selection.value,
                     bulkTagDialog = bulkTagDialog.value
                 )
@@ -145,15 +146,15 @@ class HomeViewModel @Inject constructor(
     }
 
     fun toggleSearch() {
-        memoSearch.toggle()
+        searchControls.update { search -> search.toggled() }
     }
 
     fun updateSearchQuery(query: String) {
-        memoSearch.updateQuery(query)
+        searchControls.update { search -> search.withQuery(query) }
     }
 
     fun closeSearch() {
-        memoSearch.close()
+        searchControls.update { search -> search.closed() }
     }
 
     fun setMemoFavorite(memoId: MemoId, isFavorite: Boolean) {
