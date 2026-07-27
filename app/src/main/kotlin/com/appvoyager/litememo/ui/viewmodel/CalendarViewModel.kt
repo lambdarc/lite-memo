@@ -16,8 +16,8 @@ import com.appvoyager.litememo.domain.usecase.SearchMemosUseCase
 import com.appvoyager.litememo.ui.model.MemoUiModel
 import com.appvoyager.litememo.ui.state.CalendarDayUiState
 import com.appvoyager.litememo.ui.state.CalendarUiState
-import com.appvoyager.litememo.ui.state.MemoSearchUiStateHolder
 import com.appvoyager.litememo.ui.state.SearchUiState
+import com.appvoyager.litememo.ui.state.searchMemoResults
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,7 +53,8 @@ class CalendarViewModel @Inject constructor(
     private val selectedDate = MutableStateFlow(initialDate)
     private val isCalendarExpanded = MutableStateFlow(true)
     private val isDatePickerVisible = MutableStateFlow(false)
-    private val memoSearch = MemoSearchUiStateHolder(searchMemosUseCase)
+    private val searchControls = MutableStateFlow(SearchUiState())
+    private val searchResults = searchControls.searchMemoResults(searchMemosUseCase)
     private val retryTrigger = MutableStateFlow(0)
 
     private val observedCalendarData = combine(
@@ -81,7 +82,7 @@ class CalendarViewModel @Inject constructor(
     private val uiControls = combine(
         isCalendarExpanded,
         isDatePickerVisible,
-        memoSearch.controls
+        searchControls
     ) { expanded, datePickerVisible, search ->
         CalendarUiControls(expanded, datePickerVisible, search)
     }
@@ -92,12 +93,12 @@ class CalendarViewModel @Inject constructor(
             selectedMonth,
             selectedDate,
             uiControls,
-            memoSearch.results
+            searchResults
         ) { observed, month, date, controls, searchResult ->
             val hasError = observed.monthSummary == null ||
                 observed.memos == null ||
                 observed.tags == null
-            val search = memoSearch.toUiState(controls.search, searchResult) { searchHits ->
+            val search = controls.search.withResult(searchResult) { searchHits ->
                 if (observed.tags != null) {
                     MemoUiModel.fromDomain(
                         searchHits,
@@ -163,15 +164,15 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun toggleSearch() {
-        memoSearch.toggle()
+        searchControls.update { search -> search.toggled() }
     }
 
     fun updateSearchQuery(query: String) {
-        memoSearch.updateQuery(query)
+        searchControls.update { search -> search.withQuery(query) }
     }
 
     fun closeSearch() {
-        memoSearch.close()
+        searchControls.update { search -> search.closed() }
     }
 
     fun retry() {
