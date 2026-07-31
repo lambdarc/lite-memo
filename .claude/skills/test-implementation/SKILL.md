@@ -18,7 +18,7 @@ Lite Memo の変更した振る舞いを、既存の Unit Test / instrumented te
 1. 変更した振る舞いを洗い出し、JVM Unit Test で足りるか androidTest が要るか判断する。
 2. domain の value object / UseCase / Repository interface 境界 / mapper を優先し、テスト対象を選ぶ。
 3. 選んだ対象に AAA でテストを追加・修正する。
-4. JVM Unit Test は `./gradlew :app:testProdDebugUnitTest`、lint は `./gradlew :app:lintProdDebug`、instrumented test は `./gradlew :app:connectedDevDebugAndroidTest` を実行する。
+4. 変更内容に該当する検証をすべて実行する。Kotlin のテスト変更は `./gradlew :app:ktlintCheck :app:detekt`、JVM Unit Test は `./gradlew :app:testProdDebugUnitTest`、lint は `./gradlew :app:lintProdDebug`、instrumented test は `./gradlew :app:connectedDevDebugAndroidTest` で検証し、複数に該当するときは各 task を組み合わせる。
 5. 追加・修正したテスト、実行した task と結果、未実施の検証と理由を簡潔に報告する。
 
 # 注意事項

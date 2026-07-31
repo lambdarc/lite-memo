@@ -10,7 +10,7 @@
 ## 実装時の注意
 
 - 画面状態は `ui/state` と ViewModel に寄せ、Compose に状態を持たせすぎない。
-- domain model をそのまま UI へ流さず、表示に必要な形へ `XxxUiModel` で写す。
+- 表示固有の整形や UI 専用情報が必要な場合は `XxxUiModel` へ写し、不要な変換型は増やさない。
 - loading / empty / error / content などの分岐を状態として表す。
 - 主要 UiState と一緒に使う小型 state / enum は、関連が明確で読みやすい範囲なら同じファイルのトップレベル宣言へまとめる。
 

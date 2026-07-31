@@ -1,6 +1,4 @@
 interface:
-  display_name: Domain 実装
-  short_description: model / value object / UseCase / Repository interface / provider を扱う。
-  default_prompt: Domain 層の変更対象の役割クラスを判定し、該当 reference に沿って実装する。
-policy:
-  allow_implicit_invocation: true
+  display_name: "Domain 実装"
+  short_description: "Domain model・UseCase・Repository interface・providerを扱う"
+  default_prompt: "$domain-implementation を使い、Domain 層の変更対象を判定して実装・検証してください。"

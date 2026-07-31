@@ -1,6 +1,4 @@
 interface:
-  display_name: Data 実装
-  short_description: Repository 実装 / mapper / DataStore / export-import / ContentResolver を扱う。
-  default_prompt: Data 層の変更対象の役割クラスを判定し、該当 reference に沿って実装する。
-policy:
-  allow_implicit_invocation: true
+  display_name: "Data 実装"
+  short_description: "Repository・mapper・DataStore・export/importを扱う"
+  default_prompt: "$data-implementation を使い、Data 層の変更対象を判定して実装・検証してください。"

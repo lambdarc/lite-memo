@@ -1,6 +1,6 @@
 ---
 name: data-implementation
-description: Lite Memo の Data 層の設計、実装、修正を扱う。Repository 実装、mapper、DataStore、export/import、ContentResolver、Hilt module、provider 実装、domain と data の変換境界が対象。
+description: Lite Memo の Data 層の設計、実装、修正を扱う。Repository 実装、mapper、DataStore、export/import、ContentResolver、Hilt module、provider 実装、domain と data の変換境界が対象。Room schema 変更を伴う場合は db-implementation も併用する。
 ---
 
 # 目的

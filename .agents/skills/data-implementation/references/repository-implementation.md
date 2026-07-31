@@ -4,7 +4,7 @@ domain の Repository interface を既存データ源に接続し、実装詳細
 
 ## 確認する対象
 
-- `data/repository/` の既存実装（`RoomMemoRepository`、`RoomTagRepository`、`DataStoreUserSettingsRepository`、`ContentResolverExportFileRepository`、`FileSystemMemoImageStore`）
+- `data/repository/` の既存実装（`RoomMemoRepository`、`RoomTagRepository`、`DataStoreUserSettingsRepository`、`FileSystemMemoExportArchiveRepository`、`FileSystemMemoImageStore`）
 - 対応する domain interface の期待値と、DAO / DataStore / file / ContentResolver の制約
 
 ## 実装時の注意

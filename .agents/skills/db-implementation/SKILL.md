@@ -1,6 +1,6 @@
 ---
 name: db-implementation
-description: Lite Memo の Room DB 周りの設計、実装、修正を扱う。Room entity、DAO、LiteMemoDatabase、migration、app/schemas、Room testing、DB schema 変更が対象。
+description: Lite Memo の Room DB 周りの設計、実装、修正を扱う。Room entity、DAO、LiteMemoDatabase、migration、app/schemas、Room testing、DB schema 変更が対象。DataStore や export/import だけの変更は data-implementation を優先する。
 ---
 
 # 目的
