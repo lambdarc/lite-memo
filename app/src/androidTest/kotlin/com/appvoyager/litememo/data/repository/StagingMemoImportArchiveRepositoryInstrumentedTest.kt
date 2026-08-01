@@ -97,11 +97,10 @@ class StagingMemoImportArchiveRepositoryInstrumentedTest {
         val images = staged.data.memos.single().images
 
         // Assert
-        assertEquals(listOf("image-1", "image-2"), images.map { it.id.value })
-        assertEquals(
-            listOf("jpg", "png"),
-            images.map { it.fileName.value.substringAfterLast('.') }
-        )
+        assertEquals("image-1", images[0].id.value)
+        assertEquals("jpg", images[0].fileName.value.substringAfterLast('.'))
+        assertEquals("image-2", images[1].id.value)
+        assertEquals("png", images[1].fileName.value.substringAfterLast('.'))
     }
 
     @Test

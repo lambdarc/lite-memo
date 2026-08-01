@@ -272,7 +272,7 @@ class TrashViewModelTest {
         viewModel.actionErrorEvent.test {
             viewModel.confirmEmptyTrash()
             advanceUntilIdle()
-            awaitItem()
+            assertEquals(Unit, awaitItem())
             assertEquals(false, viewModel.uiState.value.showEmptyTrashDialog)
         }
     }
@@ -297,7 +297,7 @@ class TrashViewModelTest {
             viewModel.actionErrorEvent.test {
                 viewModel.restoreSelectedMemos()
                 advanceUntilIdle()
-                awaitItem()
+                assertEquals(Unit, awaitItem())
                 assertEquals(setOf(memo.id), viewModel.uiState.value.selection.selectedMemoIds)
             }
         }

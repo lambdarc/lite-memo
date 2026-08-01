@@ -207,7 +207,7 @@ class TagManageViewModelTest {
             viewModel.requestDelete(tagUiModel)
             viewModel.confirmDelete()
             advanceUntilIdle()
-            awaitItem()
+            assertEquals(Unit, awaitItem())
             assertEquals(null, viewModel.uiState.value.showDeleteDialog)
         }
     }
