@@ -39,6 +39,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -80,9 +81,11 @@ class MemoEditViewModelTest {
         val state = viewModel.uiState.value
 
         // Assert
-        assertEquals(
-            MemoEditSnapshot("Saved title", "Saved body", setOf(TagId("tag-1")), true),
-            MemoEditSnapshot(state.title, state.body, state.selectedTagIds, state.isFavorite)
+        assertAll(
+            { assertEquals("Saved title", state.title) },
+            { assertEquals("Saved body", state.body) },
+            { assertEquals(setOf(TagId("tag-1")), state.selectedTagIds) },
+            { assertEquals(true, state.isFavorite) }
         )
     }
 
@@ -104,15 +107,12 @@ class MemoEditViewModelTest {
         val state = viewModel.uiState.value
 
         // Assert
-        assertEquals(
-            false to
-                MemoEditSnapshot("Existing title", "Existing body", setOf(TagId("tag-1")), true),
-            state.isLoading to MemoEditSnapshot(
-                state.title,
-                state.body,
-                state.selectedTagIds,
-                state.isFavorite
-            )
+        assertAll(
+            { assertEquals(false, state.isLoading) },
+            { assertEquals("Existing title", state.title) },
+            { assertEquals("Existing body", state.body) },
+            { assertEquals(setOf(TagId("tag-1")), state.selectedTagIds) },
+            { assertEquals(true, state.isFavorite) }
         )
     }
 
@@ -146,8 +146,8 @@ class MemoEditViewModelTest {
 
         // Assert
         assertEquals(
-            MemoEditImageSnapshot("image-1", "image-1.jpg", "/images/image-1.jpg", false),
-            viewModel.uiState.value.images.single().toSnapshot()
+            MemoImageUiModel("image-1", "image-1.jpg", "/images/image-1.jpg", false),
+            viewModel.uiState.value.images.single()
         )
     }
 
@@ -272,10 +272,10 @@ class MemoEditViewModelTest {
         // Assert
         assertEquals(
             listOf(
-                MemoEditImageSnapshot("image-1", "image-1.jpg", "/images/image-1.jpg", true),
-                MemoEditImageSnapshot("image-2", "image-2.jpg", "/images/image-2.jpg", false)
+                MemoImageUiModel("image-1", "image-1.jpg", "/images/image-1.jpg", true),
+                MemoImageUiModel("image-2", "image-2.jpg", "/images/image-2.jpg", false)
             ),
-            viewModel.uiState.value.images.map { it.toSnapshot() }
+            viewModel.uiState.value.images
         )
     }
 
@@ -321,10 +321,14 @@ class MemoEditViewModelTest {
             viewModel.navigationEvent.test {
                 viewModel.finishEditing()
                 advanceUntilIdle()
-                assertEquals(
-                    MemoEditNavigationUiEvent.NavigateBack to listOf("image-1.jpg"),
-                    awaitItem() to memoRepository.savedMemos.single().images.map {
-                        it.fileName.value
+                val event = awaitItem()
+                assertAll(
+                    { assertEquals(MemoEditNavigationUiEvent.NavigateBack, event) },
+                    {
+                        assertEquals(
+                            listOf("image-1.jpg"),
+                            memoRepository.savedMemos.single().images.map { it.fileName.value }
+                        )
                     }
                 )
             }
@@ -352,8 +356,8 @@ class MemoEditViewModelTest {
 
         // Assert
         assertEquals(
-            MemoEditImageSnapshot("image-1", "image-1.jpg", "/images/image-1.jpg", true),
-            image.toSnapshot()
+            MemoImageUiModel("image-1", "image-1.jpg", "/images/image-1.jpg", true),
+            image
         )
     }
 
@@ -466,9 +470,10 @@ class MemoEditViewModelTest {
         viewModel.navigationEvent.test {
             viewModel.finishEditing()
             advanceUntilIdle()
-            assertEquals(
-                MemoEditNavigationUiEvent.NavigateBack to emptyList<MemoId>(),
-                awaitItem() to memoRepository.currentMemos().map { it.id }
+            val event = awaitItem()
+            assertAll(
+                { assertEquals(MemoEditNavigationUiEvent.NavigateBack, event) },
+                { assertEquals(emptyList<MemoId>(), memoRepository.currentMemos().map { it.id }) }
             )
         }
     }
@@ -489,9 +494,10 @@ class MemoEditViewModelTest {
             viewModel.updateTitle("")
             viewModel.finishEditing()
             advanceUntilIdle()
-            assertEquals(
-                MemoEditNavigationUiEvent.NavigateBack to emptyList<MemoId>(),
-                awaitItem() to memoRepository.currentMemos().map { it.id }
+            val event = awaitItem()
+            assertAll(
+                { assertEquals(MemoEditNavigationUiEvent.NavigateBack, event) },
+                { assertEquals(emptyList<MemoId>(), memoRepository.currentMemos().map { it.id }) }
             )
         }
     }
@@ -518,17 +524,13 @@ class MemoEditViewModelTest {
         viewModel.navigationEvent.test {
             viewModel.finishEditing()
             advanceUntilIdle()
-            assertEquals(
-                RestoredNewMemoFinishSnapshot(
-                    navigationEvent = MemoEditNavigationUiEvent.NavigateBack,
-                    remainingMemoIds = emptyList(),
-                    movedToTrashIds = emptyList()
-                ),
-                RestoredNewMemoFinishSnapshot(
-                    navigationEvent = awaitItem(),
-                    remainingMemoIds = memoRepository.currentMemos().map { it.id },
-                    movedToTrashIds = memoRepository.movedToTrash.map { it.memoId }
-                )
+            val event = awaitItem()
+            assertAll(
+                { assertEquals(MemoEditNavigationUiEvent.NavigateBack, event) },
+                { assertEquals(emptyList<MemoId>(), memoRepository.currentMemos().map { it.id }) },
+                {
+                    assertEquals(emptyList<MemoId>(), memoRepository.movedToTrash.map { it.memoId })
+                }
             )
         }
     }
@@ -565,9 +567,10 @@ class MemoEditViewModelTest {
             viewModel.updateTitle("Pending")
             viewModel.finishEditing()
             advanceUntilIdle()
-            assertEquals(
-                MemoEditNavigationUiEvent.NavigateBack to "Pending",
-                awaitItem() to memoRepository.savedMemos.single().title.value
+            val event = awaitItem()
+            assertAll(
+                { assertEquals(MemoEditNavigationUiEvent.NavigateBack, event) },
+                { assertEquals("Pending", memoRepository.savedMemos.single().title.value) }
             )
         }
     }
@@ -588,16 +591,12 @@ class MemoEditViewModelTest {
         advanceUntilIdle()
 
         // Assert
-        assertEquals(
-            MemoEditSnapshot("Pending", "", emptySet(), false),
-            memoRepository.savedMemos.single().let { memo ->
-                MemoEditSnapshot(
-                    title = memo.title.value,
-                    body = memo.body.value,
-                    selectedTagIds = memo.tagIds.toSet(),
-                    isFavorite = memo.isFavorite
-                )
-            }
+        val memo = memoRepository.savedMemos.single()
+        assertAll(
+            { assertEquals("Pending", memo.title.value) },
+            { assertEquals("", memo.body.value) },
+            { assertEquals(emptySet<TagId>(), memo.tagIds.toSet()) },
+            { assertEquals(false, memo.isFavorite) }
         )
     }
 
@@ -794,30 +793,3 @@ class MemoEditViewModelTest {
         }
     }
 }
-
-private data class MemoEditSnapshot(
-    val title: String,
-    val body: String,
-    val selectedTagIds: Set<TagId>,
-    val isFavorite: Boolean
-)
-
-private data class MemoEditImageSnapshot(
-    val id: String,
-    val fileName: String,
-    val filePath: String,
-    val isPersisted: Boolean
-)
-
-private fun MemoImageUiModel.toSnapshot() = MemoEditImageSnapshot(
-    id = id,
-    fileName = fileName,
-    filePath = filePath,
-    isPersisted = isPersisted
-)
-
-private data class RestoredNewMemoFinishSnapshot(
-    val navigationEvent: MemoEditNavigationUiEvent,
-    val remainingMemoIds: List<MemoId>,
-    val movedToTrashIds: List<MemoId>
-)

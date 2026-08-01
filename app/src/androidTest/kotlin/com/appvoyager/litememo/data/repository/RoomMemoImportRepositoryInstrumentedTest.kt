@@ -65,13 +65,8 @@ class RoomMemoImportRepositoryInstrumentedTest {
         val persistedTag = database.tagDao().getTag("new-tag")
 
         // Assert
-        assertEquals(
-            RollbackSnapshot(failedWithConstraint = true, persistedTagId = null),
-            RollbackSnapshot(
-                failedWithConstraint = failure is SQLiteConstraintException,
-                persistedTagId = persistedTag?.id
-            )
-        )
+        assertEquals(SQLiteConstraintException::class.java, failure?.javaClass)
+        assertEquals(null, persistedTag)
     }
 
     @Test
@@ -90,14 +85,9 @@ class RoomMemoImportRepositoryInstrumentedTest {
         val persistedMemo = memoDao.getActiveMemoWithRefs("memo")
 
         // Assert
-        assertEquals(
-            PersistenceSnapshot("tag", "memo", listOf("tag")),
-            PersistenceSnapshot(
-                tagId = persistedTag?.id,
-                memoId = persistedMemo?.memo?.id,
-                tagIds = persistedMemo?.tagRefs?.map { it.tagId }.orEmpty()
-            )
-        )
+        assertEquals("tag", persistedTag?.id)
+        assertEquals("memo", persistedMemo?.memo?.id)
+        assertEquals(listOf("tag"), persistedMemo?.tagRefs?.map { it.tagId }.orEmpty())
     }
 
     @Test
@@ -116,19 +106,11 @@ class RoomMemoImportRepositoryInstrumentedTest {
         val persistedMemo = memoDao.getActiveMemoWithRefs("memo")
 
         // Assert
+        assertEquals(SQLiteConstraintException::class.java, failure?.javaClass)
+        assertEquals(emptyList<MemoImageFileName>(), imageStore.deletedFileNames)
         assertEquals(
-            RollbackCleanupSnapshot(
-                failedWithConstraint = true,
-                deletedFileNames = emptyList(),
-                persistedImageFileNames = listOf("old.jpg")
-            ),
-            RollbackCleanupSnapshot(
-                failedWithConstraint = failure is SQLiteConstraintException,
-                deletedFileNames = imageStore.deletedFileNames,
-                persistedImageFileNames = persistedMemo?.imageRefs
-                    ?.map { it.fileName }
-                    .orEmpty()
-            )
+            listOf("old.jpg"),
+            persistedMemo?.imageRefs?.map { it.fileName }.orEmpty()
         )
     }
 
@@ -144,14 +126,9 @@ class RoomMemoImportRepositoryInstrumentedTest {
         repository.import(exportData(memos = listOf(memo(id = "memo"))))
 
         // Assert
-        assertEquals(
-            CleanupSnapshot(
-                deletedFileNames = listOf(MemoImageFileName("old.jpg")),
-                databaseInTransaction = false,
-                persistedImageFileNames = emptyList()
-            ),
-            imageStore.snapshot
-        )
+        assertEquals(listOf(MemoImageFileName("old.jpg")), imageStore.deletedFileNames)
+        assertEquals(false, imageStore.databaseInTransactionAtCleanup)
+        assertEquals(emptyList<String>(), imageStore.persistedImageFileNamesAtCleanup)
     }
 
     @Test
@@ -166,13 +143,8 @@ class RoomMemoImportRepositoryInstrumentedTest {
         val persistedMemo = memoDao.getActiveMemoWithRefs("memo")
 
         // Assert
-        assertEquals(
-            MemoContentSnapshot(title = "Title", updatedAt = 2_000L),
-            MemoContentSnapshot(
-                title = persistedMemo?.memo?.title,
-                updatedAt = persistedMemo?.memo?.updatedAt
-            )
-        )
+        assertEquals("Title", persistedMemo?.memo?.title)
+        assertEquals(2_000L, persistedMemo?.memo?.updatedAt)
     }
 
     @Test
@@ -194,12 +166,10 @@ class RoomMemoImportRepositoryInstrumentedTest {
 
         // Assert
         assertEquals(
-            TagConflictSnapshot(listOf(TagName("Work")), null),
-            TagConflictSnapshot(
-                conflictingTagNames = (failure as? ImportTagNameConflictException)?.tagNames,
-                persistedMemoId = persistedMemo?.memo?.id
-            )
+            listOf(TagName("Work")),
+            (failure as? ImportTagNameConflictException)?.tagNames
         )
+        assertEquals(null, persistedMemo)
     }
 
     @Test
@@ -322,36 +292,6 @@ class RoomMemoImportRepositoryInstrumentedTest {
         tagIds = tagIds
     )
 
-    private data class PersistenceSnapshot(
-        val tagId: String?,
-        val memoId: String?,
-        val tagIds: List<String>
-    )
-
-    private data class MemoContentSnapshot(val title: String?, val updatedAt: Long?)
-
-    private data class TagConflictSnapshot(
-        val conflictingTagNames: List<TagName>?,
-        val persistedMemoId: String?
-    )
-
-    private data class RollbackSnapshot(
-        val failedWithConstraint: Boolean,
-        val persistedTagId: String?
-    )
-
-    private data class RollbackCleanupSnapshot(
-        val failedWithConstraint: Boolean,
-        val deletedFileNames: List<MemoImageFileName>,
-        val persistedImageFileNames: List<String>
-    )
-
-    private data class CleanupSnapshot(
-        val deletedFileNames: List<MemoImageFileName>,
-        val databaseInTransaction: Boolean,
-        val persistedImageFileNames: List<String>
-    )
-
     private open class RecordingMemoImageStore : MemoImageStore {
 
         val deletedFileNames = mutableListOf<MemoImageFileName>()
@@ -372,18 +312,18 @@ class RoomMemoImportRepositoryInstrumentedTest {
         private val memoDao: MemoDao
     ) : RecordingMemoImageStore() {
 
-        var snapshot: CleanupSnapshot? = null
+        var databaseInTransactionAtCleanup: Boolean? = null
+            private set
+        var persistedImageFileNamesAtCleanup: List<String>? = null
+            private set
 
         override suspend fun deleteImages(fileNames: List<MemoImageFileName>) {
             super.deleteImages(fileNames)
-            snapshot = CleanupSnapshot(
-                deletedFileNames = deletedFileNames.toList(),
-                databaseInTransaction = database.inTransaction(),
-                persistedImageFileNames = memoDao.getActiveMemoWithRefs("memo")
-                    ?.imageRefs
-                    ?.map { it.fileName }
-                    .orEmpty()
-            )
+            databaseInTransactionAtCleanup = database.inTransaction()
+            persistedImageFileNamesAtCleanup = memoDao.getActiveMemoWithRefs("memo")
+                ?.imageRefs
+                ?.map { it.fileName }
+                .orEmpty()
         }
     }
 

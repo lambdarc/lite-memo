@@ -59,24 +59,20 @@ class FileSystemMemoExportArchiveRepositoryInstrumentedTest {
     }
 
     @Test
-    fun normalPrepareAndWriteRoundTripsImageOnlyMemoAndTruncatesDestination() = runTest {
+    fun normalPrepareAndWriteRoundTripsImageOnlyMemo() = runTest {
         // Arrange
         val imageBytes = ByteArray(4_096) { index -> (index % 251).toByte() }
         File(imageDir, "picked.jpg").writeBytes(imageBytes)
         val repository = repository()
         val destination = Uri.parse("content://$AUTHORITY/export-${System.nanoTime()}.zip")
-        context.contentResolver.openOutputStream(destination, "w")!!.use { output ->
-            output.write(ByteArray(64_000) { 1 })
-        }
 
         // Act
-        // Normal: a verified private ZIP is copied with truncating semantics.
+        // Normal: a verified private ZIP restores the image-only memo and its bytes.
         val token = repository.prepare(exportData())
         repository.write(token, ExportFileReference(destination.toString()))
         val archiveBytes = context.contentResolver.openInputStream(destination)!!.use { input ->
             input.readBytes()
         }
-        assertTrue(archiveBytes.size < 64_000)
         val restoredImages = linkedMapOf<String, ByteArrayOutputStream>()
         val manifest = ByteArrayInputStream(archiveBytes).use { input ->
             MemoArchiveReader(json, MemoArchiveLimits.DEFAULT).read(input) { metadata ->
@@ -86,11 +82,35 @@ class FileSystemMemoExportArchiveRepositoryInstrumentedTest {
         repository.discard(token)
 
         // Assert
+        assertEquals(listOf("image-1"), manifest.memos.single().images.map { it.id })
         assertEquals(
-            listOf("image-1") to imageBytes.toList(),
-            manifest.memos.single().images.map { it.id } to
-                restoredImages.getValue("image-1").toByteArray().toList()
+            imageBytes.toList(),
+            restoredImages.getValue("image-1").toByteArray().toList()
         )
+    }
+
+    @Test
+    fun normalWriteTruncatesDestination() = runTest {
+        // Arrange
+        val imageBytes = ByteArray(4_096) { index -> (index % 251).toByte() }
+        File(imageDir, "picked.jpg").writeBytes(imageBytes)
+        val repository = repository()
+        val token = repository.prepare(exportData())
+        val destination = Uri.parse("content://$AUTHORITY/export-${System.nanoTime()}.zip")
+        context.contentResolver.openOutputStream(destination, "w")!!.use { output ->
+            output.write(ByteArray(64_000) { 1 })
+        }
+
+        // Act
+        // Normal: writing the prepared archive truncates preexisting destination bytes.
+        repository.write(token, ExportFileReference(destination.toString()))
+        val archiveSize = context.contentResolver.openInputStream(destination)!!.use { input ->
+            input.readBytes().size
+        }
+        repository.discard(token)
+
+        // Assert
+        assertTrue(archiveSize < 64_000)
     }
 
     @Test
@@ -103,11 +123,8 @@ class FileSystemMemoExportArchiveRepositoryInstrumentedTest {
         val failure = runCatching { repository.prepare(exportData()) }.exceptionOrNull()
 
         // Assert
-        assertEquals(
-            IOException::class.java to false,
-            failure?.javaClass to
-                File(context.cacheDir, "prepared_exports").listFiles().orEmpty().isNotEmpty()
-        )
+        assertEquals(IOException::class.java, failure?.javaClass)
+        assertTrue(File(context.cacheDir, "prepared_exports").listFiles().orEmpty().isEmpty())
     }
 
     @Test

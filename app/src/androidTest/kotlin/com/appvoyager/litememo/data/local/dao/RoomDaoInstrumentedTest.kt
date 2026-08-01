@@ -421,10 +421,8 @@ class RoomDaoInstrumentedTest {
         val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
 
         // Assert
-        assertEquals(
-            emptyList<String>() to listOf("memo-active", "memo-trashed"),
-            activeIds to trashedIds.sorted()
-        )
+        assertEquals(emptyList<String>(), activeIds)
+        assertEquals(listOf("memo-active", "memo-trashed"), trashedIds.sorted())
     }
 
     @Test
@@ -459,10 +457,8 @@ class RoomDaoInstrumentedTest {
             .sorted()
 
         // Assert
-        assertEquals(
-            SQLiteConstraintException::class.java to listOf("memo-1", "memo-2"),
-            error?.javaClass to activeIds
-        )
+        assertEquals(SQLiteConstraintException::class.java, error?.javaClass)
+        assertEquals(listOf("memo-1", "memo-2"), activeIds)
     }
 
     @Test
@@ -491,10 +487,8 @@ class RoomDaoInstrumentedTest {
         val activeTitle = memoDao.observeActiveMemosWithRefs().first().single().memo.title
 
         // Assert
-        assertEquals(
-            IllegalStateException::class.java to "Active before",
-            error?.javaClass to activeTitle
-        )
+        assertEquals(IllegalStateException::class.java, error?.javaClass)
+        assertEquals("Active before", activeTitle)
     }
 
     @Test
@@ -510,10 +504,8 @@ class RoomDaoInstrumentedTest {
         val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
 
         // Assert
-        assertEquals(
-            listOf("memo-active", "memo-trashed") to emptyList<String>(),
-            activeIds to trashedIds
-        )
+        assertEquals(listOf("memo-active", "memo-trashed"), activeIds)
+        assertEquals(emptyList<String>(), trashedIds)
     }
 
     @Test
@@ -531,10 +523,8 @@ class RoomDaoInstrumentedTest {
         val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
 
         // Assert
-        assertEquals(
-            listOf("memo-active") to emptyList<String>(),
-            activeIds to trashedIds
-        )
+        assertEquals(listOf("memo-active"), activeIds)
+        assertEquals(emptyList<String>(), trashedIds)
     }
 
     @Test
@@ -567,10 +557,8 @@ class RoomDaoInstrumentedTest {
         val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
 
         // Assert
-        assertEquals(
-            setOf("image-1.jpg", "image-2.jpg") to emptyList<String>(),
-            fileNames.toSet() to trashedIds
-        )
+        assertEquals(setOf("image-1.jpg", "image-2.jpg"), fileNames.toSet())
+        assertEquals(emptyList<String>(), trashedIds)
     }
 
     @Test

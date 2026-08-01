@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -263,7 +264,10 @@ class RoomMemoRepositoryTest {
         val memos = repository.getActiveMemos(emptyList())
 
         // Assert
-        assertEquals(emptyList<MemoId>() to 0, memos.map { it.id } to dao.activeMemoReadCount)
+        assertAll(
+            { assertEquals(emptyList<MemoId>(), memos.map { it.id }) },
+            { assertEquals(0, dao.activeMemoReadCount) }
+        )
     }
 
     @Test
@@ -593,8 +597,10 @@ class RoomMemoRepositoryTest {
             .exceptionOrNull()
 
         // Assert
-        assertEquals(IllegalStateException::class.java, error?.javaClass)
-        assertEquals(emptyList<MemoImageFileName>(), imageStore.deletedFileNames)
+        assertAll(
+            { assertEquals(IllegalStateException::class.java, error?.javaClass) },
+            { assertEquals(emptyList<MemoImageFileName>(), imageStore.deletedFileNames) }
+        )
     }
 
     @Test
@@ -735,9 +741,9 @@ class RoomMemoRepositoryTest {
         }.exceptionOrNull()
 
         // Assert
-        assertEquals(
-            IllegalStateException::class.java to emptyList<MemoImageFileName>(),
-            error?.javaClass to imageStore.deletedFileNames
+        assertAll(
+            { assertEquals(IllegalStateException::class.java, error?.javaClass) },
+            { assertEquals(emptyList<MemoImageFileName>(), imageStore.deletedFileNames) }
         )
     }
 
@@ -764,9 +770,9 @@ class RoomMemoRepositoryTest {
         }.exceptionOrNull()
 
         // Assert
-        assertEquals(
-            IllegalStateException::class.java to emptyList<MemoImageFileName>(),
-            error?.javaClass to imageStore.deletedFileNames
+        assertAll(
+            { assertEquals(IllegalStateException::class.java, error?.javaClass) },
+            { assertEquals(emptyList<MemoImageFileName>(), imageStore.deletedFileNames) }
         )
     }
 

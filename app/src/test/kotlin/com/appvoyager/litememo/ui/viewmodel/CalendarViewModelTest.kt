@@ -34,6 +34,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -119,8 +120,10 @@ class CalendarViewModelTest {
         val state = viewModel.uiState.first { !it.isLoading }
 
         // Assert
-        assertEquals(YearMonth.of(2026, 7), state.selectedMonth)
-        assertEquals(LocalDate.of(2026, 7, 3), state.selectedDate)
+        assertAll(
+            { assertEquals(YearMonth.of(2026, 7), state.selectedMonth) },
+            { assertEquals(LocalDate.of(2026, 7, 3), state.selectedDate) }
+        )
     }
 
     @Test
@@ -368,9 +371,11 @@ class CalendarViewModelTest {
         }
 
         // Assert
-        assertEquals(listOf("Recovered memo"), state.memos.map { it.title })
-        assertEquals(YearMonth.of(2026, 5), state.selectedMonth)
-        assertEquals(LocalDate.of(2026, 5, 15), state.selectedDate)
+        assertAll(
+            { assertEquals(listOf("Recovered memo"), state.memos.map { it.title }) },
+            { assertEquals(YearMonth.of(2026, 5), state.selectedMonth) },
+            { assertEquals(LocalDate.of(2026, 5, 15), state.selectedDate) }
+        )
     }
 
     private fun calendarViewModel(

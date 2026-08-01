@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
@@ -189,7 +190,10 @@ class SearchUiStateTest {
         }
 
         // Assert
-        assertEquals("shopping" to true, updated.query to updated.hasError)
+        assertAll(
+            { assertEquals("shopping", updated.query) },
+            { assertEquals(true, updated.hasError) }
+        )
     }
 
     @Test

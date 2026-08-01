@@ -43,6 +43,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -81,9 +82,9 @@ class SettingsViewModelTest {
             val afterCompletion = viewModel.uiState.first { it.exportPickerRequestId != null }
 
             // Assert
-            assertEquals(
-                null to true,
-                beforeCompletion to (afterCompletion.exportPickerRequestId != null)
+            assertAll(
+                { assertEquals(null, beforeCompletion) },
+                { assertEquals(true, afterCompletion.exportPickerRequestId != null) }
             )
         }
 
@@ -119,9 +120,12 @@ class SettingsViewModelTest {
         viewModel.snackbarEvent.test {
             viewModel.prepareExport()
             advanceUntilIdle()
-            assertEquals(SettingsSnackbarUiEvent.ExportError, awaitItem())
+            val event = awaitItem()
+            assertAll(
+                { assertEquals(SettingsSnackbarUiEvent.ExportError, event) },
+                { assertEquals(null, viewModel.uiState.value.exportPickerRequestId) }
+            )
         }
-        assertEquals(null, viewModel.uiState.first().exportPickerRequestId)
     }
 
     @Test
@@ -195,13 +199,23 @@ class SettingsViewModelTest {
         viewModel.snackbarEvent.test {
             viewModel.writePreparedExport(DESTINATION)
             advanceUntilIdle()
-            assertEquals(SettingsSnackbarUiEvent.ExportSuccess, awaitItem())
+            val event = awaitItem()
+            assertAll(
+                { assertEquals(SettingsSnackbarUiEvent.ExportSuccess, event) },
+                {
+                    assertEquals(
+                        listOf(FakeMemoExportArchiveRepository.TOKEN to DESTINATION),
+                        repository.writes
+                    )
+                },
+                {
+                    assertEquals(
+                        listOf(FakeMemoExportArchiveRepository.TOKEN),
+                        repository.discardedTokens
+                    )
+                }
+            )
         }
-        assertEquals(
-            listOf(FakeMemoExportArchiveRepository.TOKEN to DESTINATION) to
-                listOf(FakeMemoExportArchiveRepository.TOKEN),
-            repository.writes to repository.discardedTokens
-        )
     }
 
     @Test
@@ -219,9 +233,17 @@ class SettingsViewModelTest {
         viewModel.snackbarEvent.test {
             viewModel.writePreparedExport(DESTINATION)
             advanceUntilIdle()
-            assertEquals(SettingsSnackbarUiEvent.ExportDestinationWriteError, awaitItem())
+            val event = awaitItem()
+            assertAll(
+                { assertEquals(SettingsSnackbarUiEvent.ExportDestinationWriteError, event) },
+                {
+                    assertEquals(
+                        listOf(FakeMemoExportArchiveRepository.TOKEN),
+                        repository.discardedTokens
+                    )
+                }
+            )
         }
-        assertEquals(listOf(FakeMemoExportArchiveRepository.TOKEN), repository.discardedTokens)
     }
 
     @Test
@@ -235,9 +257,17 @@ class SettingsViewModelTest {
         viewModel.snackbarEvent.test {
             viewModel.writePreparedExport(DESTINATION)
             advanceUntilIdle()
-            assertEquals(SettingsSnackbarUiEvent.ExportError, awaitItem())
+            val event = awaitItem()
+            assertAll(
+                { assertEquals(SettingsSnackbarUiEvent.ExportError, event) },
+                {
+                    assertEquals(
+                        emptyList<Pair<MemoExportToken, ExportFileReference>>(),
+                        repository.writes
+                    )
+                }
+            )
         }
-        assertEquals(emptyList<Pair<MemoExportToken, ExportFileReference>>(), repository.writes)
     }
 
     @Test
@@ -312,7 +342,10 @@ class SettingsViewModelTest {
         val completed = viewModel.uiState.first { !it.isImporting }.isImporting
 
         // Assert
-        assertEquals(true to false, inProgress to completed)
+        assertAll(
+            { assertEquals(true, inProgress) },
+            { assertEquals(false, completed) }
+        )
     }
 
     @Test
@@ -376,9 +409,12 @@ class SettingsViewModelTest {
         viewModel.snackbarEvent.test {
             viewModel.confirmImport()
             advanceUntilIdle()
-            assertEquals(SettingsSnackbarUiEvent.ImportSuccess, awaitItem())
+            val event = awaitItem()
+            assertAll(
+                { assertEquals(SettingsSnackbarUiEvent.ImportSuccess, event) },
+                { assertEquals(false, viewModel.uiState.value.showImportConfirmDialog) }
+            )
         }
-        assertEquals(false, viewModel.uiState.value.showImportConfirmDialog)
     }
 
     @Test
@@ -573,7 +609,10 @@ class SettingsViewModelTest {
         val state = viewModel.uiState.first { it.themeDropdownExpanded }
 
         // Assert
-        assertEquals(true to false, state.themeDropdownExpanded to state.sortOrderExpanded)
+        assertAll(
+            { assertEquals(true, state.themeDropdownExpanded) },
+            { assertEquals(false, state.sortOrderExpanded) }
+        )
     }
 
     @Test
@@ -588,7 +627,10 @@ class SettingsViewModelTest {
         val state = viewModel.uiState.first { it.sortOrderExpanded }
 
         // Assert
-        assertEquals(false to true, state.themeDropdownExpanded to state.sortOrderExpanded)
+        assertAll(
+            { assertEquals(false, state.themeDropdownExpanded) },
+            { assertEquals(true, state.sortOrderExpanded) }
+        )
     }
 
     private fun importFailingViewModel(reason: MemoImportFailureReason): SettingsViewModel {
@@ -611,9 +653,13 @@ class SettingsViewModelTest {
         // Flow: a failed authentication result keeps app lock disabled.
         viewModel.snackbarEvent.test {
             viewModel.onAppLockEnableAuthenticationResult(result)
-            assertEquals(expected, awaitItem())
+            val event = awaitItem()
+            val isEnabled = settings.observeAppLockEnabled().first()
+            assertAll(
+                { assertEquals(expected, event) },
+                { assertEquals(false, isEnabled) }
+            )
         }
-        assertEquals(false, settings.observeAppLockEnabled().first())
     }
 
     private fun viewModel(

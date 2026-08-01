@@ -23,6 +23,6 @@ Lite Memo の変更した振る舞いを、既存の Unit Test / instrumented te
 
 # 注意事項
 
-- テストの書き方（`runTest` と test dispatcher、AAA、観点 prefix、命名、原則 1 主要 assert、Turbine / MockK の使い分け、instrumented test への振り分け）は `docs/unit-test.md` を正本とする。規約本文はここで複製しない。
+- テストの書き方（`runTest` と test dispatcher、AAA、観点 prefix、命名、1振る舞い / 1シナリオ、JUnit Jupiter の `assertAll`、Turbine / MockK の使い分け、instrumented test への振り分け）は `docs/unit-test.md` を正本とする。規約本文はここで複製しない。
 - アプリ実装差分全体のレビューは `implementation-review` を優先する。
 - 実装変更に付随するテストは、対応する層の Skill と併用する。

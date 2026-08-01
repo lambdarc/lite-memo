@@ -26,6 +26,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -179,9 +180,9 @@ class MainViewModelTest {
 
             // Assert
             val state = viewModel.appLockUiState.value
-            assertEquals(
-                AppLockUiStatus.UNAVAILABLE to AppLockUiMessage.NO_DEVICE_CREDENTIAL,
-                state.status to state.message
+            assertAll(
+                { assertEquals(AppLockUiStatus.UNAVAILABLE, state.status) },
+                { assertEquals(AppLockUiMessage.NO_DEVICE_CREDENTIAL, state.message) }
             )
         }
 
@@ -199,9 +200,9 @@ class MainViewModelTest {
 
             // Assert
             val state = viewModel.appLockUiState.value
-            assertEquals(
-                AppLockUiStatus.UNAVAILABLE to AppLockUiMessage.AUTHENTICATION_UNAVAILABLE,
-                state.status to state.message
+            assertAll(
+                { assertEquals(AppLockUiStatus.UNAVAILABLE, state.status) },
+                { assertEquals(AppLockUiMessage.AUTHENTICATION_UNAVAILABLE, state.message) }
             )
         }
 
@@ -263,7 +264,10 @@ class MainViewModelTest {
 
         // Assert
         val state = viewModel.appLockUiState.value
-        assertEquals(AppLockUiStatus.UNLOCKED to null, state.status to state.message)
+        assertAll(
+            { assertEquals(AppLockUiStatus.UNLOCKED, state.status) },
+            { assertEquals(null, state.message) }
+        )
     }
 
     @Test

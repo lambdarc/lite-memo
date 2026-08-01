@@ -8,6 +8,7 @@ import io.mockk.coVerify
 import io.mockk.confirmVerified
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -57,9 +58,9 @@ class DeleteMemosPermanentlyUseCaseTest {
         useCase(listOf(first.id, MemoId("missing"), second.id))
 
         // Assert
-        assertEquals(
-            listOf(first.id, second.id) to emptyList<MemoId>(),
-            repository.permanentlyDeletedIds to repository.currentMemos().map { it.id }
+        assertAll(
+            { assertEquals(listOf(first.id, second.id), repository.permanentlyDeletedIds) },
+            { assertEquals(emptyList<MemoId>(), repository.currentMemos().map { it.id }) }
         )
     }
 }
