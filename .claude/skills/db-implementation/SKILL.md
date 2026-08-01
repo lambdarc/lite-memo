@@ -1,6 +1,6 @@
 ---
 name: db-implementation
-description: テーブル、カラム、検索クエリ、DB のバージョンが絡む依頼で使う。Lite Memo の Room 周り（entity、DAO、LiteMemoDatabase、migration、app/schemas、Room instrumented test）の設計、実装、修正を扱う。「メモやタグに項目やフラグを足したい」「既存データは false で / 壊さずに移行したい」「検索が遅い / インデックスが効いてない」「schema の JSON が増えない」のように、Room や migration という語が出てこなくても、保存項目の増減や絞り込み条件の変更ならこの skill を使う。保存項目そのものを増減する依頼は、domain model だけでなく entity と migration が伴うのでここから始める。DataStore や export/import だけの変更は data-implementation、テストコードだけなら test-implementation を優先する。
+description: テーブル、カラム、検索クエリ、DB のバージョンが絡む依頼で使う。Lite Memo の Room 周り（entity、DAO、LiteMemoDatabase、migration、app/schemas、Room instrumented test）の設計、実装、修正を扱う。「メモやタグに項目やフラグを足したい」「既存データは false で / 壊さずに移行したい」「検索が遅い / インデックスが効いてない」「schema の JSON が増えない」のように、Room や migration という語が出てこなくても、Room entity に保存する項目の増減や DAO の絞り込み条件の変更ならこの skill を使う。Room entity に保存する項目を増減する依頼は、domain model だけでなく entity と migration が伴うのでここから始める。DataStore や export/import だけの変更は data-implementation、テストコードだけなら test-implementation を優先する。
 ---
 
 # 目的

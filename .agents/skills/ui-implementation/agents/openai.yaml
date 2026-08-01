@@ -1,4 +1,4 @@
 interface:
   display_name: "UI 実装"
-  short_description: "Compose・ViewModel・UI state・画面テストを扱う"
-  default_prompt: "$ui-implementation を使い、UI 層の変更対象を判定して実装・検証してください。"
+  short_description: "Compose・ViewModel・Navigation・UI state・resource・表示・操作・遷移・画面テストを扱う"
+  default_prompt: "$ui-implementation を使い、表示・操作・画面遷移を含むUI層の変更対象を判定して実装・検証してください。"
