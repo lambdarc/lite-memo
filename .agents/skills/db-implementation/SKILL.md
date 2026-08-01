@@ -1,6 +1,6 @@
 ---
 name: db-implementation
-description: Lite Memo の Room DB 周りの設計、実装、修正を扱う。Room entity、DAO、LiteMemoDatabase、migration、app/schemas、Room testing、DB schema 変更が対象。DataStore や export/import だけの変更は data-implementation を優先する。
+description: テーブル、カラム、検索クエリ、DB のバージョンが絡む依頼で使う。Lite Memo の Room 周り（entity、DAO、LiteMemoDatabase、migration、app/schemas、Room instrumented test）の設計、実装、修正を扱う。「メモやタグに項目やフラグを足したい」「既存データは false で / 壊さずに移行したい」「検索が遅い / インデックスが効いてない」「schema の JSON が増えない」のように、Room や migration という語が出てこなくても、保存項目の増減や絞り込み条件の変更ならこの skill を使う。保存項目そのものを増減する依頼は、domain model だけでなく entity と migration が伴うのでここから始める。DataStore や export/import だけの変更は data-implementation、テストコードだけなら test-implementation を優先する。
 ---
 
 # 目的
@@ -36,7 +36,7 @@ mapper / Repository への波及は [`data-implementation`](../data-implementati
 2. schema を変える場合は entity / DAO / mapper / Repository / migration / schema export の波及範囲を洗い出す。
 3. reference の観点に沿って実装する。
 4. migration instrumented test と DAO test の要否を判断し、`app/schemas/` の更新漏れを確認する。
-5. `./gradlew :app:ktlintCheck :app:detekt :app:connectedDevDebugAndroidTest` を実行する。schema 変更では `./gradlew :app:kspDevDebugKotlin :app:copyRoomSchemas` で schema を export し、`git diff -- app/schemas` で変更対象 version の schema JSON が更新されたことを確認する。schema 差分がなければ未完了とする。
+5. 変更内容に該当する検証をすべて実行する。Kotlin 変更と DB 変更は `./gradlew :app:ktlintCheck :app:detekt :app:connectedDevDebugAndroidTest` で検証する（task 一覧の正本は [`docs/development-setup.md`](../../../docs/development-setup.md)）。schema 変更では `./gradlew :app:kspDevDebugKotlin :app:copyRoomSchemas` で schema を export し、`git diff -- app/schemas` で変更対象 version の schema JSON が更新されたことを確認する。schema 差分がなければ未完了とする。
 6. 変更内容、実行した task と結果、schema export と schema 差分の確認結果、未実施の検証と理由を簡潔に報告する。
 
 # 注意事項

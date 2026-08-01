@@ -1,6 +1,6 @@
 ---
 name: ui-implementation
-description: Lite Memo の UI 層の設計、実装、修正を扱う。Compose screen、Route、ViewModel、UI state、one-shot event、Navigation Compose、strings.xml、Preview、Compose UI Test が対象。
+description: 画面の見た目、表示内容、ユーザー操作、画面遷移、表示文言を変える依頼で使う。Lite Memo の UI 層（Compose screen、Route、ViewModel、UI state、UI event、Navigation Compose、strings.xml、Preview、Compose UI Test）の設計、実装、修正を扱う。「一覧の並び順を変えたい」「ボタンを足したい」「画面が真っ白になる」「戻ると表示が古い」「スナックバーが出ない」のように、Compose や ViewModel という語が出てこなくても、表示・操作・遷移の変更ならこの skill を使う。テストコードだけを足すなら test-implementation、差分全体のレビューなら implementation-review を優先する。
 ---
 
 # 目的
@@ -26,7 +26,7 @@ Lite Memo の UI 層を、既存の Compose / MVVM 構成に沿って変更す�
 | screen（`XxxRoute` / `XxxScreen`） | [`references/screen.md`](references/screen.md) |
 | viewmodel | [`references/viewmodel.md`](references/viewmodel.md) |
 | UI state / UI model | [`references/ui-state.md`](references/ui-state.md) |
-| one-shot event | [`references/one-shot-event.md`](references/one-shot-event.md) |
+| UI event（UI state / UI callback / Channel の使い分け） | [`references/one-shot-event.md`](references/one-shot-event.md) |
 | navigation | [`references/navigation.md`](references/navigation.md) |
 | Compose UI Test | [`references/compose-ui-test.md`](references/compose-ui-test.md) |
 | Preview / strings | reference なし。`docs/implementation-guidelines.md` の UI / Localization 方針に従う（`XxxRoute` の配線は screen 行を参照） |
@@ -37,7 +37,7 @@ Lite Memo の UI 層を、既存の Compose / MVVM 構成に沿って変更す�
 2. `ui -> domain <- data` の依存方向と、ViewModel 経由の domain アクセスを保つ。
 3. reference の観点に沿って実装する。
 4. 変更に応じて ViewModel test または Compose UI Test の要否を判断する。
-5. 変更内容に該当する検証をすべて実行する。Kotlin 変更は `./gradlew :app:ktlintCheck :app:detekt :app:testProdDebugUnitTest`、UI / resource 変更は `./gradlew :app:lintProdDebug`、Compose UI Test は `./gradlew :app:connectedDevDebugAndroidTest` で検証し、複数に該当するときは各 task を組み合わせる。
+5. 変更内容に該当する検証をすべて実行する。Kotlin 変更は `./gradlew :app:ktlintCheck :app:detekt :app:testProdDebugUnitTest`、UI / resource 変更は `./gradlew :app:lintProdDebug`、Compose UI Test は `./gradlew :app:connectedDevDebugAndroidTest` で検証し、複数に該当するときは各 task を組み合わせる。task 一覧の正本は [`docs/development-setup.md`](../../../docs/development-setup.md)。
 6. 変更内容、実行した task と結果、未実施の検証と理由を簡潔に報告する。
 
 # 注意事項

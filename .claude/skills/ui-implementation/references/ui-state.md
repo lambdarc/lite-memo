@@ -21,4 +21,4 @@
 ## 検証観点
 
 - UI が data model / Room entity を直接参照していないか。
-- 表示に不要な domain 詳細を UI state に持ち込んでいないか。
+- `XxxUiModel` の追加が表示固有の整形・UI 専用情報で正当化できるか（できないなら domain model をそのまま使う）。

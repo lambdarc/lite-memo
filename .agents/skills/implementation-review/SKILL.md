@@ -1,6 +1,6 @@
 ---
 name: implementation-review
-description: Lite Memo の実装差分全体のレビューを扱う。依存方向、責務分離、過剰 API、DB migration、UI state、data mapper、Unit Test 不足、レビュー指摘形式が対象。
+description: 実装差分を Lite Memo のアーキテクチャ方針に照らして見る依頼で使う。依存方向、責務分離、過剰 API、DB migration、UI state、data mapper、Unit Test 不足を確認し、指摘を docs/review.md の分類と形式で出す。「差分レビューして」「マージして大丈夫か」「責務分離が崩れてないか見て」のようにレビューを求められたら、対象が Lite Memo のコードである限りこの skill を使う。GitHub 上の PR コメントへの対応は address-review、脆弱性中心の確認は security-review、可読性の整理は simplify が主担当。
 ---
 
 # 目的

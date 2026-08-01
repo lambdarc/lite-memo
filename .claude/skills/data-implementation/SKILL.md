@@ -1,6 +1,6 @@
 ---
 name: data-implementation
-description: Lite Memo の Data 層の設計、実装、修正を扱う。Repository 実装、mapper、DataStore、export/import、ContentResolver、Hilt module、provider 実装、domain と data の変換境界が対象。Room schema 変更を伴う場合は db-implementation も併用する。
+description: 保存、読み込み、ファイル入出力、外部データとの変換が絡む依頼で使う。Lite Memo の Data 層（Repository 実装、mapper、DataStore、export/import、ContentResolver、Hilt module、provider 実装、domain と data の変換境界）の設計、実装、修正を扱う。「エクスポートしたファイルが壊れる」「設定を保存したい / 既定値をどうするか」「画像の URI が読めない」「変換で値が落ちる」のように、Repository や mapper という語が出てこなくても、データの永続化や受け渡しの問題ならこの skill を使う。テーマや表示設定のような軽量な設定値の追加も、保存先は DataStore なのでここが担当。Room の schema や migration を伴う場合は db-implementation も併用し、テストコードだけなら test-implementation を優先する。
 ---
 
 # 目的
@@ -37,7 +37,7 @@ Lite Memo の data 層で、domain の interface を既存データ源に接続�
 3. reference の観点に沿って実装し、変換は mapper、Android 依存は data 層 / app entry に閉じる。
 4. 複数の役割クラスに跨る場合は、mapper・data source・domain interface の整合を確認する。
 5. 振る舞いを JVM Unit Test または androidTest で押さえる。
-6. `./gradlew :app:ktlintCheck :app:detekt :app:testProdDebugUnitTest` を実行する。Room / DataStore / ContentResolver を跨ぐ変更では、これらに加えて `./gradlew :app:connectedDevDebugAndroidTest` を実行する。
+6. 変更内容に該当する検証をすべて実行する。Kotlin 変更は `./gradlew :app:ktlintCheck :app:detekt :app:testProdDebugUnitTest`、Room / DataStore / ContentResolver を跨ぐ変更は `./gradlew :app:connectedDevDebugAndroidTest` で検証し、複数に該当するときは各 task を組み合わせる。task 一覧の正本は [`docs/development-setup.md`](../../../docs/development-setup.md)。
 7. 変更内容、実行した task と結果、未実施の検証と理由を簡潔に報告する。
 
 # 注意事項

@@ -1,6 +1,6 @@
 ---
 name: domain-implementation
-description: Lite Memo の Domain 層の設計、実装、修正を扱う。domain model、value object、UseCase、Repository interface、provider、Android 非依存のビジネスルールが対象。
+description: 業務ルール、入力制約、値の妥当性、判定ロジックを変える依頼で使う。Lite Memo の Domain 層（domain model、value object、UseCase、Repository interface、provider、Android 非依存のビジネスルール）の設計、実装、修正を扱う。「文字数を制限したい」「不正な値が入る余地がある」「◯日経ったら自動で削除」「時刻依存でテストしづらい」のように、UseCase や value object という語が出てこなくても、アプリの決まりごとを変える依頼ならこの skill を使う。保存先や変換の実装は data-implementation、テストコードだけなら test-implementation を優先する。
 ---
 
 # 目的
@@ -34,7 +34,7 @@ Lite Memo のビジネスルールと公開 contract を、Android Framework に
 2. 既存 contract で足りるか、新しい interface / UseCase / provider が必要か決める。
 3. reference の観点に沿って実装する。
 4. 変更した rule を JVM Unit Test で押さえる。
-5. `./gradlew :app:ktlintCheck :app:detekt :app:testProdDebugUnitTest` を実行する。
+5. 変更内容に該当する検証をすべて実行する。Kotlin 変更は `./gradlew :app:ktlintCheck :app:detekt :app:testProdDebugUnitTest` で検証する。domain は Android resource を持たないため lint task は通常不要。task 一覧の正本は [`docs/development-setup.md`](../../../docs/development-setup.md)。
 6. 変更内容、実行した task と結果、未実施の検証と理由を簡潔に報告する。
 
 # 注意事項
