@@ -7,7 +7,7 @@
 - JVM Unit Test（`src/test`）は JUnit Jupiter（現在は 6.x）を使う
 - instrumented test（`src/androidTest`）は JUnit 4 と AndroidX Test を使い、`AndroidJUnitRunner` を継承した `HiltTestRunner` で実行する
 - テスト関数名は英語にする
-- 1つのテスト関数では、原則として1つの振る舞いを1つの主要な assert で検証する
+- 1つのテスト関数では、1つの振る舞いまたは1つのシナリオだけを検証する
 - Domain の値オブジェクト、UseCase、Repository interface 境界を優先してテストする
 
 ## テスト配置の判断
@@ -68,11 +68,54 @@ class MemoTitleTest {
 
 ## Assert
 
-- 「主要な assert」は、テスト関数名で示した1つの振る舞いの結果を判定する検証を指す
-- 1つの振る舞いを共同で検証する複数の assert は許容し、失敗内容をまとめて確認したい場合は `assertAll` などでグループ化する
-- 対象が自然に data class や値オブジェクトで表せる場合は値全体を比較してよいが、assert 数を減らすためだけの比較用型は作らない
-- `verify` / `coVerify` / `confirmVerified` など、同じ振る舞いを裏付ける interaction check は主要な assert と併用してよい
-- 別の振る舞いを検証する assert が必要な場合は、テスト関数を分ける
+- 1つの振る舞いまたは1つのシナリオを成立させるために必要な、関連する複数の assertion は許容する
+- 異なる入力条件、異なる操作、または同じシナリオを共同で説明しない異なる期待結果・異なる失敗理由を検証する場合は、テスト関数を分ける
+- assertion 数を1つにするためだけに、`Pair`、`Triple`、専用 Snapshot 型、比較用 data class などへ値をまとめない
+- 対象が自然に data class や値オブジェクトとして比較できる場合は、オブジェクト全体を `assertEquals` で比較する
+- JVM Unit Test（JUnit Jupiter）で、同一の実行結果に含まれる複数のプロパティを個別に検証する場合は `assertAll` を使う
+- instrumented test / Compose UI Test（JUnit 4）では、同じシナリオを共同で検証する複数の assertion を直接記述してよい
+- `verify` / `coVerify` / `confirmVerified` など、同じ振る舞いを裏付ける interaction check は結果検証と併用してよい
+
+JVM Unit Test で同一結果の複数プロパティを検証する例:
+
+```kotlin
+import org.junit.jupiter.api.Assertions.assertAll
+import org.junit.jupiter.api.Assertions.assertEquals
+
+@Test
+fun normalUiStateRestoresSavedEdits() {
+    // Arrange
+    val viewModel = createViewModelWithSavedEdits()
+
+    // Act
+    // Normal: saved edits are restored to the edit state
+    val state = viewModel.uiState.value
+
+    // Assert
+    assertAll(
+        { assertEquals("Shopping", state.title) },
+        { assertEquals("Milk", state.body) }
+    )
+}
+```
+
+JUnit 4 の Compose UI Test で同じ表示シナリオを検証する例:
+
+```kotlin
+@Test
+fun normalImagesShowImageListAndItem() {
+    // Arrange
+    val image = testMemoImageUiModel()
+
+    // Act
+    // Normal: an image is shown in the image list
+    composeRule.setContent { MemoEditScreen(uiState = MemoEditUiState(images = listOf(image))) }
+
+    // Assert
+    composeRule.onNodeWithTag(MemoEditTestTags.IMAGE_LIST).assertIsDisplayed()
+    composeRule.onNodeWithTag(MemoEditTestTags.imageItem(image.id)).assertIsDisplayed()
+}
+```
 
 ## AAA Comments
 
