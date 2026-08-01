@@ -1,6 +1,4 @@
 interface:
-  display_name: DB 実装
-  short_description: Room entity / DAO / migration / schema を扱う。
-  default_prompt: DB の変更対象の役割クラスを判定し、entity / DAO / migration / schema を一体で計画する。
-policy:
-  allow_implicit_invocation: true
+  display_name: "DB 実装"
+  short_description: "Roomの保存項目・検索条件・entity・DAO・migration・schemaを扱う"
+  default_prompt: "$db-implementation を使い、保存項目・検索条件・DBバージョンを含むRoom DBの変更対象を判定して実装・検証してください。"

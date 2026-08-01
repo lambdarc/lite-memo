@@ -11,12 +11,12 @@ Lite Memo で AI エージェントが最初に読む入口です。
 - [`docs/development-setup.md`](docs/development-setup.md): 開発環境セットアップ / Git フック / 静的解析 / CI 相当チェック
 - [`docs/unit-test.md`](docs/unit-test.md): Unit Test の方針
 - [`docs/review.md`](docs/review.md): コードレビューの形式
-- [`docs/claude-code.md`](docs/claude-code.md): Claude Code 固有の運用（skill 同期 / CLAUDE.md import）
+- [`docs/claude-code.md`](docs/claude-code.md): Claude Code 固有の運用（CLAUDE.md import / skill 管理）
 
 ## AI作業用 Skill
 
 作業の種類に応じて、必要な Skill を最初に確認します。
-skill を変更するときは `.agents/skills/` を編集する。`.claude/skills/` は同期生成物なので直接編集しない（詳細: [`docs/claude-code.md`](docs/claude-code.md)）。
+Codex 向け skill は `.agents/skills/`、Claude Code 向け skill は `.claude/skills/` で個別に管理する。自動同期は行わない。
 
 - `ui-implementation`: Compose / ViewModel / UI state / 画面テスト
   - [`.agents/skills/ui-implementation/SKILL.md`](.agents/skills/ui-implementation/SKILL.md)

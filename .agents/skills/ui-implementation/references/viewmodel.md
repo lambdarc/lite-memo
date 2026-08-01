@@ -11,7 +11,7 @@
 
 - UI state は StateFlow で公開し、必要な UseCase または domain の Repository interface / provider に依存する。
 - Android View / Context 依存を ViewModel に直接持ち込まない。
-- 画面上に残る失敗は UI state、一回限りの通知は one-shot event で扱う（`one-shot-event.md`）。
+- 失ってはいけない処理結果は UI state に保持して確認済み callback で消費し、失われても影響しない通知だけ Channel event に流す（`one-shot-event.md`）。
 - 画面固有の状態とドメインモデルを混ぜすぎない。
 - ViewModel 固有の event 契約や private 補助型は `ui/viewmodel` の所有者付近へ置き、`event` / `data` パッケージへ分散させない。
 
