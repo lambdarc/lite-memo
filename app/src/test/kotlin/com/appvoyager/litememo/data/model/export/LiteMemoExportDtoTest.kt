@@ -46,16 +46,32 @@ class LiteMemoExportDtoTest {
         val dto = json.decodeFromString<LiteMemoExportDto>(jsonString)
 
         // Assert
-        assertEquals(1, dto.version)
-        assertEquals(1716700000000L, dto.exportedAt)
-        assertEquals(1, dto.tags.size)
-        assertEquals("tag-1", dto.tags[0].id)
-        assertEquals("Work", dto.tags[0].name)
-        assertEquals(4285132580L, dto.tags[0].colorArgb)
-        assertEquals(1, dto.memos.size)
-        assertEquals("memo-1", dto.memos[0].id)
-        assertEquals(true, dto.memos[0].isFavorite)
-        assertEquals(listOf("tag-1"), dto.memos[0].tagIds)
+        assertEquals(
+            LiteMemoExportDto(
+                version = 1,
+                exportedAt = 1716700000000L,
+                tags = listOf(
+                    TagExportDto(
+                        id = "tag-1",
+                        name = "Work",
+                        colorArgb = 4285132580L,
+                        createdAt = 1716600000000L
+                    )
+                ),
+                memos = listOf(
+                    MemoExportDto(
+                        id = "memo-1",
+                        title = "Title",
+                        body = "Body",
+                        createdAt = 1716600000000L,
+                        updatedAt = 1716650000000L,
+                        isFavorite = true,
+                        tagIds = listOf("tag-1")
+                    )
+                )
+            ),
+            dto
+        )
     }
 
     @Test
@@ -75,8 +91,15 @@ class LiteMemoExportDtoTest {
         val dto = json.decodeFromString<LiteMemoExportDto>(jsonString)
 
         // Assert
-        assertEquals(1, dto.version)
-        assertEquals(1000L, dto.exportedAt)
+        assertEquals(
+            LiteMemoExportDto(
+                version = 1,
+                exportedAt = 1000L,
+                tags = emptyList(),
+                memos = emptyList()
+            ),
+            dto
+        )
     }
 
     @Test

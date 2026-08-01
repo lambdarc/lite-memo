@@ -41,6 +41,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -482,10 +483,8 @@ class HomeViewModelTest {
                 val state = viewModel.uiState.first {
                     it.selection.selectedMemoIds == setOf(MemoId("memo-1"))
                 }
-                assertEquals(
-                    Unit to setOf(MemoId("memo-1")),
-                    awaitItem() to state.selection.selectedMemoIds
-                )
+                awaitItem()
+                assertEquals(setOf(MemoId("memo-1")), state.selection.selectedMemoIds)
             }
         }
 
@@ -795,7 +794,10 @@ class HomeViewModelTest {
         val selected = viewModel.getSelectedMemoForShare()
 
         // Assert
-        assertEquals(MemoId("memo-1") to "共有対象", selected?.id to selected?.title)
+        assertAll(
+            { assertEquals(MemoId("memo-1"), selected?.id) },
+            { assertEquals("共有対象", selected?.title) }
+        )
     }
 
     @Test

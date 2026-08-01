@@ -14,8 +14,8 @@ import com.appvoyager.litememo.domain.model.value.TagName
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
 import com.appvoyager.litememo.domain.tagFixture
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 
 class ImportMemosUseCaseTest {
@@ -80,12 +80,18 @@ class ImportMemosUseCaseTest {
 
         // Act
         // Error: unsupported format versions are rejected before persistence.
-        val failure = assertThrows(MemoImportException::class.java) {
-            runTest { useCase(data) }
-        }
+        val failure = runCatching { runTest { useCase(data) } }.exceptionOrNull()
 
         // Assert
-        assertEquals(MemoImportFailureReason.UNSUPPORTED_VERSION, failure.reason)
+        assertAll(
+            { assertEquals(MemoImportException::class.java, failure?.javaClass) },
+            {
+                assertEquals(
+                    MemoImportFailureReason.UNSUPPORTED_VERSION,
+                    (failure as? MemoImportException)?.reason
+                )
+            }
+        )
     }
 
     @Test
@@ -100,9 +106,14 @@ class ImportMemosUseCaseTest {
         val failure = runCatching { useCase(data) }.exceptionOrNull()
 
         // Assert
-        assertEquals(
-            MemoImportFailureReason.INVALID_ARCHIVE to emptyList<ExportData>(),
-            (failure as? MemoImportException)?.reason to importRepository.importedData
+        assertAll(
+            {
+                assertEquals(
+                    MemoImportFailureReason.INVALID_ARCHIVE,
+                    (failure as? MemoImportException)?.reason
+                )
+            },
+            { assertEquals(emptyList<ExportData>(), importRepository.importedData) }
         )
     }
 
@@ -143,9 +154,14 @@ class ImportMemosUseCaseTest {
         val failure = runCatching { useCase(data) }.exceptionOrNull()
 
         // Assert
-        assertEquals(
-            MemoImportFailureReason.INVALID_ARCHIVE to emptyList<ExportData>(),
-            (failure as? MemoImportException)?.reason to importRepository.importedData
+        assertAll(
+            {
+                assertEquals(
+                    MemoImportFailureReason.INVALID_ARCHIVE,
+                    (failure as? MemoImportException)?.reason
+                )
+            },
+            { assertEquals(emptyList<ExportData>(), importRepository.importedData) }
         )
     }
 
@@ -212,10 +228,14 @@ class ImportMemosUseCaseTest {
         val failure = runCatching { useCase(data) }.exceptionOrNull()
 
         // Assert
-        assertEquals(
-            listOf(TagName("Work")) to emptyList<ExportData>(),
-            (failure as? ImportTagNameConflictException)?.tagNames to
-                importRepository.importedData
+        assertAll(
+            {
+                assertEquals(
+                    listOf(TagName("Work")),
+                    (failure as? ImportTagNameConflictException)?.tagNames
+                )
+            },
+            { assertEquals(emptyList<ExportData>(), importRepository.importedData) }
         )
     }
 

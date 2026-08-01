@@ -1,6 +1,7 @@
 package com.appvoyager.litememo.ui.state
 
 import com.appvoyager.litememo.domain.model.value.MemoId
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -15,9 +16,11 @@ class MemoSelectionUiStateTest {
         val selection = MemoSelectionUiState()
 
         // Assert
-        assertEquals(emptySet<MemoId>(), selection.selectedMemoIds)
-        assertFalse(selection.isActive)
-        assertEquals(0, selection.selectedCount)
+        assertAll(
+            { assertEquals(emptySet<MemoId>(), selection.selectedMemoIds) },
+            { assertFalse(selection.isActive) },
+            { assertEquals(0, selection.selectedCount) }
+        )
     }
 
     @Test
@@ -73,18 +76,29 @@ class MemoSelectionUiStateTest {
     }
 
     @Test
-    fun normalContainsReportsSelectedMemoId() {
+    fun normalContainsReturnsTrueForSelectedMemoId() {
         // Arrange
         val selection = MemoSelectionUiState(setOf(memoId("memo-1")))
 
         // Act
-        // Normal: contains distinguishes selected ids from unselected ones
-        val containsSelected = selection.contains(memoId("memo-1"))
-        val containsOther = selection.contains(memoId("memo-2"))
+        // Normal: contains reports a selected id
+        val contains = selection.contains(memoId("memo-1"))
 
         // Assert
-        assertTrue(containsSelected)
-        assertFalse(containsOther)
+        assertTrue(contains)
+    }
+
+    @Test
+    fun normalContainsReturnsFalseForUnselectedMemoId() {
+        // Arrange
+        val selection = MemoSelectionUiState(setOf(memoId("memo-1")))
+
+        // Act
+        // Normal: contains rejects an unselected id
+        val contains = selection.contains(memoId("memo-2"))
+
+        // Assert
+        assertFalse(contains)
     }
 
     @Test
@@ -101,14 +115,38 @@ class MemoSelectionUiStateTest {
     }
 
     @Test
-    fun stateTransitionTransitionsKeepSourceStateUnchanged() {
+    fun stateTransitionSelectOnlyKeepsSourceStateUnchanged() {
         // Arrange
         val selection = MemoSelectionUiState(setOf(memoId("memo-1")))
 
         // Act
-        // StateTransition: every transition returns a new state without mutating the source
+        // StateTransition: selectOnly returns a new state without mutating the source
         selection.selectOnly(memoId("memo-2"))
+
+        // Assert
+        assertEquals(setOf(memoId("memo-1")), selection.selectedMemoIds)
+    }
+
+    @Test
+    fun stateTransitionToggleKeepsSourceStateUnchanged() {
+        // Arrange
+        val selection = MemoSelectionUiState(setOf(memoId("memo-1")))
+
+        // Act
+        // StateTransition: toggle returns a new state without mutating the source
         selection.toggle(memoId("memo-2"))
+
+        // Assert
+        assertEquals(setOf(memoId("memo-1")), selection.selectedMemoIds)
+    }
+
+    @Test
+    fun stateTransitionClearKeepsSourceStateUnchanged() {
+        // Arrange
+        val selection = MemoSelectionUiState(setOf(memoId("memo-1")))
+
+        // Act
+        // StateTransition: clear returns a new state without mutating the source
         selection.clear()
 
         // Assert

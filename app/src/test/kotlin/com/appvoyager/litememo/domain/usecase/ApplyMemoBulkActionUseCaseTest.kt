@@ -6,7 +6,6 @@ import com.appvoyager.litememo.domain.MutableTimeProvider
 import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.model.ActiveMemoBulkWrite
 import com.appvoyager.litememo.domain.model.ApplyMemoBulkActionCommand
-import com.appvoyager.litememo.domain.model.Memo
 import com.appvoyager.litememo.domain.model.MemoBulkAction
 import com.appvoyager.litememo.domain.model.MemoTrashUpdate
 import com.appvoyager.litememo.domain.model.value.MemoId
@@ -333,43 +332,64 @@ class ApplyMemoBulkActionUseCaseTest {
     }
 
     @Test
-    fun boundaryNoOpBulkChangesPersistNoChangedMemos() = runTest {
+    fun boundarySetFavoriteDoesNotPersistWhenMemoAlreadyFavorite() = runTest {
         // Arrange
-        val tagId = TagId("tag-1")
-        val alreadyFavoriteRepository = FakeMemoRepository(
+        val repository = FakeMemoRepository(
             listOf(memoFixture(id = "favorite", isFavorite = true))
         )
-        val alreadyTaggedRepository = FakeMemoRepository(
-            listOf(memoFixture(id = "tagged", tagIds = listOf(tagId)))
-        )
-        val untaggedRepository = FakeMemoRepository(
-            listOf(memoFixture(id = "untagged"))
-        )
-        val tagRepository = FakeTagRepository(listOf(tagFixture(id = tagId.value)))
+        val useCase = applyMemoBulkActionUseCase(memoRepository = repository)
 
         // Act
-        // Boundary/Normal: no-op favorite/tag changes should not produce changed memos.
-        applyMemoBulkActionUseCase(
-            memoRepository = alreadyFavoriteRepository
-        )(
+        // Boundary: setting an existing favorite value does not produce a changed memo.
+        useCase(
             ApplyMemoBulkActionCommand(
                 memoIds = listOf(MemoId("favorite")),
                 action = MemoBulkAction.setFavorite(true)
             )
         )
-        applyMemoBulkActionUseCase(
-            memoRepository = alreadyTaggedRepository,
-            tagRepository = tagRepository
-        )(
+
+        // Assert
+        assertEquals(emptyList<Any>(), repository.savedMemos)
+    }
+
+    @Test
+    fun boundaryAddTagDoesNotPersistWhenMemoAlreadyHasTag() = runTest {
+        // Arrange
+        val tagId = TagId("tag-1")
+        val repository = FakeMemoRepository(
+            listOf(memoFixture(id = "tagged", tagIds = listOf(tagId)))
+        )
+        val useCase = applyMemoBulkActionUseCase(
+            memoRepository = repository,
+            tagRepository = FakeTagRepository(listOf(tagFixture(id = tagId.value)))
+        )
+
+        // Act
+        // Boundary: adding an existing tag does not produce a changed memo.
+        useCase(
             ApplyMemoBulkActionCommand(
                 memoIds = listOf(MemoId("tagged")),
                 action = MemoBulkAction.addTag(tagId)
             )
         )
-        applyMemoBulkActionUseCase(
-            memoRepository = untaggedRepository,
-            tagRepository = tagRepository
-        )(
+
+        // Assert
+        assertEquals(emptyList<Any>(), repository.savedMemos)
+    }
+
+    @Test
+    fun boundaryRemoveTagDoesNotPersistWhenMemoDoesNotHaveTag() = runTest {
+        // Arrange
+        val tagId = TagId("tag-1")
+        val repository = FakeMemoRepository(listOf(memoFixture(id = "untagged")))
+        val useCase = applyMemoBulkActionUseCase(
+            memoRepository = repository,
+            tagRepository = FakeTagRepository(listOf(tagFixture(id = tagId.value)))
+        )
+
+        // Act
+        // Boundary: removing an absent tag does not produce a changed memo.
+        useCase(
             ApplyMemoBulkActionCommand(
                 memoIds = listOf(MemoId("untagged")),
                 action = MemoBulkAction.removeTag(tagId)
@@ -377,18 +397,7 @@ class ApplyMemoBulkActionUseCaseTest {
         )
 
         // Assert
-        assertEquals(
-            NoOpBulkChangeSnapshot(
-                alreadyFavoriteSavedMemos = emptyList(),
-                alreadyTaggedSavedMemos = emptyList(),
-                untaggedSavedMemos = emptyList()
-            ),
-            NoOpBulkChangeSnapshot(
-                alreadyFavoriteSavedMemos = alreadyFavoriteRepository.savedMemos,
-                alreadyTaggedSavedMemos = alreadyTaggedRepository.savedMemos,
-                untaggedSavedMemos = untaggedRepository.savedMemos
-            )
-        )
+        assertEquals(emptyList<Any>(), repository.savedMemos)
     }
 
     @Test
@@ -409,10 +418,14 @@ class ApplyMemoBulkActionUseCaseTest {
         )
 
         // Assert
-        assertEquals(
-            listOf(unchanged.id, changed.id) to listOf(changed.id),
-            repository.activeBulkSaveExpectedIdBatches.single() to
-                repository.savedMemos.map { it.id }
+        assertAll(
+            {
+                assertEquals(
+                    listOf(unchanged.id, changed.id),
+                    repository.activeBulkSaveExpectedIdBatches.single()
+                )
+            },
+            { assertEquals(listOf(changed.id), repository.savedMemos.map { it.id }) }
         )
     }
 
@@ -433,9 +446,10 @@ class ApplyMemoBulkActionUseCaseTest {
         }.exceptionOrNull()
 
         // Assert
-        val expected = true to emptyList<Memo>()
-        val actual = (error is IllegalArgumentException) to repository.savedMemos
-        assertEquals(expected, actual)
+        assertAll(
+            { assertEquals(IllegalArgumentException::class.java, error?.javaClass) },
+            { assertEquals(emptyList<Any>(), repository.savedMemos) }
+        )
     }
 
     @Test
@@ -458,9 +472,10 @@ class ApplyMemoBulkActionUseCaseTest {
         }.exceptionOrNull()
 
         // Assert
-        val expected = true to emptyList<Memo>()
-        val actual = (error is IllegalArgumentException) to repository.savedMemos
-        assertEquals(expected, actual)
+        assertAll(
+            { assertEquals(IllegalArgumentException::class.java, error?.javaClass) },
+            { assertEquals(emptyList<Any>(), repository.savedMemos) }
+        )
     }
 
     @Test
@@ -585,11 +600,11 @@ class ApplyMemoBulkActionUseCaseTest {
         // Assert
         assertAll(
             { assertEquals(IllegalStateException::class.java, error?.javaClass) },
+            { assertEquals(1, repository.bulkWriteCallCount) },
             {
                 assertEquals(
-                    1 to listOf(false, false, false),
-                    repository.bulkWriteCallCount to
-                        delegate.currentMemos().sortedBy { it.id.value }.map { it.isFavorite }
+                    listOf(false, false, false),
+                    delegate.currentMemos().sortedBy { it.id.value }.map { it.isFavorite }
                 )
             }
         )
@@ -625,11 +640,11 @@ class ApplyMemoBulkActionUseCaseTest {
         // Assert
         assertAll(
             { assertEquals(IllegalStateException::class.java, error?.javaClass) },
+            { assertEquals(1, repository.bulkTrashCallCount) },
             {
                 assertEquals(
-                    1 to listOf<TimestampMillis?>(null, null, null),
-                    repository.bulkTrashCallCount to
-                        delegate.currentMemos().sortedBy { it.id.value }.map { it.deletedAt }
+                    listOf<TimestampMillis?>(null, null, null),
+                    delegate.currentMemos().sortedBy { it.id.value }.map { it.deletedAt }
                 )
             }
         )
@@ -674,10 +689,4 @@ class ApplyMemoBulkActionUseCaseTest {
             delegate.moveMemosToTrash(updates)
         }
     }
-
-    private data class NoOpBulkChangeSnapshot(
-        val alreadyFavoriteSavedMemos: List<Memo>,
-        val alreadyTaggedSavedMemos: List<Memo>,
-        val untaggedSavedMemos: List<Memo>
-    )
 }

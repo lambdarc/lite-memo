@@ -97,9 +97,10 @@ class StagingMemoImportArchiveRepositoryInstrumentedTest {
         val images = staged.data.memos.single().images
 
         // Assert
+        assertEquals(listOf("image-1", "image-2"), images.map { it.id.value })
         assertEquals(
-            listOf("image-1" to "jpg", "image-2" to "png"),
-            images.map { it.id.value to it.fileName.value.substringAfterLast('.') }
+            listOf("jpg", "png"),
+            images.map { it.fileName.value.substringAfterLast('.') }
         )
     }
 
@@ -158,9 +159,10 @@ class StagingMemoImportArchiveRepositoryInstrumentedTest {
 
         // Assert
         assertEquals(
-            MemoImportFailureReason.INVALID_IMAGE to emptyList<String>(),
-            (failure as? MemoImportException)?.reason to importedImageFileNames()
+            MemoImportFailureReason.INVALID_IMAGE,
+            (failure as? MemoImportException)?.reason
         )
+        assertEquals(emptyList<String>(), importedImageFileNames())
     }
 
     @Test
@@ -318,10 +320,8 @@ class StagingMemoImportArchiveRepositoryInstrumentedTest {
         val secondClaim = sessionDataSource.claimAbandonedTokens()
 
         // Assert
-        assertEquals(
-            listOf(token) to emptyList<MemoImportSessionToken>(),
-            firstClaim to secondClaim
-        )
+        assertEquals(listOf(token), firstClaim)
+        assertEquals(emptyList<MemoImportSessionToken>(), secondClaim)
     }
 
     private fun storedFileNames(vararg staged: StagedMemoImport): List<String> = staged

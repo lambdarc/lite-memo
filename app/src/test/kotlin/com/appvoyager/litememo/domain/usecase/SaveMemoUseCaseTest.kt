@@ -24,6 +24,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
@@ -372,8 +373,10 @@ class SaveMemoUseCaseTest {
         )
 
         // Assert
-        assertEquals(TimestampMillis(5000L), memo.createdAt)
-        assertEquals(TimestampMillis(5000L), memo.updatedAt)
+        assertAll(
+            { assertEquals(TimestampMillis(5000L), memo.createdAt) },
+            { assertEquals(TimestampMillis(5000L), memo.updatedAt) }
+        )
     }
 
     @Test

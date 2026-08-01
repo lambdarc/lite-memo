@@ -7,6 +7,7 @@ import com.appvoyager.litememo.domain.memoFixture
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
 import com.appvoyager.litememo.domain.tagFixture
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -32,8 +33,10 @@ class ExportMemosUseCaseTest {
         val result = useCase()
 
         // Assert
-        assertEquals(2, result.memos.size)
-        assertEquals(2, result.tags.size)
+        assertAll(
+            { assertEquals(2, result.memos.size) },
+            { assertEquals(2, result.tags.size) }
+        )
     }
 
     @Test
@@ -49,8 +52,10 @@ class ExportMemosUseCaseTest {
         val result = useCase()
 
         // Assert
-        assertEquals(1, result.memos.size)
-        assertEquals("active", result.memos[0].id.value)
+        assertAll(
+            { assertEquals(1, result.memos.size) },
+            { assertEquals("active", result.memos[0].id.value) }
+        )
     }
 
     @Test
@@ -63,8 +68,10 @@ class ExportMemosUseCaseTest {
         val result = useCase()
 
         // Assert
-        assertEquals(ExportMemosUseCase.CURRENT_VERSION, result.version)
-        assertEquals(now, result.exportedAt)
+        assertAll(
+            { assertEquals(ExportMemosUseCase.CURRENT_VERSION, result.version) },
+            { assertEquals(now, result.exportedAt) }
+        )
     }
 
     @Test
@@ -89,9 +96,10 @@ class ExportMemosUseCaseTest {
         val result = useCase()
 
         // Assert
-        val expected = listOf("m1", "m2", "m3") to listOf("t1", "t2", "t3")
-        val actual = result.memos.map { it.id.value } to result.tags.map { it.id.value }
-        assertEquals(expected, actual)
+        assertAll(
+            { assertEquals(listOf("m1", "m2", "m3"), result.memos.map { it.id.value }) },
+            { assertEquals(listOf("t1", "t2", "t3"), result.tags.map { it.id.value }) }
+        )
     }
 
     @Test
@@ -103,8 +111,10 @@ class ExportMemosUseCaseTest {
         val result = useCase()
 
         // Assert
-        assertEquals(0, result.memos.size)
-        assertEquals(0, result.tags.size)
+        assertAll(
+            { assertEquals(0, result.memos.size) },
+            { assertEquals(0, result.tags.size) }
+        )
     }
 
     private fun exportMemosUseCase(

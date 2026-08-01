@@ -16,7 +16,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -50,10 +50,12 @@ class LiteMemoAppViewModelTest {
         // Act
         viewModel.restoreMemo(MemoId("memo-1"))
         advanceUntilIdle()
-        val event = viewModel.restoreMemoErrorEvent.first()
+        val event = withTimeoutOrNull(100L) {
+            viewModel.restoreMemoErrorEvent.first()
+        }
 
         // Assert
-        assertEquals(Unit, event)
+        assertNotNull(event)
     }
 
     @Test

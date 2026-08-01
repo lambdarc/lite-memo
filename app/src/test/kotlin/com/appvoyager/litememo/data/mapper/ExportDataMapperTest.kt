@@ -5,15 +5,11 @@ import com.appvoyager.litememo.data.model.export.MemoExportDto
 import com.appvoyager.litememo.data.model.export.MemoImageExportDto
 import com.appvoyager.litememo.data.model.export.TagExportDto
 import com.appvoyager.litememo.domain.memoFixture
+import com.appvoyager.litememo.domain.model.ExportData
 import com.appvoyager.litememo.domain.model.MemoImage
-import com.appvoyager.litememo.domain.model.value.MemoBody
-import com.appvoyager.litememo.domain.model.value.MemoId
 import com.appvoyager.litememo.domain.model.value.MemoImageFileName
 import com.appvoyager.litememo.domain.model.value.MemoImageId
-import com.appvoyager.litememo.domain.model.value.MemoTitle
-import com.appvoyager.litememo.domain.model.value.TagColor
 import com.appvoyager.litememo.domain.model.value.TagId
-import com.appvoyager.litememo.domain.model.value.TagName
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
 import com.appvoyager.litememo.domain.tagFixture
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -58,16 +54,32 @@ class ExportDataMapperTest {
             val domain = dto.toDomain()
 
             // Assert
-            assertEquals(1, domain.version)
-            assertEquals(TimestampMillis(5000L), domain.exportedAt)
-            assertEquals(TagId("tag-1"), domain.tags[0].id)
-            assertEquals(TagName("Work"), domain.tags[0].name)
-            assertEquals(TagColor(0xFF6750A4), domain.tags[0].color)
-            assertEquals(MemoId("memo-1"), domain.memos[0].id)
-            assertEquals(MemoTitle("Title"), domain.memos[0].title)
-            assertEquals(MemoBody("Body"), domain.memos[0].body)
-            assertEquals(true, domain.memos[0].isFavorite)
-            assertEquals(listOf(TagId("tag-1")), domain.memos[0].tagIds)
+            assertEquals(
+                ExportData(
+                    version = 1,
+                    exportedAt = TimestampMillis(5000L),
+                    tags = listOf(
+                        tagFixture(
+                            id = "tag-1",
+                            name = "Work",
+                            color = 0xFF6750A4,
+                            createdAt = 1000L
+                        )
+                    ),
+                    memos = listOf(
+                        memoFixture(
+                            id = "memo-1",
+                            title = "Title",
+                            body = "Body",
+                            createdAt = 2000L,
+                            updatedAt = 3000L,
+                            isFavorite = true,
+                            tagIds = listOf(TagId("tag-1"))
+                        )
+                    )
+                ),
+                domain
+            )
         }
 
         @Test
@@ -111,14 +123,7 @@ class ExportDataMapperTest {
             val roundTripped = original.toExportDto(emptyList()).toDomain()
 
             // Assert
-            assertEquals(original.id, roundTripped.id)
-            assertEquals(original.title, roundTripped.title)
-            assertEquals(original.body, roundTripped.body)
-            assertEquals(original.createdAt, roundTripped.createdAt)
-            assertEquals(original.updatedAt, roundTripped.updatedAt)
-            assertEquals(original.isFavorite, roundTripped.isFavorite)
-            assertEquals(original.tagIds, roundTripped.tagIds)
-            assertNull(roundTripped.deletedAt)
+            assertEquals(original, roundTripped)
         }
     }
 

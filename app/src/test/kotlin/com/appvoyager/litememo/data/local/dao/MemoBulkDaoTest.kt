@@ -3,6 +3,7 @@ package com.appvoyager.litememo.data.local.dao
 import com.appvoyager.litememo.data.local.entity.MemoEntity
 import com.appvoyager.litememo.data.local.model.MemoWithRefs
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
@@ -37,9 +38,9 @@ class MemoBulkDaoTest {
         dao.moveMemosToTrash(emptyMap())
 
         // Assert
-        assertEquals(
-            emptyList<String>() to emptyList<List<String>>(),
-            dao.calls to dao.activeMemoIdReads
+        assertAll(
+            { assertEquals(emptyList<String>(), dao.calls) },
+            { assertEquals(emptyList<List<String>>(), dao.activeMemoIdReads) }
         )
     }
 
@@ -54,9 +55,9 @@ class MemoBulkDaoTest {
         dao.restoreMemosFromTrash(ids)
 
         // Assert
-        assertEquals(
-            listOf(900, 1) to listOf(900, 1),
-            dao.trashedMemoIdBatchSizes to dao.restoredMemoBatchSizes
+        assertAll(
+            { assertEquals(listOf(900, 1), dao.trashedMemoIdBatchSizes) },
+            { assertEquals(listOf(900, 1), dao.restoredMemoBatchSizes) }
         )
     }
 

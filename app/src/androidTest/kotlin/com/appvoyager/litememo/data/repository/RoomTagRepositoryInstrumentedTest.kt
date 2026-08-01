@@ -88,8 +88,8 @@ class RoomTagRepositoryInstrumentedTest {
 
         // Assert
         assertEquals(
-            listOf(StoredTag(id = "tag-1", name = "Renamed", colorArgb = 0xFF6750A4)),
-            storedTags.map { it.toStoredTag() }
+            listOf(tagEntity(id = "tag-1", name = "Renamed")),
+            storedTags
         )
     }
 
@@ -105,8 +105,8 @@ class RoomTagRepositoryInstrumentedTest {
 
         // Assert
         assertEquals(
-            listOf(StoredTag(id = "tag-1", name = "Work", colorArgb = 0xFF006D3B)),
-            storedTags.map { it.toStoredTag() }
+            listOf(tagEntity(id = "tag-1", name = "Work", colorArgb = 0xFF006D3B)),
+            storedTags
         )
     }
 
@@ -123,15 +123,18 @@ class RoomTagRepositoryInstrumentedTest {
         assertEquals(listOf("tag-1", "tag-2"), storedIds.sorted())
     }
 
-    private fun TagEntity.toStoredTag() = StoredTag(id = id, name = name, colorArgb = colorArgb)
-
-    private data class StoredTag(val id: String, val name: String, val colorArgb: Long)
-
     private fun tag(id: String, name: String, colorArgb: Long = 0xFF6750A4) = Tag(
         id = TagId(id),
         name = TagName(name),
         color = TagColor(colorArgb),
         createdAt = TimestampMillis(1_000L)
+    )
+
+    private fun tagEntity(id: String, name: String, colorArgb: Long = 0xFF6750A4) = TagEntity(
+        id = id,
+        name = name,
+        colorArgb = colorArgb,
+        createdAt = 1_000L
     )
 
 }
