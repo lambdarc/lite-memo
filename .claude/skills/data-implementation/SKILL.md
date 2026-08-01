@@ -1,6 +1,6 @@
 ---
 name: data-implementation
-description: 保存、読み込み、ファイル入出力、外部データとの変換が絡む依頼で使う。Lite Memo の Data 層（Repository 実装、mapper、DataStore、export/import、ContentResolver、Hilt module、provider 実装、domain と data の変換境界）の設計、実装、修正を扱う。「エクスポートしたファイルが壊れる」「設定を保存したい / 既定値をどうするか」「画像の URI が読めない」「変換で値が落ちる」のように、Repository や mapper という語が出てこなくても、データの永続化や受け渡しの問題ならこの skill を使う。テーマや表示設定のような軽量な設定値の追加も、保存先は DataStore なのでここが担当。Room の schema や migration を伴う場合は db-implementation も併用し、テストコードだけなら test-implementation を優先する。
+description: 保存、読み込み、ファイル入出力、外部データとの変換が絡む依頼で使う。Lite Memo の Data 層の Repository 実装、mapper、DataStore、export/import、ContentResolver を担当する。
 ---
 
 # 目的

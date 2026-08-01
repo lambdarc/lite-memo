@@ -1,6 +1,6 @@
 ---
 name: ui-implementation
-description: 画面の見た目、表示内容、ユーザー操作、画面遷移、表示文言を変える依頼で使う。Lite Memo の UI 層（Compose screen、Route、ViewModel、UI state、UI event、Navigation Compose、strings.xml、Preview、Compose UI Test）の設計、実装、修正を扱う。「一覧の並び順を変えたい」「ボタンを足したい」「画面が真っ白になる」「戻ると表示が古い」「スナックバーが出ない」のように、Compose や ViewModel という語が出てこなくても、表示・操作・遷移の変更ならこの skill を使う。テストコードだけを足すなら test-implementation、差分全体のレビューなら implementation-review を優先する。
+description: 画面の表示、操作、遷移、表示文言を変える依頼で使う。Lite Memo の UI 層の Compose screen、Route、ViewModel、UI state、UI event、Navigation Compose、strings.xml を担当する。
 ---
 
 # 目的

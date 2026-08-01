@@ -1,6 +1,6 @@
 ---
 name: test-implementation
-description: テストを書く、直す、増やす依頼で使う。Lite Memo のテストコード（JUnit Jupiter の JVM Unit Test、JUnit 4 の instrumented test、runTest、MockK、Turbine、ViewModel test、UseCase test、mapper test、Room / Compose instrumented test、AAA、観点 prefix）を扱う。「テスト書いて」「◯◯のテストを追加して」「テストが足りない」「runBlocking を直したい」「Flow の検証はこのプロジェクトだとどう書く？」のように、対象クラス名だけを指定された場合も、そのクラスがどの層にあるかに関係なくこの skill を使う。実装変更に付随するテストは各層の skill、差分全体のレビューは implementation-review を優先する。
+description: テストコードを追加・修正する依頼で使う。Lite Memo の JVM Unit Test（JUnit Jupiter）と instrumented test（JUnit 4）を担当する。
 ---
 
 # 目的

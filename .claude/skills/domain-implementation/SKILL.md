@@ -1,6 +1,6 @@
 ---
 name: domain-implementation
-description: 業務ルール、入力制約、値の妥当性、判定ロジックを変える依頼で使う。Lite Memo の Domain 層（domain model、value object、UseCase、Repository interface、provider、Android 非依存のビジネスルール）の設計、実装、修正を扱う。「文字数を制限したい」「不正な値が入る余地がある」「◯日経ったら自動で削除」「時刻依存でテストしづらい」のように、UseCase や value object という語が出てこなくても、アプリの決まりごとを変える依頼ならこの skill を使う。保存先や変換の実装は data-implementation、テストコードだけなら test-implementation を優先する。
+description: 入力制約、業務ルール、値の妥当性を変える依頼で使う。Lite Memo の Domain 層の domain model、value object、UseCase、Repository interface、provider を担当する。
 ---
 
 # 目的
