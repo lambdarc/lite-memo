@@ -16,7 +16,7 @@ import com.appvoyager.litememo.domain.model.value.SearchQuery
 import com.appvoyager.litememo.domain.model.value.TagId
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
 import com.appvoyager.litememo.domain.model.value.TimestampRange
-import com.appvoyager.litememo.domain.repository.FakeUserSettingsRepository
+import com.appvoyager.litememo.domain.repository.FakeDisplaySettingsRepository
 import com.appvoyager.litememo.domain.repository.MemoRepository
 import com.appvoyager.litememo.domain.tagFixture
 import com.appvoyager.litememo.domain.usecase.ApplyMemoBulkActionUseCase
@@ -41,6 +41,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -482,10 +483,8 @@ class HomeViewModelTest {
                 val state = viewModel.uiState.first {
                     it.selection.selectedMemoIds == setOf(MemoId("memo-1"))
                 }
-                assertEquals(
-                    Unit to setOf(MemoId("memo-1")),
-                    awaitItem() to state.selection.selectedMemoIds
-                )
+                awaitItem()
+                assertEquals(setOf(MemoId("memo-1")), state.selection.selectedMemoIds)
             }
         }
 
@@ -795,7 +794,10 @@ class HomeViewModelTest {
         val selected = viewModel.getSelectedMemoForShare()
 
         // Assert
-        assertEquals(MemoId("memo-1") to "共有対象", selected?.id to selected?.title)
+        assertAll(
+            { assertEquals(MemoId("memo-1"), selected?.id) },
+            { assertEquals("共有対象", selected?.title) }
+        )
     }
 
     @Test
@@ -870,12 +872,12 @@ class HomeViewModelTest {
         memoRepository: MemoRepository = FakeMemoRepository(memos)
     ): HomeViewModel {
         val tagRepository = FakeTagRepository(tags)
-        val userSettingsRepository = FakeUserSettingsRepository()
+        val displaySettingsRepository = FakeDisplaySettingsRepository()
         return HomeViewModel(
-            observeMemosUseCase = ObserveMemosUseCase(memoRepository, userSettingsRepository),
+            observeMemosUseCase = ObserveMemosUseCase(memoRepository, displaySettingsRepository),
             observeTagsUseCase = ObserveTagsUseCase(tagRepository),
             filterMemosUseCase = FilterMemosUseCase(),
-            searchMemosUseCase = SearchMemosUseCase(memoRepository, userSettingsRepository),
+            searchMemosUseCase = SearchMemosUseCase(memoRepository, displaySettingsRepository),
             setMemoFavoriteUseCase = SetMemoFavoriteUseCase(
                 memoRepository,
                 MutableTimeProvider(TimestampMillis(today + 1))

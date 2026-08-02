@@ -26,6 +26,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -60,7 +61,10 @@ class TagManageViewModelTest {
         val state = viewModel.uiState.first { it.hasError && it.editingTag != null }
 
         // Assert
-        assertEquals(true to "", state.hasError to state.editingTag?.name)
+        assertAll(
+            { assertEquals(true, state.hasError) },
+            { assertEquals("", state.editingTag?.name) }
+        )
     }
 
     @Test
@@ -118,9 +122,9 @@ class TagManageViewModelTest {
         val state = viewModel.uiState.first { it.editingTag == null }
 
         // Assert
-        assertEquals(
-            null to listOf("Work"),
-            state.editingTag to tagRepository.currentTags().map { it.name.value }
+        assertAll(
+            { assertEquals(null, state.editingTag) },
+            { assertEquals(listOf("Work"), tagRepository.currentTags().map { it.name.value }) }
         )
     }
 
@@ -137,7 +141,10 @@ class TagManageViewModelTest {
         val state = viewModel.uiState.first { it.editingTag?.nameError == true }
 
         // Assert
-        assertEquals(true to "   ", state.editingTag?.nameError to state.editingTag?.name)
+        assertAll(
+            { assertEquals(true, state.editingTag?.nameError) },
+            { assertEquals("   ", state.editingTag?.name) }
+        )
     }
 
     @Test
@@ -154,9 +161,9 @@ class TagManageViewModelTest {
         val state = viewModel.uiState.first { it.editingTag == null && it.tags.isNotEmpty() }
 
         // Assert
-        assertEquals(
-            null to listOf("Work"),
-            state.editingTag to tagRepository.currentTags().map { it.name.value }
+        assertAll(
+            { assertEquals(null, state.editingTag) },
+            { assertEquals(listOf("Work"), tagRepository.currentTags().map { it.name.value }) }
         )
     }
 
@@ -180,9 +187,9 @@ class TagManageViewModelTest {
         val state = viewModel.uiState.first { it.editingTag?.duplicateNameError == true }
 
         // Assert
-        assertEquals(
-            false to true,
-            state.editingTag?.saveError to state.editingTag?.duplicateNameError
+        assertAll(
+            { assertEquals(false, state.editingTag?.saveError) },
+            { assertEquals(true, state.editingTag?.duplicateNameError) }
         )
     }
 
@@ -200,7 +207,8 @@ class TagManageViewModelTest {
             viewModel.requestDelete(tagUiModel)
             viewModel.confirmDelete()
             advanceUntilIdle()
-            assertEquals(Unit to null, awaitItem() to viewModel.uiState.value.showDeleteDialog)
+            assertEquals(Unit, awaitItem())
+            assertEquals(null, viewModel.uiState.value.showDeleteDialog)
         }
     }
 

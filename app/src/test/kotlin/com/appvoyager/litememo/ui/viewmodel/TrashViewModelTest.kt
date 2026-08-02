@@ -27,6 +27,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -271,7 +272,8 @@ class TrashViewModelTest {
         viewModel.actionErrorEvent.test {
             viewModel.confirmEmptyTrash()
             advanceUntilIdle()
-            assertEquals(Unit to false, awaitItem() to viewModel.uiState.value.showEmptyTrashDialog)
+            assertEquals(Unit, awaitItem())
+            assertEquals(false, viewModel.uiState.value.showEmptyTrashDialog)
         }
     }
 
@@ -295,10 +297,8 @@ class TrashViewModelTest {
             viewModel.actionErrorEvent.test {
                 viewModel.restoreSelectedMemos()
                 advanceUntilIdle()
-                assertEquals(
-                    Unit to setOf(memo.id),
-                    awaitItem() to viewModel.uiState.value.selection.selectedMemoIds
-                )
+                assertEquals(Unit, awaitItem())
+                assertEquals(setOf(memo.id), viewModel.uiState.value.selection.selectedMemoIds)
             }
         }
 
@@ -314,7 +314,10 @@ class TrashViewModelTest {
         val state = viewModel.uiState.first { it.hasError }
 
         // Assert
-        assertEquals(true to emptyList<MemoId>(), state.hasError to state.memos.map { it.id })
+        assertAll(
+            { assertEquals(true, state.hasError) },
+            { assertEquals(emptyList<MemoId>(), state.memos.map { it.id }) }
+        )
     }
 
     @Test
@@ -331,7 +334,10 @@ class TrashViewModelTest {
         val state = viewModel.uiState.first { !it.hasError }
 
         // Assert
-        assertEquals(false to 2, state.hasError to repository.purgeAttempts)
+        assertAll(
+            { assertEquals(false, state.hasError) },
+            { assertEquals(2, repository.purgeAttempts) }
+        )
     }
 
     @Test

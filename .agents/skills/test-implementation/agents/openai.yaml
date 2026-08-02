@@ -1,6 +1,4 @@
 interface:
-  display_name: テスト実装
-  short_description: Unit Test / androidTest / coroutine / Flow 検証を扱う。
-  default_prompt: 変更した振る舞いの検証層を判断し、AAA でテストを追加・実行する。
-policy:
-  allow_implicit_invocation: true
+  display_name: "テスト実装"
+  short_description: "Unit Test・androidTest・coroutine・Flow検証を扱う"
+  default_prompt: "$test-implementation を使い、変更した振る舞いに対応するテストを実装・検証してください。"

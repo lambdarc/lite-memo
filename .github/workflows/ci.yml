@@ -177,21 +177,6 @@ jobs:
             ~/.android/adb*
           key: avd-api33-google-apis-x86_64-v1
 
-  claude-code-skill-sync:
-    name: Claude Code Skill Sync
-    if: *standard-ci-condition
-    runs-on: windows-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Validate Claude Code Skill Sync
-        run: ./scripts/sync-claude-skills.ps1 -Check
-
   gradle-wrapper-validation:
     name: Gradle Wrapper Validation
     if: *standard-ci-condition

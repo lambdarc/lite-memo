@@ -24,62 +24,48 @@ class MemoEditScreenComposeTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun normalTitleAndBodyInputsAcceptText() {
+    fun normalTitleInputAcceptsText() {
         // Arrange
         var uiState by mutableStateOf(MemoEditUiState())
-        composeRule.setContent {
-            TestScreenContent {
-                MemoEditScreen(
-                    uiState = uiState,
-                    onTitleChange = { title -> uiState = uiState.copy(title = title) },
-                    onBodyChange = { body -> uiState = uiState.copy(body = body) },
-                    onTagToggle = {},
-                    onDelete = {},
-                    onBackRequest = {},
-                    onRetry = {},
-                    onAttachImageRequest = {},
-                    onImageRemove = {},
-                    onShareMemo = {}
-                )
-            }
-        }
+        setMemoEditScreen(
+            uiState = { uiState },
+            onTitleChange = { title -> uiState = uiState.copy(title = title) }
+        )
 
         // Act
-        // Normal: title and body edits are reflected through callbacks.
+        // Normal: a title edit is reflected through its callback.
         composeRule
             .onNodeWithTag(MemoEditTestTags.TITLE_INPUT)
             .performTextInput("Shopping")
+
+        // Assert
+        assertEquals("Shopping", uiState.title)
+    }
+
+    @Test
+    fun normalBodyInputAcceptsText() {
+        // Arrange
+        var uiState by mutableStateOf(MemoEditUiState())
+        setMemoEditScreen(
+            uiState = { uiState },
+            onBodyChange = { body -> uiState = uiState.copy(body = body) }
+        )
+
+        // Act
+        // Normal: a body edit is reflected through its callback.
         composeRule
             .onNodeWithTag(MemoEditTestTags.BODY_INPUT)
             .performTextInput("Milk")
 
         // Assert
-        assertEquals(
-            MemoEditInputSnapshot(title = "Shopping", body = "Milk"),
-            MemoEditInputSnapshot(title = uiState.title, body = uiState.body)
-        )
+        assertEquals("Milk", uiState.body)
     }
 
     @Test
     fun interactionAttachImageButtonInvokesCallback() {
         // Arrange
         var clicked = false
-        composeRule.setContent {
-            TestScreenContent {
-                MemoEditScreen(
-                    uiState = MemoEditUiState(),
-                    onTitleChange = {},
-                    onBodyChange = {},
-                    onTagToggle = {},
-                    onDelete = {},
-                    onBackRequest = {},
-                    onRetry = {},
-                    onAttachImageRequest = { clicked = true },
-                    onImageRemove = {},
-                    onShareMemo = {}
-                )
-            }
-        }
+        setMemoEditScreen(onAttachImageRequest = { clicked = true })
 
         // Act
         // Interaction: tapping the toolbar image button requests Photo Picker launch.
@@ -97,22 +83,7 @@ class MemoEditScreenComposeTest {
         val image = testMemoImageUiModel()
 
         // Act
-        composeRule.setContent {
-            TestScreenContent {
-                MemoEditScreen(
-                    uiState = MemoEditUiState(images = listOf(image)),
-                    onTitleChange = {},
-                    onBodyChange = {},
-                    onTagToggle = {},
-                    onDelete = {},
-                    onBackRequest = {},
-                    onRetry = {},
-                    onAttachImageRequest = {},
-                    onImageRemove = {},
-                    onShareMemo = {}
-                )
-            }
-        }
+        setMemoEditScreen(uiState = { MemoEditUiState(images = listOf(image)) })
 
         // Assert
         composeRule
@@ -128,22 +99,10 @@ class MemoEditScreenComposeTest {
         // Arrange
         val image = testMemoImageUiModel()
         var removedId: String? = null
-        composeRule.setContent {
-            TestScreenContent {
-                MemoEditScreen(
-                    uiState = MemoEditUiState(images = listOf(image)),
-                    onTitleChange = {},
-                    onBodyChange = {},
-                    onTagToggle = {},
-                    onDelete = {},
-                    onBackRequest = {},
-                    onRetry = {},
-                    onAttachImageRequest = {},
-                    onImageRemove = { removedId = it },
-                    onShareMemo = {}
-                )
-            }
-        }
+        setMemoEditScreen(
+            uiState = { MemoEditUiState(images = listOf(image)) },
+            onImageRemove = { removedId = it }
+        )
 
         // Act
         // Interaction: tapping the per-image remove button emits that image id.
@@ -158,22 +117,7 @@ class MemoEditScreenComposeTest {
     @Test
     fun normalDeletePendingHidesAttachImageButton() {
         // Act
-        composeRule.setContent {
-            TestScreenContent {
-                MemoEditScreen(
-                    uiState = MemoEditUiState(isDeletePending = true),
-                    onTitleChange = {},
-                    onBodyChange = {},
-                    onTagToggle = {},
-                    onDelete = {},
-                    onBackRequest = {},
-                    onRetry = {},
-                    onAttachImageRequest = {},
-                    onImageRemove = {},
-                    onShareMemo = {}
-                )
-            }
-        }
+        setMemoEditScreen(uiState = { MemoEditUiState(isDeletePending = true) })
 
         // Assert
         composeRule
@@ -181,5 +125,28 @@ class MemoEditScreenComposeTest {
             .assertCountEquals(0)
     }
 
-    private data class MemoEditInputSnapshot(val title: String, val body: String)
+    private fun setMemoEditScreen(
+        uiState: () -> MemoEditUiState = { MemoEditUiState() },
+        onTitleChange: (String) -> Unit = {},
+        onBodyChange: (String) -> Unit = {},
+        onAttachImageRequest: () -> Unit = {},
+        onImageRemove: (String) -> Unit = {}
+    ) {
+        composeRule.setContent {
+            TestScreenContent {
+                MemoEditScreen(
+                    uiState = uiState(),
+                    onTitleChange = onTitleChange,
+                    onBodyChange = onBodyChange,
+                    onTagToggle = {},
+                    onDelete = {},
+                    onBackRequest = {},
+                    onRetry = {},
+                    onAttachImageRequest = onAttachImageRequest,
+                    onImageRemove = onImageRemove,
+                    onShareMemo = {}
+                )
+            }
+        }
+    }
 }

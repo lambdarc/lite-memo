@@ -1,6 +1,6 @@
 ---
 name: implementation-review
-description: Lite Memo の実装差分全体のレビューを扱う。依存方向、責務分離、過剰 API、DB migration、UI state、data mapper、Unit Test 不足、レビュー指摘形式が対象。
+description: 実装差分をレビューする依頼で使う。Lite Memo の依存方向、責務分離、過剰 API、DB migration、UI state、Unit Test 不足を確認し、docs/review.md の形式で指摘する。
 ---
 
 # 目的

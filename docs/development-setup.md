@@ -120,7 +120,7 @@ Gradle から同じアプリ検証を直接実行する場合は次のとおり�
 ./gradlew :app:connectedDevDebugAndroidTest
 ```
 
-Gradle Wrapper Validation、skill 同期、GitHub Actions Validation、CodeQL などの workflow 固有チェックは、
+Gradle Wrapper Validation、GitHub Actions Validation、CodeQL などの workflow 固有チェックは、
 上記コマンドだけでは再現しません。最終結果は GitHub Actions で確認します。
 
 ### GitHub Actions の命名

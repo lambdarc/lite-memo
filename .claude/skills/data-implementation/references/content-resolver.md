@@ -4,8 +4,8 @@
 
 ## 確認する対象
 
-- `data/image/MemoImageFileDataSource`、`FileSystemMemoImageStore`、`ContentResolverExportFileRepository`
-- domain の `ImageSourceReference` / `ExportFileReference` / `UriValidation`（data 層が変換・実装で扱う contract）
+- `data/image/MemoImageFileDataSource`、`data/repository/FileSystemMemoImageStore`、`data/repository/FileSystemMemoExportArchiveRepository`、`data/export/MemoImportArchiveExtractor`
+- domain の `ImageSourceReference` / `ExportFileReference`（data 層が変換・実装で扱う contract）
 
 ## 実装時の注意
 

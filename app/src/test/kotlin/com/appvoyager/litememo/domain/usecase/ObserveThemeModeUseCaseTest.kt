@@ -1,7 +1,7 @@
 package com.appvoyager.litememo.domain.usecase
 
 import com.appvoyager.litememo.domain.model.ThemeMode
-import com.appvoyager.litememo.domain.repository.FakeUserSettingsRepository
+import com.appvoyager.litememo.domain.repository.FakeDisplaySettingsRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -12,7 +12,7 @@ class ObserveThemeModeUseCaseTest {
     @Test
     fun invokeReturnsDefaultThemeMode() = runTest {
         // Arrange
-        val repository = FakeUserSettingsRepository()
+        val repository = FakeDisplaySettingsRepository()
         val useCase = ObserveThemeModeUseCase(repository)
 
         // Act
@@ -25,7 +25,7 @@ class ObserveThemeModeUseCaseTest {
     @Test
     fun invokeReflectsUpdatedThemeMode() = runTest {
         // Arrange
-        val repository = FakeUserSettingsRepository()
+        val repository = FakeDisplaySettingsRepository()
         val useCase = ObserveThemeModeUseCase(repository)
         repository.setThemeMode(ThemeMode.DARK)
 

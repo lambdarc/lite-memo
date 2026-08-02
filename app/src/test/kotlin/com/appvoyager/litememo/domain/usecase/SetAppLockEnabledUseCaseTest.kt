@@ -1,6 +1,6 @@
 package com.appvoyager.litememo.domain.usecase
 
-import com.appvoyager.litememo.domain.repository.FakeUserSettingsRepository
+import com.appvoyager.litememo.domain.repository.FakeAppLockSettingsRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -11,7 +11,7 @@ class SetAppLockEnabledUseCaseTest {
     @Test
     fun invokePersistsAppLockEnabled() = runTest {
         // Arrange
-        val repository = FakeUserSettingsRepository()
+        val repository = FakeAppLockSettingsRepository()
         val useCase = SetAppLockEnabledUseCase(repository)
 
         // Act

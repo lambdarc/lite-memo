@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -109,9 +110,9 @@ class RoomTagRepositoryTest {
         repository.saveTag(tagFixture(id = "tag-2", name = "Home"))
 
         // Assert
-        assertEquals(
-            WriteSplit(insertedIds = listOf("tag-2"), updatedIds = emptyList()),
-            dao.toWriteSplit()
+        assertAll(
+            { assertEquals(listOf("tag-2"), dao.insertedTags.map { it.id }) },
+            { assertEquals(emptyList<String>(), dao.updatedTags.map { it.id }) }
         )
     }
 
@@ -125,13 +126,10 @@ class RoomTagRepositoryTest {
         repository.saveTag(tagFixture(id = "tag-1", name = "Renamed"))
 
         // Assert
-        assertEquals(
-            WriteSplit(
-                insertedIds = emptyList(),
-                updatedIds = listOf("tag-1"),
-                updatedNames = listOf("Renamed")
-            ),
-            dao.toWriteSplit()
+        assertAll(
+            { assertEquals(emptyList<String>(), dao.insertedTags.map { it.id }) },
+            { assertEquals(listOf("tag-1"), dao.updatedTags.map { it.id }) },
+            { assertEquals(listOf("Renamed"), dao.updatedTags.map { it.name }) }
         )
     }
 
@@ -186,18 +184,6 @@ class RoomTagRepositoryTest {
         // Assert
         assertNull(tag)
     }
-
-    private fun FakeTagDao.toWriteSplit() = WriteSplit(
-        insertedIds = insertedTags.map { it.id },
-        updatedIds = updatedTags.map { it.id },
-        updatedNames = updatedTags.map { it.name }
-    )
-
-    private data class WriteSplit(
-        val insertedIds: List<String>,
-        val updatedIds: List<String>,
-        val updatedNames: List<String> = emptyList()
-    )
 
     private fun tagEntity(id: String, name: String = "Tag") = TagEntity(
         id = id,

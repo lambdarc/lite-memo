@@ -7,13 +7,15 @@ import com.appvoyager.litememo.data.repository.RoomMemoImportRepository
 import com.appvoyager.litememo.data.repository.RoomMemoRepository
 import com.appvoyager.litememo.data.repository.RoomTagRepository
 import com.appvoyager.litememo.data.repository.StagingMemoImportArchiveRepository
+import com.appvoyager.litememo.domain.repository.AppLockSettingsRepository
+import com.appvoyager.litememo.domain.repository.DisplaySettingsRepository
 import com.appvoyager.litememo.domain.repository.MemoExportArchiveRepository
 import com.appvoyager.litememo.domain.repository.MemoImageStore
 import com.appvoyager.litememo.domain.repository.MemoImportArchiveRepository
 import com.appvoyager.litememo.domain.repository.MemoImportRepository
 import com.appvoyager.litememo.domain.repository.MemoRepository
 import com.appvoyager.litememo.domain.repository.TagRepository
-import com.appvoyager.litememo.domain.repository.UserSettingsRepository
+import com.appvoyager.litememo.domain.repository.TutorialProgressRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -49,10 +51,19 @@ abstract class RepositoryModule {
     abstract fun bindTagRepository(repository: RoomTagRepository): TagRepository
 
     @Binds
-    @Singleton
-    abstract fun bindUserSettingsRepository(
+    abstract fun bindDisplaySettingsRepository(
         repository: DataStoreUserSettingsRepository
-    ): UserSettingsRepository
+    ): DisplaySettingsRepository
+
+    @Binds
+    abstract fun bindAppLockSettingsRepository(
+        repository: DataStoreUserSettingsRepository
+    ): AppLockSettingsRepository
+
+    @Binds
+    abstract fun bindTutorialProgressRepository(
+        repository: DataStoreUserSettingsRepository
+    ): TutorialProgressRepository
 
     @Binds
     @Singleton

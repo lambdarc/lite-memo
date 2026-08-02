@@ -13,7 +13,7 @@ import com.appvoyager.litememo.domain.model.value.SearchQuery
 import com.appvoyager.litememo.domain.model.value.TagId
 import com.appvoyager.litememo.domain.model.value.TimestampMillis
 import com.appvoyager.litememo.domain.model.value.TimestampRange
-import com.appvoyager.litememo.domain.repository.FakeUserSettingsRepository
+import com.appvoyager.litememo.domain.repository.FakeDisplaySettingsRepository
 import com.appvoyager.litememo.domain.repository.MemoRepository
 import com.appvoyager.litememo.domain.tagFixture
 import com.appvoyager.litememo.domain.usecase.ObserveCalendarMonthSummaryUseCase
@@ -34,6 +34,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -119,8 +120,10 @@ class CalendarViewModelTest {
         val state = viewModel.uiState.first { !it.isLoading }
 
         // Assert
-        assertEquals(YearMonth.of(2026, 7), state.selectedMonth)
-        assertEquals(LocalDate.of(2026, 7, 3), state.selectedDate)
+        assertAll(
+            { assertEquals(YearMonth.of(2026, 7), state.selectedMonth) },
+            { assertEquals(LocalDate.of(2026, 7, 3), state.selectedDate) }
+        )
     }
 
     @Test
@@ -368,9 +371,11 @@ class CalendarViewModelTest {
         }
 
         // Assert
-        assertEquals(listOf("Recovered memo"), state.memos.map { it.title })
-        assertEquals(YearMonth.of(2026, 5), state.selectedMonth)
-        assertEquals(LocalDate.of(2026, 5, 15), state.selectedDate)
+        assertAll(
+            { assertEquals(listOf("Recovered memo"), state.memos.map { it.title }) },
+            { assertEquals(YearMonth.of(2026, 5), state.selectedMonth) },
+            { assertEquals(LocalDate.of(2026, 5, 15), state.selectedDate) }
+        )
     }
 
     private fun calendarViewModel(
@@ -379,7 +384,7 @@ class CalendarViewModelTest {
         zone: ZoneId = zoneId
     ): CalendarViewModel {
         val tagRepository = FakeTagRepository(tags)
-        val userSettingsRepository = FakeUserSettingsRepository()
+        val displaySettingsRepository = FakeDisplaySettingsRepository()
         return CalendarViewModel(
             observeCalendarMonthSummaryUseCase = ObserveCalendarMonthSummaryUseCase(
                 memoRepository = memoRepository,
@@ -387,13 +392,13 @@ class CalendarViewModelTest {
             ),
             observeMemosByCalendarDateUseCase = ObserveMemosByCalendarDateUseCase(
                 memoRepository = memoRepository,
-                userSettingsRepository = userSettingsRepository,
+                displaySettingsRepository = displaySettingsRepository,
                 zoneId = zone
             ),
             observeTagsUseCase = ObserveTagsUseCase(tagRepository),
             searchMemosUseCase = SearchMemosUseCase(
                 memoRepository = memoRepository,
-                userSettingsRepository = userSettingsRepository
+                displaySettingsRepository = displaySettingsRepository
             ),
             resolveMemoImagePathUseCase = ResolveMemoImagePathUseCase(FakeMemoImageStore()),
             currentTimeProvider = MutableTimeProvider(TimestampMillis(today)),

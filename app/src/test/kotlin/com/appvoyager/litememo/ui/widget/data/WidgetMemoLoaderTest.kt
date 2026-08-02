@@ -9,6 +9,7 @@ import io.mockk.verify
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -104,8 +105,10 @@ class WidgetMemoLoaderTest {
         val item = loader.loadRecent().single()
 
         // Assert
-        assertEquals("見出し", item.title)
-        assertEquals("本文1 本文2", item.snippet)
+        assertAll(
+            { assertEquals("見出し", item.title) },
+            { assertEquals("本文1 本文2", item.snippet) }
+        )
     }
 
     @Test
@@ -119,8 +122,10 @@ class WidgetMemoLoaderTest {
         val item = loader.loadRecent().single()
 
         // Assert
-        assertEquals("先頭行", item.title)
-        assertEquals("2行目", item.snippet)
+        assertAll(
+            { assertEquals("先頭行", item.title) },
+            { assertEquals("2行目", item.snippet) }
+        )
     }
 
     @Test
@@ -151,8 +156,10 @@ class WidgetMemoLoaderTest {
         val item = loader.loadRecent().single()
 
         // Assert
-        assertEquals("x".repeat(50), item.title)
-        assertEquals("x".repeat(50), item.snippet)
+        assertAll(
+            { assertEquals("x".repeat(50), item.title) },
+            { assertEquals("x".repeat(50), item.snippet) }
+        )
     }
 
     @Test
@@ -197,8 +204,10 @@ class WidgetMemoLoaderTest {
         val item = loader.loadRecent().single()
 
         // Assert
-        assertEquals("a".repeat(49), item.title)
-        assertFalse(item.title.last().isHighSurrogate())
+        assertAll(
+            { assertEquals("a".repeat(49), item.title) },
+            { assertFalse(item.title.last().isHighSurrogate()) }
+        )
     }
 
     @Test
@@ -213,7 +222,9 @@ class WidgetMemoLoaderTest {
         val item = loader.loadRecent().single()
 
         // Assert
-        assertEquals("b".repeat(79), item.snippet)
-        assertFalse(item.snippet.last().isHighSurrogate())
+        assertAll(
+            { assertEquals("b".repeat(79), item.snippet) },
+            { assertFalse(item.snippet.last().isHighSurrogate()) }
+        )
     }
 }

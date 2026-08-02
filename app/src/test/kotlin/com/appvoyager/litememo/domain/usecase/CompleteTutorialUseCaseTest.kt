@@ -1,6 +1,6 @@
 package com.appvoyager.litememo.domain.usecase
 
-import com.appvoyager.litememo.domain.repository.FakeUserSettingsRepository
+import com.appvoyager.litememo.domain.repository.FakeTutorialProgressRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -11,7 +11,7 @@ class CompleteTutorialUseCaseTest {
     @Test
     fun normalPersistsCompletedValue() = runTest {
         // Arrange
-        val repository = FakeUserSettingsRepository()
+        val repository = FakeTutorialProgressRepository()
         val useCase = CompleteTutorialUseCase(repository)
 
         // Act

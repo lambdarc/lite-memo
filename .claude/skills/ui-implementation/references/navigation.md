@@ -11,7 +11,7 @@
 
 - route 名、引数、戻る挙動を明確にする。
 - 遷移先追加時は既存の下部主要導線（`NavigationBar`）と矛盾させない。
-- 結果を伴う遷移は取りこぼさない event 手段で扱う（`one-shot-event.md`）。
+- UI 操作を起点とする遷移は UI callback で扱い、失ってはいけない遷移前の処理結果は UI state に持つ（`one-shot-event.md`）。
 
 ## テスト判断
 
