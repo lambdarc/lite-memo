@@ -1,6 +1,6 @@
-package com.appvoyager.litememo.di
+package com.lambdarc.litememo.di
 
-import com.appvoyager.litememo.data.di.IoDispatcher
+import com.lambdarc.litememo.data.di.IoDispatcher
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

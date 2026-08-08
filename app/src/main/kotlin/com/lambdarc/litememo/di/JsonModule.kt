@@ -1,4 +1,4 @@
-package com.appvoyager.litememo.di
+package com.lambdarc.litememo.di
 
 import dagger.Module
 import dagger.Provides

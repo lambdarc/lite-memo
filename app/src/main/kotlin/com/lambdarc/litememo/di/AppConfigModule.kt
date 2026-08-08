@@ -1,7 +1,7 @@
-package com.appvoyager.litememo.di
+package com.lambdarc.litememo.di
 
-import com.appvoyager.litememo.BuildConfig
-import com.appvoyager.litememo.data.export.MemoArchiveLimits
+import com.lambdarc.litememo.BuildConfig
+import com.lambdarc.litememo.data.export.MemoArchiveLimits
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

@@ -1,4 +1,4 @@
-package com.appvoyager.litememo
+package com.lambdarc.litememo
 
 import android.app.Application
 import android.content.Context

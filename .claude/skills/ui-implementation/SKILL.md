@@ -12,9 +12,9 @@ Lite Memo の UI 層を、既存の Compose / MVVM 構成に沿って変更す�
 - [`docs/architecture.md`](../../../docs/architecture.md)
 - [`docs/implementation-guidelines.md`](../../../docs/implementation-guidelines.md)
 - [`docs/unit-test.md`](../../../docs/unit-test.md)
-- [`app/src/main/kotlin/com/appvoyager/litememo/ui/`](../../../app/src/main/kotlin/com/appvoyager/litememo/ui/)
+- [`app/src/main/kotlin/com/lambdarc/litememo/ui/`](../../../app/src/main/kotlin/com/lambdarc/litememo/ui/)
 - [`app/src/main/res/values/strings.xml`](../../../app/src/main/res/values/strings.xml)
-- 必要に応じて [`app/src/androidTest/kotlin/com/appvoyager/litememo/ui/`](../../../app/src/androidTest/kotlin/com/appvoyager/litememo/ui/)
+- 必要に応じて [`app/src/androidTest/kotlin/com/lambdarc/litememo/ui/`](../../../app/src/androidTest/kotlin/com/lambdarc/litememo/ui/)
 
 # 役割クラスと参照先
 

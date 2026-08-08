@@ -12,9 +12,9 @@ Lite Memo の Room schema と migration を、既存 DB 構成とテストに沿
 - [`docs/architecture.md`](../../../docs/architecture.md)
 - [`docs/implementation-guidelines.md`](../../../docs/implementation-guidelines.md)
 - [`docs/unit-test.md`](../../../docs/unit-test.md)
-- [`app/src/main/kotlin/com/appvoyager/litememo/data/local/`](../../../app/src/main/kotlin/com/appvoyager/litememo/data/local/)
+- [`app/src/main/kotlin/com/lambdarc/litememo/data/local/`](../../../app/src/main/kotlin/com/lambdarc/litememo/data/local/)
 - [`app/schemas/`](../../../app/schemas/)
-- [`app/src/androidTest/kotlin/com/appvoyager/litememo/data/local/`](../../../app/src/androidTest/kotlin/com/appvoyager/litememo/data/local/)
+- [`app/src/androidTest/kotlin/com/lambdarc/litememo/data/local/`](../../../app/src/androidTest/kotlin/com/lambdarc/litememo/data/local/)
 
 # 役割クラスと参照先
 

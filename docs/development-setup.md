@@ -24,8 +24,8 @@ bundle install
 Crashlytics は `dev` / `prod` の両方に導入済みです。
 Firebase 設定ファイルは flavor ごとに配置します。
 
-- `app/src/dev/google-services.json`: `com.appvoyager.litememo.dev`
-- `app/src/prod/google-services.json`: `com.appvoyager.litememo`
+- `app/src/dev/google-services.json`: `com.lambdarc.litememo.dev`
+- `app/src/prod/google-services.json`: `com.lambdarc.litememo`
 
 `app/google-services.json` は全 variant の fallback になるため、flavor 固有の設定ファイルは `src/<flavor>/` 配下に置きます。
 release ビルドは R8 対象で、Crashlytics Gradle Plugin が release variant の mapping file upload task を生成します。

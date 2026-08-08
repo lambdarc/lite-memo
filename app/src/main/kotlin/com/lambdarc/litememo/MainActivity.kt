@@ -1,4 +1,4 @@
-package com.appvoyager.litememo
+package com.lambdarc.litememo
 
 import android.content.Intent
 import android.os.Bundle
@@ -21,15 +21,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.appvoyager.litememo.domain.model.ThemeMode
-import com.appvoyager.litememo.ui.auth.AppLockAuthenticator
-import com.appvoyager.litememo.ui.navigation.LiteMemoApp
-import com.appvoyager.litememo.ui.screen.AppLockScreen
-import com.appvoyager.litememo.ui.screen.TutorialScreen
-import com.appvoyager.litememo.ui.state.TutorialUiStatus
-import com.appvoyager.litememo.ui.theme.LiteMemoTheme
-import com.appvoyager.litememo.ui.viewmodel.MainViewModel
-import com.appvoyager.litememo.ui.widget.common.WidgetLaunchIntents
+import com.lambdarc.litememo.domain.model.ThemeMode
+import com.lambdarc.litememo.ui.auth.AppLockAuthenticator
+import com.lambdarc.litememo.ui.navigation.LiteMemoApp
+import com.lambdarc.litememo.ui.screen.AppLockScreen
+import com.lambdarc.litememo.ui.screen.TutorialScreen
+import com.lambdarc.litememo.ui.state.TutorialUiStatus
+import com.lambdarc.litememo.ui.theme.LiteMemoTheme
+import com.lambdarc.litememo.ui.viewmodel.MainViewModel
+import com.lambdarc.litememo.ui.widget.common.WidgetLaunchIntents
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 

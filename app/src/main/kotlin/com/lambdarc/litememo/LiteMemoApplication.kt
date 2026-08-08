@@ -1,14 +1,14 @@
-package com.appvoyager.litememo
+package com.lambdarc.litememo
 
 import android.app.Application
 import android.util.Log
-import com.appvoyager.litememo.di.ApplicationScope
-import com.appvoyager.litememo.domain.repository.MemoExportArchiveRepository
-import com.appvoyager.litememo.domain.repository.MemoImportArchiveRepository
-import com.appvoyager.litememo.domain.usecase.ObserveRecentMemosUseCase
-import com.appvoyager.litememo.ui.widget.data.WidgetMemoLoader
-import com.appvoyager.litememo.ui.widget.data.WidgetRefresher
 import com.google.android.gms.ads.MobileAds
+import com.lambdarc.litememo.di.ApplicationScope
+import com.lambdarc.litememo.domain.repository.MemoExportArchiveRepository
+import com.lambdarc.litememo.domain.repository.MemoImportArchiveRepository
+import com.lambdarc.litememo.domain.usecase.ObserveRecentMemosUseCase
+import com.lambdarc.litememo.ui.widget.data.WidgetMemoLoader
+import com.lambdarc.litememo.ui.widget.data.WidgetRefresher
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
