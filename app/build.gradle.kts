@@ -31,7 +31,7 @@ val keystoreProperties =
     }
 
 android {
-    namespace = "com.appvoyager.litememo"
+    namespace = "com.lambdarc.litememo"
     compileSdk {
         version =
             release(36) {
@@ -40,13 +40,13 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.appvoyager.litememo"
+        applicationId = "com.lambdarc.litememo"
         minSdk = 28
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "com.appvoyager.litememo.HiltTestRunner"
+        testInstrumentationRunner = "com.lambdarc.litememo.HiltTestRunner"
     }
 
     signingConfigs {
@@ -128,22 +128,22 @@ kover {
                 // Keep PR coverage focused on classes that are exercised by JVM unit tests.
                 // UI classes are selected by responsibility so package-only refactors do not change coverage scope.
                 classes(
-                    "com.appvoyager.litememo.data.local.entity.*",
-                    "com.appvoyager.litememo.data.local.model.*",
-                    "com.appvoyager.litememo.data.mapper.*",
-                    "com.appvoyager.litememo.data.model.export.*",
-                    "com.appvoyager.litememo.data.repository.*",
-                    "com.appvoyager.litememo.domain.model.*",
-                    "com.appvoyager.litememo.domain.model.value.*",
-                    "com.appvoyager.litememo.domain.usecase.*",
-                    "com.appvoyager.litememo.ui.*.*ViewModel*",
-                    "com.appvoyager.litememo.ui.*.*UiDirection*",
-                    "com.appvoyager.litememo.ui.*.*UiMessage*",
-                    "com.appvoyager.litememo.ui.*.*UiModel*",
-                    "com.appvoyager.litememo.ui.*.*UiResult*",
-                    "com.appvoyager.litememo.ui.*.*UiState*",
-                    "com.appvoyager.litememo.ui.*.*UiStatus*",
-                    "com.appvoyager.litememo.ui.*.*UiType*"
+                    "com.lambdarc.litememo.data.local.entity.*",
+                    "com.lambdarc.litememo.data.local.model.*",
+                    "com.lambdarc.litememo.data.mapper.*",
+                    "com.lambdarc.litememo.data.model.export.*",
+                    "com.lambdarc.litememo.data.repository.*",
+                    "com.lambdarc.litememo.domain.model.*",
+                    "com.lambdarc.litememo.domain.model.value.*",
+                    "com.lambdarc.litememo.domain.usecase.*",
+                    "com.lambdarc.litememo.ui.*.*ViewModel*",
+                    "com.lambdarc.litememo.ui.*.*UiDirection*",
+                    "com.lambdarc.litememo.ui.*.*UiMessage*",
+                    "com.lambdarc.litememo.ui.*.*UiModel*",
+                    "com.lambdarc.litememo.ui.*.*UiResult*",
+                    "com.lambdarc.litememo.ui.*.*UiState*",
+                    "com.lambdarc.litememo.ui.*.*UiStatus*",
+                    "com.lambdarc.litememo.ui.*.*UiType*"
                 )
             }
         }

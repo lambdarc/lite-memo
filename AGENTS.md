@@ -33,7 +33,7 @@ Codex 向け skill は `.agents/skills/` で管理する。Claude Code 向けの
 ## 最低限の前提
 
 - Lite Memo は Android 向けの軽量メモアプリ
-- パッケージ名は `com.appvoyager.litememo`
+- パッケージ名は `com.lambdarc.litememo`
 - メインモジュールは `:app`
 - UI は Kotlin / Jetpack Compose / Material 3 を軸にする
 - 構造は Clean Architecture + MVVM を軸にする

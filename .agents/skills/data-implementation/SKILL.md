@@ -12,8 +12,8 @@ Lite Memo の data 層で、domain の interface を既存データ源に接続�
 - [`docs/architecture.md`](../../../docs/architecture.md)
 - [`docs/implementation-guidelines.md`](../../../docs/implementation-guidelines.md)
 - [`docs/unit-test.md`](../../../docs/unit-test.md)
-- [`app/src/main/kotlin/com/appvoyager/litememo/data/`](../../../app/src/main/kotlin/com/appvoyager/litememo/data/)
-- 関連する [`app/src/test/kotlin/com/appvoyager/litememo/data/`](../../../app/src/test/kotlin/com/appvoyager/litememo/data/) と [`app/src/androidTest/kotlin/com/appvoyager/litememo/data/`](../../../app/src/androidTest/kotlin/com/appvoyager/litememo/data/)
+- [`app/src/main/kotlin/com/lambdarc/litememo/data/`](../../../app/src/main/kotlin/com/lambdarc/litememo/data/)
+- 関連する [`app/src/test/kotlin/com/lambdarc/litememo/data/`](../../../app/src/test/kotlin/com/lambdarc/litememo/data/) と [`app/src/androidTest/kotlin/com/lambdarc/litememo/data/`](../../../app/src/androidTest/kotlin/com/lambdarc/litememo/data/)
 
 # 役割クラスと参照先
 

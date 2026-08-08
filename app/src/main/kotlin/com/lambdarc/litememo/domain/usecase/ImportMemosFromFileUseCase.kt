@@ -1,0 +1,37 @@
+package com.lambdarc.litememo.domain.usecase
+
+import com.lambdarc.litememo.domain.model.value.ExportFileReference
+import com.lambdarc.litememo.domain.repository.MemoImportArchiveRepository
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
+
+class ImportMemosFromFileUseCase @Inject constructor(
+    private val memoImportArchiveRepository: MemoImportArchiveRepository,
+    private val importMemosUseCase: ImportMemosUseCase
+) {
+
+    suspend operator fun invoke(reference: ExportFileReference) {
+        importArchive(reference)
+    }
+
+    private suspend fun importArchive(reference: ExportFileReference) {
+        val staged = memoImportArchiveRepository.stageImportImages(reference)
+        val failure = runCatching { importMemosUseCase(staged.data) }.exceptionOrNull()
+        if (failure != null) {
+            val rollbackFailure = runCatching {
+                withContext(NonCancellable) {
+                    memoImportArchiveRepository.rollbackStagedImport(staged.token)
+                }
+            }.exceptionOrNull()
+            if (rollbackFailure != null && rollbackFailure !== failure) {
+                failure.addSuppressed(rollbackFailure)
+            }
+            throw failure
+        }
+        withContext(NonCancellable) {
+            memoImportArchiveRepository.completeStagedImport(staged.token)
+        }
+    }
+
+}

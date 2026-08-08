@@ -11,7 +11,7 @@ Lite Memo は Android 向けの軽量メモアプリです。
 
 現在の基本情報:
 
-- パッケージ名: `com.appvoyager.litememo`
+- パッケージ名: `com.lambdarc.litememo`
 - ルートプロジェクト名: `Lite Memo`
 - メインモジュール: `:app`
 - ビルドフレーバー: `dev` / `prod`
@@ -27,7 +27,7 @@ Lite Memo は Android 向けの軽量メモアプリです。
 ## 主な確認先
 
 - `app/`: Android アプリ本体
-- `app/src/main/kotlin/com/appvoyager/litememo/`: Kotlin ソース
+- `app/src/main/kotlin/com/lambdarc/litememo/`: Kotlin ソース
   - `ui/`: Compose 画面、ViewModel、UI state、ナビゲーション、テーマ
   - `domain/`: model、値オブジェクト、UseCase、Repository interface、provider
   - `data/`: Repository 実装、Room、DataStore、mapper、データ層の Hilt module、Export/Import

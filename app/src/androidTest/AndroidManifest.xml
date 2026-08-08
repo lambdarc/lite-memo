@@ -3,8 +3,8 @@
 
     <application>
         <provider
-            android:name="com.appvoyager.litememo.data.export.NonTruncatingExportTestProvider"
-            android:authorities="com.appvoyager.litememo.test.nontruncating"
+            android:name="com.lambdarc.litememo.data.export.NonTruncatingExportTestProvider"
+            android:authorities="com.lambdarc.litememo.test.nontruncating"
             android:exported="true" />
     </application>
 
