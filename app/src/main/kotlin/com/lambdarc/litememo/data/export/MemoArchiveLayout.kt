@@ -2,7 +2,6 @@ package com.lambdarc.litememo.data.export
 
 internal object MemoArchiveLayout {
 
-    const val VERSION = 1
     const val MANIFEST_ENTRY_NAME = "manifest.json"
 
     private const val IMAGE_ENTRY_PREFIX = "images/"

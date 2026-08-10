@@ -5,12 +5,14 @@
 
 ## 実行条件
 
-- draft ではない Pull Request は、base branch にかかわらず CI の対象とする
+- draft ではない Pull Request は、base branch にかかわらず `ci.yml` の対象とする
+- CodeQL は `develop` / `main` を base にする Pull Request だけを対象とする
 - `develop` / `main` を base にする Pull Request では、静的解析と JVM Unit Test に加えて release / R8 build を検証する
-- coverage は draft ではない Pull Request と、`main` への push で計測する
-- draft の Pull Request は全 job を skip し、ready for review にした時点で CI と CodeQL を開始する
+- `ci.yml` と CodeQL の push 検証は `main` だけを対象とし、`develop` への push では実行しない
+- coverage は draft ではない Pull Request と、`main` への push で生成する。PR コメントは同一リポジトリからの Pull Request にだけ追加する
+- draft の Pull Request は全 job を skip し、ready for review にした時点で CI を開始する。CodeQL は base が `develop` / `main` の場合だけ開始する
 - ready for review から draft に戻した場合は、実行中の Pull Request の検証を中断する
-- Pull Request の `closed` event は workflow の起動対象に含めない。merge 後は base branch への push だけで検証し、Pull Request と push の二重実行を防ぐ
+- Pull Request の `closed` event は workflow の起動対象に含めない。`main` への merge 後は push で検証し、`develop` への merge 後は push では検証しない
 
 ## job 構成
 

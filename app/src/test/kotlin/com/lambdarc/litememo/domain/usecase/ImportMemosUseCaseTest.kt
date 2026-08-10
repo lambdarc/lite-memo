@@ -290,7 +290,7 @@ class ImportMemosUseCaseTest {
 
     private fun exportData(tags: List<Tag> = emptyList(), memos: List<Memo> = emptyList()) =
         ExportData(
-            version = ExportMemosUseCase.CURRENT_VERSION,
+            version = ExportData.CURRENT_VERSION,
             exportedAt = TimestampMillis(1000L),
             tags = tags,
             memos = memos

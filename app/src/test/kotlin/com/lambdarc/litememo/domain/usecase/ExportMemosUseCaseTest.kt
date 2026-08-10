@@ -4,6 +4,7 @@ import com.lambdarc.litememo.domain.FakeMemoRepository
 import com.lambdarc.litememo.domain.FakeTagRepository
 import com.lambdarc.litememo.domain.MutableTimeProvider
 import com.lambdarc.litememo.domain.memoFixture
+import com.lambdarc.litememo.domain.model.ExportData
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.tagFixture
 import kotlinx.coroutines.test.runTest
@@ -69,7 +70,7 @@ class ExportMemosUseCaseTest {
 
         // Assert
         assertAll(
-            { assertEquals(ExportMemosUseCase.CURRENT_VERSION, result.version) },
+            { assertEquals(ExportData.CURRENT_VERSION, result.version) },
             { assertEquals(now, result.exportedAt) }
         )
     }

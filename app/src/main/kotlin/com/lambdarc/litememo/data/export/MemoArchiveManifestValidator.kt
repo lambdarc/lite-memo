@@ -2,6 +2,7 @@ package com.lambdarc.litememo.data.export
 
 import com.lambdarc.litememo.data.model.export.LiteMemoExportDto
 import com.lambdarc.litememo.data.model.export.MemoImageExportDto
+import com.lambdarc.litememo.domain.model.ExportData
 import com.lambdarc.litememo.domain.model.value.MemoId
 import com.lambdarc.litememo.domain.model.value.MemoImageId
 import com.lambdarc.litememo.domain.model.value.TagColor
@@ -12,7 +13,7 @@ import com.lambdarc.litememo.domain.model.value.TimestampMillis
 internal object MemoArchiveManifestValidator {
 
     fun validate(manifest: LiteMemoExportDto, limits: MemoArchiveLimits) {
-        if (manifest.version != MemoArchiveLayout.VERSION) {
+        if (manifest.version != ExportData.CURRENT_VERSION) {
             archiveFailure(
                 MemoArchiveFailureReason.UNSUPPORTED_VERSION,
                 "Unsupported archive version: ${manifest.version}."

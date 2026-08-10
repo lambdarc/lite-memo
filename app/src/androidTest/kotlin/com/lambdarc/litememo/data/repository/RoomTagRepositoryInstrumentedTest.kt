@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lambdarc.litememo.data.local.LiteMemoDatabase
+import com.lambdarc.litememo.data.local.dao.SQLITE_QUERY_PARAMETER_BATCH_SIZE
 import com.lambdarc.litememo.data.local.entity.TagEntity
 import com.lambdarc.litememo.domain.exception.DuplicateTagNameException
 import com.lambdarc.litememo.domain.model.Tag
@@ -121,6 +122,24 @@ class RoomTagRepositoryInstrumentedTest {
 
         // Assert
         assertEquals(listOf("tag-1", "tag-2"), storedIds.sorted())
+    }
+
+    @Test
+    fun boundaryGetTagsByIdsHandlesMoreThanSqliteParameterLimitWithRealRoom() = runTest {
+        // Arrange
+        val storedTags = List(SQLITE_QUERY_PARAMETER_BATCH_SIZE + 1) { index ->
+            val suffix = index.toString().padStart(length = 4, padChar = '0')
+            tagEntity(id = "tag-$suffix", name = "Tag $suffix")
+        }
+        database.tagDao().insertOrUpdateAllTags(storedTags)
+        val requestedIds = storedTags.asReversed().map { TagId(it.id) }
+
+        // Act
+        // Boundary: the repository splits a request larger than SQLite's parameter limit.
+        val tags = repository.getTagsByIds(requestedIds)
+
+        // Assert
+        assertEquals(requestedIds, tags.map { it.id })
     }
 
     private fun tag(id: String, name: String, colorArgb: Long = 0xFF6750A4) = Tag(
