@@ -70,7 +70,8 @@ Lite Memo は Android 向けの軽量メモアプリです。
 - kotlinx.serialization（ZIP内のmanifest JSONに使用。単独JSON形式のExport / Importは非対応）
 
 Room / DataStore の使い分けは [`docs/architecture.md`](architecture.md) の Data 方針を、
-テーブル構成とクエリの制約は [`docs/data-model.md`](data-model.md) を正本とします。
+テーブル構成とクエリの制約は [`docs/data-model.md`](data-model.md) を、
+ZIP アーカイブの形式は [`docs/export-import-format.md`](export-import-format.md) を正本とします。
 
 ### Security
 
