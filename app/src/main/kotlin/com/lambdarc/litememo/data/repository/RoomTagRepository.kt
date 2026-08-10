@@ -1,6 +1,7 @@
 package com.lambdarc.litememo.data.repository
 
 import android.database.sqlite.SQLiteConstraintException
+import com.lambdarc.litememo.data.local.dao.SQLITE_QUERY_PARAMETER_BATCH_SIZE
 import com.lambdarc.litememo.data.local.dao.TagDao
 import com.lambdarc.litememo.data.mapper.toDomain
 import com.lambdarc.litememo.data.mapper.toEntity
@@ -26,7 +27,9 @@ class RoomTagRepository @Inject constructor(private val tagDao: TagDao) : TagRep
     override suspend fun getTagsByIds(ids: List<TagId>): List<Tag> {
         if (ids.isEmpty()) return emptyList()
 
-        val tagsById = tagDao.getTagsByIds(ids.map { it.value })
+        val tagsById = ids.map { it.value }
+            .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
+            .flatMap { batch -> tagDao.getTagsByIds(batch) }
             .associateBy { it.id }
         return ids.mapNotNull { id -> tagsById[id.value]?.toDomain() }
     }

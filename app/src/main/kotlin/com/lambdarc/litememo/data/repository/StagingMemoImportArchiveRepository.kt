@@ -7,6 +7,7 @@ import com.lambdarc.litememo.data.export.MemoImportArchiveExtractor
 import com.lambdarc.litememo.data.export.MemoImportSessionDataSource
 import com.lambdarc.litememo.data.image.MemoImageFileDataSource
 import com.lambdarc.litememo.data.local.dao.MemoDao
+import com.lambdarc.litememo.data.local.dao.SQLITE_QUERY_PARAMETER_BATCH_SIZE
 import com.lambdarc.litememo.data.mapper.toDomain
 import com.lambdarc.litememo.data.model.export.LiteMemoExportDto
 import com.lambdarc.litememo.domain.exception.MemoImportException
@@ -112,7 +113,7 @@ class StagingMemoImportArchiveRepository @Inject constructor(
             .listImageFileNamesStartingWith(importedFileNamePrefix(token))
         if (fileNames.isEmpty()) return
 
-        val referenced = fileNames.chunked(NAME_QUERY_CHUNK_SIZE)
+        val referenced = fileNames.chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
             .flatMap { chunk -> memoDao.findReferencedImageFileNames(chunk) }
             .toSet()
         fileNames.filterNot { it in referenced }
@@ -137,7 +138,6 @@ class StagingMemoImportArchiveRepository @Inject constructor(
         "${token.value}$IMPORTED_FILE_NAME_SEPARATOR"
 
     private companion object {
-        const val NAME_QUERY_CHUNK_SIZE = 900
         const val IMAGE_NUMBER_LENGTH = 8
         const val MAX_EXTENSION_LENGTH = 8
         const val FALLBACK_EXTENSION = "img"

@@ -3,6 +3,7 @@ package com.lambdarc.litememo.data.repository
 import androidx.room.withTransaction
 import com.lambdarc.litememo.data.local.LiteMemoDatabase
 import com.lambdarc.litememo.data.local.dao.MemoDao
+import com.lambdarc.litememo.data.local.dao.SQLITE_QUERY_PARAMETER_BATCH_SIZE
 import com.lambdarc.litememo.data.local.dao.TagDao
 import com.lambdarc.litememo.data.local.entity.MemoEntity
 import com.lambdarc.litememo.data.local.entity.TagEntity
@@ -17,8 +18,6 @@ import com.lambdarc.litememo.domain.model.value.TagName
 import com.lambdarc.litememo.domain.repository.MemoImageStore
 import com.lambdarc.litememo.domain.repository.MemoImportRepository
 import javax.inject.Inject
-
-private const val NAME_QUERY_CHUNK_SIZE = 900
 
 class RoomMemoImportRepository @Inject constructor(
     private val memoDao: MemoDao,
@@ -58,7 +57,7 @@ class RoomMemoImportRepository @Inject constructor(
         val importedTagIds = data.tags.mapTo(mutableSetOf()) { it.id.value }
         return data.tags.map { it.name.value }
             .distinct()
-            .chunked(NAME_QUERY_CHUNK_SIZE)
+            .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
             .flatMap { names -> tagDao.findTagsByNames(names) }
             .filterNot { it.id in importedTagIds }
             .map { TagName(it.name) }

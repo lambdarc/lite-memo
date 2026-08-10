@@ -43,15 +43,11 @@ interface TagDao {
         if (tags.isEmpty()) return
 
         val existingIds = tags.map { it.id }
-            .chunked(ID_QUERY_CHUNK_SIZE)
+            .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
             .flatMapTo(mutableSetOf()) { ids -> getTagsByIds(ids).map { it.id } }
         val (existing, added) = tags.partition { it.id in existingIds }
         if (added.isNotEmpty()) insertTags(added)
         if (existing.isNotEmpty()) updateTags(existing)
-    }
-
-    companion object {
-        private const val ID_QUERY_CHUNK_SIZE = 900
     }
 
 }
