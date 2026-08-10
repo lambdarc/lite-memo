@@ -7,6 +7,7 @@ Lite Memo で Codex が最初に読む入口です。
 
 - [`docs/project-overview.md`](docs/project-overview.md): プロジェクト概要 / 主要な確認先 / 技術スタック
 - [`docs/architecture.md`](docs/architecture.md): Clean Architecture / MVVM の構造方針
+- [`docs/data-model.md`](docs/data-model.md): Room のテーブル構成 / 論理削除 / クエリの制約
 - [`docs/implementation-guidelines.md`](docs/implementation-guidelines.md): 実装時の基本方針
 - [`docs/development-setup.md`](docs/development-setup.md): 開発環境セットアップ / Git フック / 静的解析 / ローカル検証
 - [`docs/ci.md`](docs/ci.md): CI の実行条件 / job 構成 / カバレッジ / キャッシュ / 命名規約
