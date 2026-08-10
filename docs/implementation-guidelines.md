@@ -57,7 +57,7 @@
 
 ## Test
 
-- Unit Test の方針は `docs/unit-test.md` を確認する
+- Unit Test の方針は [`docs/unit-test.md`](unit-test.md) を確認する
 
 ## Localization
 

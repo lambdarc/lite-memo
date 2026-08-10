@@ -32,7 +32,12 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
   - `theme`: Compose / Material 3 テーマ
   - `widget`: ViewModel / Route とは別の UI entry point である Glance ウィジェット。機能内では `common` / `data` / `di` とウィジェット別パッケージに分けてよい
 
-画面固有の callback 集約、event、補助 data class、enum、test tag は、所有する `screen` / `route` / `viewmodel` / `state` / `model` / `component` へ置きます。UI state / result / event は、それぞれ `XxxUiState` / `XxxUiResult` / `XxxUiEvent` と命名します。複数箇所から参照する契約は主要な役割パッケージ内で独立ファイルにし、所有者だけが使う小型型は所有者ファイルへまとめます。
+  画面固有の callback 集約、event、補助 data class、enum、test tag は、
+  所有する `screen` / `route` / `viewmodel` / `state` / `model` / `component` へ置きます。
+  UI state / result / event は、それぞれ `XxxUiState` / `XxxUiResult` / `XxxUiEvent` と命名します。
+  複数箇所から参照する契約は主要な役割パッケージ内で独立ファイルにし、
+  所有者だけが使う小型型は所有者ファイルへまとめます。
+
 - `domain`: Android Framework に依存しないビジネスロジック
   - `model` / `model/value`: ドメインモデルと値オブジェクト
   - `usecase`: ビジネス上の操作を表す UseCase

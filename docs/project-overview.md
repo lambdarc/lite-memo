@@ -82,7 +82,7 @@ Room / DataStore の使い分けは [`docs/architecture.md`](architecture.md) �
 
 ### Test
 
-- JUnit Jupiter 6.x（JVM Unit Test）
+- JUnit Jupiter（JVM Unit Test）
 - kotlinx-coroutines-test（`runTest`）
 - MockK（モック）
 - Turbine（`StateFlow` / event stream の検証）
@@ -90,17 +90,18 @@ Room / DataStore の使い分けは [`docs/architecture.md`](architecture.md) �
 - Compose UI Test / Espresso / Room testing（instrumented test）
 - Kover（カバレッジ計測）
 
+テストの方針は [`docs/unit-test.md`](unit-test.md) を、カバレッジの集計対象は [`docs/ci.md`](ci.md) を正本とします。
+
 ### Build
 
-- JDK 17（jvmToolchain）
-- compileSdk 36.1 / minSdk 28 / targetSdk 36
 - release ビルド: R8 minify + リソース圧縮 + ProGuard
 - Crashlytics Gradle Plugin（release の mapping file upload）
 - KtLint（コード整形）
 - detekt（静的解析。書き方・複雑度 + Compose 特化ルール `io.nlopez.compose.rules`）
 - Android Lint（Android 特有の問題検出）
 
-各ツールの役割分担としきい値は [`docs/development-setup.md`](development-setup.md) の静的解析を正本とします。
+JDK と SDK レベルの前提、各ツールの役割分担としきい値は
+[`docs/development-setup.md`](development-setup.md) を正本とします。
 
 ### CI
 
@@ -111,8 +112,8 @@ Room / DataStore の使い分けは [`docs/architecture.md`](architecture.md) �
   - CodeQL、Dependabot
 - fastlane（ローカル / CI の検証コマンドを実行）
 
-実行コマンドと lane の正本は [`docs/development-setup.md`](development-setup.md) と
-[`fastlane/Fastfile`](../fastlane/Fastfile) を確認してください。
+CI の実行条件と job 構成は [`docs/ci.md`](ci.md) を、ローカルの実行コマンドと lane は
+[`docs/development-setup.md`](development-setup.md) と [`fastlane/Fastfile`](../fastlane/Fastfile) を正本とします。
 
 ### Monetization / Release
 
@@ -134,4 +135,4 @@ Room / DataStore の使い分けは [`docs/architecture.md`](architecture.md) �
 
 - まず Gradle とソースを見て、現在導入済みのものを確認する
 - 既存構成を優先し、必要以上に大きな再編をしない
-- 構造方針は Clean Architecture + MVVM とし、詳細は `docs/architecture.md` を確認する
+- 構造方針は Clean Architecture + MVVM とし、詳細は [`docs/architecture.md`](architecture.md) を確認する
