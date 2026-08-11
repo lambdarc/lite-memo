@@ -42,6 +42,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         appLockAuthenticator = AppLockAuthenticator(this)
+        mainViewModel.onAuthenticationHostRecreated()
         enableEdgeToEdge()
         observeAuthenticationRequests()
         observeSecureScreen()
