@@ -78,12 +78,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun onAuthenticationHostRecreated() {
-        if (_appLockUiState.value.status == AppLockUiStatus.AUTHENTICATING) {
-            _appLockUiState.value = AppLockUiState(status = AppLockUiStatus.LOCKED)
-        }
-    }
-
     fun requestUnlock() {
         if (appLockEnabled != true) return
         if (_appLockUiState.value.status == AppLockUiStatus.AUTHENTICATING) return

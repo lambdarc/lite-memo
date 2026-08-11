@@ -74,18 +74,23 @@ API 30 未満の生体認証のみの経路では、利用者にロックアウ�
 ## 実装上の制約
 
 - `BiometricPrompt` は `FragmentActivity` と `ActivityResultLauncher` を要求するため、`AppLockAuthenticator` は ViewModel ではなく `ui/auth` に置く。ViewModel からは要求イベントを送り、Activity 側が受けて認証を実行する
-- `AppLockAuthenticator` は `onCreate` で作り直す。前の認証のコールバックは引き継がないため、認証中に再生成された状態は後述の手順で戻す
+- `AppLockAuthenticator` は `onCreate` で作り直すが、認証シートと結果の受け渡しは androidx 側が Activity 再生成をまたいで保つ
 - ごみ箱の期限切れ削除は、解錠の成功時と、アプリロックが無効だと分かった時点が入口になる。画面の描画完了とは連動しない
 - この削除の 1 回制限は `MainViewModel` のフィールドで持つ。保証されるのは ViewModel インスタンス単位であり、プロセス単位ではない
 - `MainActivity` は `singleTop` のため、ウィジェットからの起動では `onNewIntent` が呼ばれる。ロックの状態機械は Activity の生存期間に紐づくため、この経路では初期化されない
 
-認証中の Activity 再生成は、状態が取り残されないよう明示的に処理します。
+認証中に Activity が再生成されても、認証はやり直しになりません。
 
 `AppLockAuthenticator` は `BiometricPrompt` を `authenticate()` の中で生成するため、
 再生成後の新しいインスタンスには前の認証の情報が残りません。
-一方で認証中という状態は `MainViewModel` に残ります。
-この状態のままだと `onAppStarted()` も `requestUnlock()` も何もしないため、再認証を要求できなくなります。
+それでも androidx の `BiometricPrompt` が内部で認証シートを復元し、
+結果は再生成前に登録されたコールバックへ届きます。
+`MainViewModel` は再生成をまたいで生きているため、そこから状態も更新されます。
 
-そのため `MainActivity.onCreate` で `onAuthenticationHostRecreated()` を呼び、
-認証中であればロック中へ戻します。直後の `onStart()` が改めて認証を要求します。
-認証中以外の状態は変更しません。
+画面回転で確認しています。認証シートを表示した状態で回転させると、
+横画面向けのシートへ切り替わったうえで解錠まで進みます。
+認証中の状態が取り残されて解錠できなくなることはありません。
+
+コードだけを読むと、`AppLockAuthenticator` が認証中の情報を持たないまま作り直されるため、
+`onAppStarted()` も `requestUnlock()` も認証中は何もしないことと合わせて、
+解錠できなくなるように見えます。実際には androidx 側が復元するため、その状態にはなりません。

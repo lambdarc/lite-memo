@@ -287,58 +287,6 @@ class MainViewModelTest {
         }
 
     @Test
-    fun stateTransitionAuthenticationHostRecreatedRestoresLockWhileAuthenticating() =
-        runTest(dispatcher) {
-            // Arrange
-            val repository = FakeUserSettingsRepository()
-            repository.setAppLockEnabled(true)
-            val viewModel = mainViewModel(repository)
-            advanceUntilIdle()
-
-            // Act
-            // StateTransition: a recreated host can no longer deliver the pending result
-            viewModel.onAuthenticationHostRecreated()
-
-            // Assert
-            assertEquals(AppLockUiStatus.LOCKED, viewModel.appLockUiState.value.status)
-        }
-
-    @Test
-    fun stateTransitionAppStartRequestsUnlockAfterAuthenticationHostRecreated() =
-        runTest(dispatcher) {
-            // Arrange
-            val repository = FakeUserSettingsRepository()
-            repository.setAppLockEnabled(true)
-            val viewModel = mainViewModel(repository)
-            advanceUntilIdle()
-            viewModel.onAuthenticationHostRecreated()
-
-            // Act
-            // StateTransition: the restored lock lets the next start ask for authentication again
-            viewModel.onAppStarted()
-
-            // Assert
-            assertEquals(AppLockUiStatus.AUTHENTICATING, viewModel.appLockUiState.value.status)
-        }
-
-    @Test
-    fun boundaryAuthenticationHostRecreatedKeepsUnlockedState() = runTest(dispatcher) {
-        // Arrange
-        val repository = FakeUserSettingsRepository()
-        repository.setAppLockEnabled(true)
-        val viewModel = mainViewModel(repository)
-        advanceUntilIdle()
-        viewModel.onAuthenticationResult(AppLockAuthenticationUiResult.SUCCEEDED)
-
-        // Act
-        // Boundary: recreation outside authentication leaves the status untouched
-        viewModel.onAuthenticationHostRecreated()
-
-        // Assert
-        assertEquals(AppLockUiStatus.UNLOCKED, viewModel.appLockUiState.value.status)
-    }
-
-    @Test
     fun stateTransitionTutorialStartsVisibleWhenNotCompleted() = runTest(dispatcher) {
         // Arrange
         val viewModel = mainViewModel(FakeUserSettingsRepository())
