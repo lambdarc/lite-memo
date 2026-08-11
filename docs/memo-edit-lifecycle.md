@@ -10,8 +10,8 @@ UI / MVVM の配置は [`docs/architecture.md`](architecture.md) を、Room と�
 ## 責務
 
 - `MemoEditRoute` は画面 lifecycle、戻る操作、画像 picker、Navigation、エラー表示を ViewModel へ接続する
-- `MemoEditViewModel` は編集セッション、autosave、終了条件、一時画像の所有状態を管理する
-- `SaveMemoUseCase` は空メモの拒否、タグの存在確認、id と timestamp を含む保存内容の確定を行う
+- `MemoEditViewModel` は編集セッション、autosave、終了条件、一時画像の所有状態を管理し、空の状態を保存処理へ渡さない
+- `SaveMemoUseCase` は直接呼び出された場合にも空メモを拒否し、タグの存在確認、id と timestamp を含む保存内容の確定を行う
 - `MemoRepository` は Room transaction と、保存済み画像の参照差分に基づくファイル削除を行う
 
 Compose のレイアウトや表示文言は、この文書の対象に含めません。
@@ -61,7 +61,9 @@ Compose のレイアウトや表示文言は、この文書の対象に含めま
 ## 保存と終了の直列化
 
 autosave、終了時保存、破棄、ごみ箱への移動は、同じ `persistMutex` で直列化します。
-これにより、進行中の保存より先に破棄や削除が完了し、保存処理がメモを復活させる競合を防ぎます。
+保留中の autosave をキャンセルした後、終了・削除処理は `persistMutex` を取得します。
+保存がすでにロックを保持している場合は、その処理が完了してロックを解放した後に破棄・削除を行います。
+これにより、削除後に保存処理がメモを復活させる競合を防ぎます。
 
 - 終了または削除の開始時に、保留中の autosave job をキャンセルする
 - `isFinishing` または `isDeletePending` の間は、編集、画像追加、画像削除、新しい autosave を受け付けない
