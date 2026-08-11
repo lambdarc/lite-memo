@@ -9,6 +9,7 @@ Lite Memo で Codex が最初に読む入口です。
 - [`docs/architecture.md`](docs/architecture.md): Clean Architecture / MVVM の構造方針
 - [`docs/data-model.md`](docs/data-model.md): Room のテーブル構成 / 論理削除 / クエリの制約
 - [`docs/export-import-format.md`](docs/export-import-format.md): ZIP アーカイブの形式 / version / 検証と衝突解決
+- [`docs/app-lock.md`](docs/app-lock.md): アプリロックの発動条件 / 認証経路 / 設定の切り替え
 - [`docs/implementation-guidelines.md`](docs/implementation-guidelines.md): 実装時の基本方針
 - [`docs/development-setup.md`](docs/development-setup.md): 開発環境セットアップ / Git フック / 静的解析 / ローカル検証
 - [`docs/ci.md`](docs/ci.md): CI の実行条件 / job 構成 / カバレッジ / キャッシュ / 命名規約
