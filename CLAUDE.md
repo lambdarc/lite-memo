@@ -9,6 +9,7 @@ Lite Memo で Claude Code が最初に読む入口です。
 - [`docs/architecture.md`](docs/architecture.md): Clean Architecture / MVVM の構造方針
 - [`docs/data-model.md`](docs/data-model.md): Room のテーブル構成 / 論理削除 / クエリの制約
 - [`docs/export-import-format.md`](docs/export-import-format.md): ZIP アーカイブの形式 / version / 検証と衝突解決
+- [`docs/memo-edit-lifecycle.md`](docs/memo-edit-lifecycle.md): 編集セッション / autosave / 終了と画像 cleanup
 - [`docs/app-lock.md`](docs/app-lock.md): アプリロックの発動条件 / 認証経路 / 設定の切り替え
 - [`docs/widget.md`](docs/widget.md): Glance ウィジェットの構成 / データ取得 / 更新の契機
 - [`docs/implementation-guidelines.md`](docs/implementation-guidelines.md): 実装時の基本方針
