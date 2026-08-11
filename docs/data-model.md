@@ -57,10 +57,10 @@ Repository 側の削除は `NonCancellable` で囲み、commit 後にキャン�
 
 - `IN (:ids)` を使うクエリは、呼び出し側で 900 件ずつ chunk する。SQLite の変数上限を超えないための措置で、`SQLITE_QUERY_PARAMETER_BATCH_SIZE` を使う
 - 期間で絞るクエリは `createdAt >= :from AND createdAt < :to` の半開区間にする。終端と同じ時刻のメモは含めない
-- 一覧のクエリは `id` を最後の並び順に加える。Room は行順を保証しないため、同じ時刻のメモが並んだときの順序を決めるのに要る
+- SQL で一覧の順序を確定するクエリは、同じ優先キーの行順も契約に含める場合、`id` を最後の並び順に加える。現状では `observeRecentActiveMemos` がこの tie-break を持つ。その他のメモ一覧は Domain 層で並べ替えるか、ごみ箱のように同一時刻内の順序を規定していない
 - 検索は `LIKE :pattern ESCAPE '\'` を使う。ユーザー入力の `%` `_` `\` は `RoomMemoRepository` の `toEscapedLikePattern` でエスケープしてから渡す
 
-半開区間の境界と `id` の tie-break は instrumented test で固定しています。挙動を変えるとテストが落ちます。
+半開区間の境界と `observeRecentActiveMemos` の `id` tie-break は instrumented test で固定しています。挙動を変えるとテストが落ちます。
 
 ## 楽観的ロック
 
