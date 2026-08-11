@@ -1,5 +1,6 @@
 package com.lambdarc.litememo.data.repository
 
+import com.lambdarc.litememo.data.local.dao.SQLITE_QUERY_PARAMETER_BATCH_SIZE
 import com.lambdarc.litememo.data.local.dao.TagDao
 import com.lambdarc.litememo.data.local.entity.TagEntity
 import com.lambdarc.litememo.domain.model.Tag
@@ -90,7 +91,7 @@ class RoomTagRepositoryTest {
     @Test
     fun boundaryGetTagsByIdsUsesSqliteSafeBatches() = runTest {
         // Arrange
-        val ids = List(901) { index -> "tag-$index" }
+        val ids = List(SQLITE_QUERY_PARAMETER_BATCH_SIZE + 1) { index -> "tag-$index" }
         val dao = FakeTagDao(tags = ids.map { tagEntity(id = it) })
         val repository = RoomTagRepository(dao)
 
@@ -100,7 +101,12 @@ class RoomTagRepositoryTest {
 
         // Assert
         assertAll(
-            { assertEquals(listOf(900, 1), dao.getTagsByIdsBatchSizes) },
+            {
+                assertEquals(
+                    listOf(SQLITE_QUERY_PARAMETER_BATCH_SIZE, 1),
+                    dao.getTagsByIdsBatchSizes
+                )
+            },
             { assertEquals(ids, tags.map { it.id.value }) }
         )
     }
