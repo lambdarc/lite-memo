@@ -1,5 +1,6 @@
 package com.lambdarc.litememo.data.export
 
+import com.lambdarc.litememo.domain.model.ExportData
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
@@ -78,7 +79,7 @@ class MemoArchiveWriterTest {
     @Test
     fun errorWriteRejectsManifestThatFailsStructureValidation() {
         // Arrange
-        val manifest = manifestFixture(version = MemoArchiveLayout.VERSION + 1)
+        val manifest = manifestFixture(version = ExportData.CURRENT_VERSION + 1)
 
         // Act & Assert
         // Error: the writer runs the same manifest validation as the reader

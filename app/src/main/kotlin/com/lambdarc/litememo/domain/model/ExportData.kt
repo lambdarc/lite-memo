@@ -13,4 +13,8 @@ data class ExportData(
         require(version > 0) { "ExportData version must be positive." }
     }
 
+    companion object {
+        const val CURRENT_VERSION = 1
+    }
+
 }

@@ -72,6 +72,7 @@ class MemoTitleTest {
 - 異なる入力条件、異なる操作、または同じシナリオを共同で説明しない異なる期待結果・異なる失敗理由を検証する場合は、テスト関数を分ける
 - assertion 数を1つにするためだけに、`Pair`、`Triple`、専用 Snapshot 型、比較用 data class などへ値をまとめない
 - 対象が自然に data class や値オブジェクトとして比較できる場合は、オブジェクト全体を `assertEquals` で比較する
+- 期待値の全フィールドを書くと検証したい差分が埋もれる場合に限り、関係するプロパティだけを個別に検証する
 - JVM Unit Test（JUnit Jupiter）で、同一の実行結果に含まれる複数のプロパティを個別に検証する場合は `assertAll` を使う
 - instrumented test / Compose UI Test（JUnit 4）では、同じシナリオを共同で検証する複数の assertion を直接記述してよい
 - `verify` / `coVerify` / `confirmVerified` など、同じ振る舞いを裏付ける interaction check は結果検証と併用してよい
@@ -103,13 +104,13 @@ JUnit 4 の Compose UI Test で同じ表示シナリオを検証する例:
 
 ```kotlin
 @Test
-fun normalImagesShowImageListAndItem() {
+fun normalImagesShowImageListAndItems() {
     // Arrange
     val image = testMemoImageUiModel()
 
     // Act
     // Normal: an image is shown in the image list
-    composeRule.setContent { MemoEditScreen(uiState = MemoEditUiState(images = listOf(image))) }
+    setMemoEditScreen(uiState = MemoEditUiState(images = listOf(image)))
 
     // Assert
     composeRule.onNodeWithTag(MemoEditTestTags.IMAGE_LIST).assertIsDisplayed()
@@ -117,13 +118,17 @@ fun normalImagesShowImageListAndItem() {
 }
 ```
 
+Screen が多くの callback を必須引数に持つ場合は、no-op を既定値にした private ヘルパーを
+テストクラス内に置き、各テストからは検証したい state だけを渡します。
+Screen を直接呼ぶとテストごとに全 callback を書くことになり、変更のたびに全テストが壊れます。
+
 ## AAA Comments
 
 - テストは Arrange / Act / Assert の流れで書く
 - 基本は `// Arrange`、`// Act`、`// Assert` コメントを入れる
 - Arrange が不要な場合は `// Arrange` を省略してよい
 - Act と Assert は原則として分け、必要なラベルを別の表現へ置き換えない
-- `assertThrows { ... }` や Turbine の `.test {}` のように、操作と検証が1つの式で構造上交錯する場合に限り、`// Act & Assert` を使う
+- `assertThrows(Xxx::class.java) { ... }` や Turbine の `.test {}` のように、操作と検証が1つの式で構造上交錯する場合に限り、`// Act & Assert` を使う
 - 検証観点は、`// Act` または `// Act & Assert` の直下に `// <観点>: <意図>` の形で1行添える
 
 ## テスト観点（命名とコメント）
@@ -204,13 +209,28 @@ class SaveViewModelTest {
         val viewModel = SaveViewModel()
 
         // Act & Assert
-        // StateTransition: save result remains in UI state until acknowledged
+        // StateTransition: the save result is exposed in UI state
         viewModel.state.test {
             skipItems(1)
             viewModel.save()
             advanceUntilIdle()
             assertEquals(SaveUiState(result = SaveResult.Success), awaitItem())
         }
+    }
+
+    @Test
+    fun stateTransitionAcknowledgeClearsSavedResult() = runTest(mainDispatcher) {
+        // Arrange
+        val viewModel = SaveViewModel()
+        viewModel.save()
+        advanceUntilIdle()
+
+        // Act
+        // StateTransition: the result is consumed once the UI acknowledges it
+        viewModel.acknowledgeSaveResult()
+
+        // Assert
+        assertEquals(SaveUiState(), viewModel.state.value)
     }
 }
 

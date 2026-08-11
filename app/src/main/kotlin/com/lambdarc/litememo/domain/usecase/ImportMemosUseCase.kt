@@ -15,7 +15,7 @@ class ImportMemosUseCase @Inject constructor(
 ) {
 
     suspend operator fun invoke(data: ExportData) {
-        if (data.version != ExportMemosUseCase.CURRENT_VERSION) {
+        if (data.version != ExportData.CURRENT_VERSION) {
             throw MemoImportException(
                 MemoImportFailureReason.UNSUPPORTED_VERSION,
                 "Unsupported export version: ${data.version}."

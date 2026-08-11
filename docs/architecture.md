@@ -32,7 +32,12 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
   - `theme`: Compose / Material 3 テーマ
   - `widget`: ViewModel / Route とは別の UI entry point である Glance ウィジェット。機能内では `common` / `data` / `di` とウィジェット別パッケージに分けてよい
 
-画面固有の callback 集約、event、補助 data class、enum、test tag は、所有する `screen` / `route` / `viewmodel` / `state` / `model` / `component` へ置きます。UI state / result / event は、それぞれ `XxxUiState` / `XxxUiResult` / `XxxUiEvent` と命名します。複数箇所から参照する契約は主要な役割パッケージ内で独立ファイルにし、所有者だけが使う小型型は所有者ファイルへまとめます。
+  画面固有の callback 集約、event、補助 data class、enum、test tag は、
+  所有する `screen` / `route` / `viewmodel` / `state` / `model` / `component` へ置きます。
+  UI state / result / event は、それぞれ `XxxUiState` / `XxxUiResult` / `XxxUiEvent` と命名します。
+  複数箇所から参照する契約は主要な役割パッケージ内で独立ファイルにし、
+  所有者だけが使う小型型は所有者ファイルへまとめます。
+
 - `domain`: Android Framework に依存しないビジネスロジック
   - `model` / `model/value`: ドメインモデルと値オブジェクト
   - `usecase`: ビジネス上の操作を表す UseCase
@@ -96,4 +101,4 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 - 画像追加はアプリ専用領域への copy 成功後に Room の参照を保存し、存在しないファイルを DB から参照させない
 - 参照を削除するときは、Room transaction 内で参照更新と削除対象の収集を行い、commit 後に対象ファイルを削除する
 - commit 後のファイル削除は冪等かつ best-effort にし、削除失敗を理由に Room の参照を復元しない
-- 未保存画像は保存処理とは別に cleanup し、失敗やクラッシュで残った未参照ファイルは Room との差分を基準に後続の orphan cleanup で回収できるようにする
+- 未保存画像は保存処理とは別に cleanup する。現行の後続 cleanup は、中断した import セッションの接頭辞を持つ未参照ファイルだけを回収する。全画像ファイルを走査して Room と突き合わせる汎用の orphan cleanup は実装していない

@@ -1,5 +1,6 @@
 package com.lambdarc.litememo.data.export
 
+import com.lambdarc.litememo.domain.model.ExportData
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Test
 
@@ -29,7 +30,7 @@ class MemoArchiveManifestValidatorTest {
     @Test
     fun errorValidateRejectsUnsupportedVersion() {
         // Arrange
-        val manifest = manifestFixture(version = MemoArchiveLayout.VERSION + 1)
+        val manifest = manifestFixture(version = ExportData.CURRENT_VERSION + 1)
 
         // Act & Assert
         // Error: an unsupported version rejects the whole archive
