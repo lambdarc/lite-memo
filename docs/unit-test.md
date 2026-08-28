@@ -270,6 +270,10 @@ private class SaveViewModel : ViewModel() {
 instrumented test は JUnit 4 と AndroidX Test の runner / rule を使います。
 テスト関数名、AAA コメント、観点 prefix / comment の方針は JVM Unit Test とそろえ、coroutine を扱う場合だけ `runTest` を使います。
 
+`testInstrumentationRunner` に指定している `HiltTestRunner` は、`@CustomTestApplication(Application::class)` が生成する素の `Application` へ差し替えます。
+これにより `LiteMemoApplication.onCreate()` の MobileAds 初期化、import / export の cleanup、ウィジェット更新の Flow 収集が instrumented test 中に走りません。
+`@HiltAndroidTest` を使うテストがまだ無くても、この分離のために `hilt-android-testing` と `kspAndroidTest` は必要です。
+
 ## 実行
 
 Unit Test、coverage、Instrumented Test / Compose UI Test の実行コマンドは、[`development-setup.md`](development-setup.md) を参照します。
