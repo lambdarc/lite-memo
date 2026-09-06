@@ -34,7 +34,7 @@ Lite Memo のビジネスルールと公開 contract を、Android Framework に
 2. 既存 contract で足りるか、新しい interface / UseCase / provider が必要か決める。
 3. reference の観点に沿って実装する。
 4. 変更した rule を JVM Unit Test で押さえる。
-5. 変更内容に該当する検証をすべて実行する。Kotlin 変更は `./gradlew :app:ktlintCheck :app:detekt :app:testProdDebugUnitTest` で検証する。domain は Android resource を持たないため lint task は通常不要。task 一覧の正本は [`docs/development-setup.md`](../../../docs/development-setup.md)。
+5. 変更した振る舞いと影響範囲に応じて検証を選ぶ。選択方針と実行コマンドは [`docs/development-setup.md`](../../../docs/development-setup.md) の「ローカルでの検証」に従う。
 6. 変更内容、実行した task と結果、未実施の検証と理由を簡潔に報告する。
 
 # 注意事項

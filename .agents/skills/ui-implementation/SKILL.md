@@ -37,7 +37,7 @@ Lite Memo の UI 層を、既存の Compose / MVVM 構成に沿って変更す�
 2. `ui -> domain <- data` の依存方向と、ViewModel 経由の domain アクセスを保つ。
 3. reference の観点に沿って実装する。
 4. 変更に応じて ViewModel test または Compose UI Test の要否を判断する。
-5. 変更内容に該当する検証をすべて実行する。Kotlin 変更は `./gradlew :app:ktlintCheck :app:detekt :app:testProdDebugUnitTest`、UI / resource 変更は `./gradlew :app:lintProdDebug`、Compose UI Test は `./gradlew :app:connectedDevDebugAndroidTest` で検証し、複数に該当するときは各 task を組み合わせる。task 一覧の正本は [`docs/development-setup.md`](../../../docs/development-setup.md)。
+5. 変更した振る舞いと影響範囲に応じて検証を選ぶ。選択方針と実行コマンドは [`docs/development-setup.md`](../../../docs/development-setup.md) の「ローカルでの検証」に従う。
 6. 変更内容、実行した task と結果、未実施の検証と理由を簡潔に報告する。
 
 # 注意事項
