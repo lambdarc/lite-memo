@@ -103,6 +103,9 @@ Gradle から同じアプリ検証を直接実行する場合は次のとおり�
 .\gradlew.bat :app:assembleProdRelease
 .\gradlew.bat :app:koverXmlReportProdDebug :app:koverHtmlReportProdDebug
 
+# Room schema を変更したとき
+.\gradlew.bat :app:kspDevDebugKotlin :app:copyRoomSchemas
+
 # 端末またはエミュレーターが必要
 .\gradlew.bat :app:connectedDevDebugAndroidTest
 ```

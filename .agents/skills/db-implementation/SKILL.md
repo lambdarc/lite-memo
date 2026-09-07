@@ -36,7 +36,7 @@ mapper / Repository への波及は [`data-implementation`](../data-implementati
 2. schema を変える場合は entity / DAO / mapper / Repository / migration / schema export の波及範囲を洗い出す。
 3. reference の観点に沿って実装する。
 4. migration instrumented test と DAO test の要否を判断し、`app/schemas/` の更新漏れを確認する。
-5. 変更した振る舞いと影響範囲に応じて検証を選ぶ。選択方針と実行コマンドは [`docs/development-setup.md`](../../../docs/development-setup.md) の「ローカルでの検証」に従う。 schema 変更では `./gradlew :app:kspDevDebugKotlin :app:copyRoomSchemas` で export し、対象 version の JSON が entity・database version・migration と整合することを確認する。ステージ済み・コミット済みの更新も確認対象とし、作業ツリーの差分の有無だけで完了を判定しない。
+5. 変更した振る舞いと影響範囲に応じて検証を選ぶ。選択方針と実行コマンドは [`docs/development-setup.md`](../../../docs/development-setup.md) の「ローカルでの検証」に従う。schema 変更では `./gradlew :app:kspDevDebugKotlin :app:copyRoomSchemas` で export し、対象 version の JSON が entity・database version・migration と整合することを確認する。ステージ済み・コミット済みの更新も確認対象とし、作業ツリーの差分の有無だけで完了を判定しない。
 6. 変更内容、実行した task と結果、schema export と schema 差分の確認結果、未実施の検証と理由を簡潔に報告する。
 
 # 注意事項
