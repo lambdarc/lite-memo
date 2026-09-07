@@ -24,7 +24,10 @@ interface MemoBulkDao : MemoDao {
     @Query("SELECT * FROM memo_images WHERE memoId IN (:memoIds)")
     suspend fun getImageRefsForMemosBatch(memoIds: List<String>): List<MemoImageEntity>
 
-    @Query("UPDATE memos SET deletedAt = :deletedAt WHERE id IN (:ids) AND deletedAt IS NULL")
+    @Query(
+        "UPDATE memos SET deletedAt = MAX(:deletedAt, updatedAt) " +
+            "WHERE id IN (:ids) AND deletedAt IS NULL"
+    )
     suspend fun moveMemosToTrashBatch(ids: List<String>, deletedAt: Long): Int
 
     @Query("UPDATE memos SET deletedAt = NULL WHERE id IN (:ids) AND deletedAt IS NOT NULL")

@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import java.io.IOException
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class StagingMemoImportArchiveRepositoryTest {
@@ -190,6 +191,38 @@ class StagingMemoImportArchiveRepositoryTest {
         coVerify(exactly = 0) {
             imageFileDataSource.listImageFileNamesStartingWith("${secondToken.value}-")
         }
+    }
+
+    @Test
+    fun errorCleanupKeepsSessionWhenImageDeleteFails() {
+        // Arrange
+        val token = MemoImportSessionToken("session-1")
+        val fileName = "${token.value}-0001.jpg"
+        val sessionDataSource = mockk<MemoImportSessionDataSource>()
+        val imageFileDataSource = mockk<MemoImageFileDataSource>()
+        val memoDao = mockk<MemoDao>()
+        coEvery { sessionDataSource.claimAbandonedTokens() } returns listOf(token)
+        coEvery {
+            imageFileDataSource.listImageFileNamesStartingWith("${token.value}-")
+        } returns listOf(fileName)
+        coEvery { memoDao.findReferencedImageFileNames(any()) } returns emptyList()
+        coEvery { imageFileDataSource.deleteImage(fileName) } returns false
+        val repository = StagingMemoImportArchiveRepository(
+            extractor = mockk<MemoImportArchiveExtractor>(),
+            sessionDataSource = sessionDataSource,
+            imageFileDataSource = imageFileDataSource,
+            memoDao = memoDao,
+            ioDispatcher = UnconfinedTestDispatcher()
+        )
+
+        // Act
+        // Error: a leftover file keeps the session open so a later sweep can retry it.
+        assertThrows(IOException::class.java) {
+            runTest { repository.deleteUnreferencedImportImages() }
+        }
+
+        // Assert
+        coVerify(exactly = 0) { sessionDataSource.close(token) }
     }
 
     private fun repository(

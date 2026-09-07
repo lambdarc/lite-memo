@@ -10,6 +10,7 @@ import com.lambdarc.litememo.domain.tagFixture
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -269,6 +270,15 @@ class RoomTagRepositoryTest {
             updatedTags = tags
             savedTags = tags
             savedTag = tags.lastOrNull()
+        }
+
+        override suspend fun findTagNamesStartingWith(prefix: String): List<String> =
+            tags.value.map { it.name }.filter { it.startsWith(prefix) }
+
+        override suspend fun updateTagName(id: String, name: String) {
+            tags.update { current ->
+                current.map { tag -> if (tag.id == id) tag.copy(name = name) else tag }
+            }
         }
 
         override suspend fun deleteTag(id: String) {
