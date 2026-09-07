@@ -6,7 +6,6 @@ import androidx.room.Transaction
 import com.lambdarc.litememo.data.local.entity.MemoEntity
 import com.lambdarc.litememo.data.local.entity.MemoImageEntity
 import com.lambdarc.litememo.data.local.entity.MemoTagRefEntity
-import com.lambdarc.litememo.data.local.model.MemoVersionProjection
 import com.lambdarc.litememo.data.local.model.MemoWithRefs
 
 @Dao
@@ -18,9 +17,6 @@ interface MemoBulkDao : MemoDao {
 
     @Query("SELECT id FROM memos WHERE id IN (:ids) AND deletedAt IS NULL")
     suspend fun getActiveMemoIdsBatch(ids: List<String>): List<String>
-
-    @Query("SELECT id, updatedAt FROM memos WHERE id IN (:ids) AND deletedAt IS NULL")
-    suspend fun getActiveMemoVersionsBatch(ids: List<String>): List<MemoVersionProjection>
 
     @Query("SELECT id FROM memos WHERE id IN (:ids) AND deletedAt IS NOT NULL")
     suspend fun getTrashedMemoIdsBatch(ids: List<String>): List<String>
@@ -49,28 +45,35 @@ interface MemoBulkDao : MemoDao {
     }
 
     @Transaction
-    suspend fun upsertActiveMemosWithVersionCheckAndCollectRemovedFileNames(
-        expectedVersions: Map<String, Long>,
+    suspend fun upsertActiveMemosWithSnapshotCheckAndCollectRemovedFileNames(
+        expectedMemos: List<MemoWithRefs>,
         memos: List<MemoEntity>,
         tagRefsByMemoId: Map<String, List<MemoTagRefEntity>>,
         imageRefsByMemoId: Map<String, List<MemoImageEntity>>
     ): List<String> {
-        if (expectedVersions.isEmpty()) return emptyList()
+        if (expectedMemos.isEmpty()) return emptyList()
+        val expectedById = expectedMemos.associateBy { it.memo.id }
+        require(expectedById.size == expectedMemos.size) { "Expected memo ids must be unique." }
         require(memos.all { it.deletedAt == null }) {
             "Only active memos can be written through the active bulk write."
         }
-        require(memos.all { it.id in expectedVersions }) {
-            "Every written memo must be included in expectedVersions."
+        require(memos.all { it.id in expectedById }) {
+            "Every written memo must be included in expectedMemos."
         }
 
-        val currentVersionById = expectedVersions.keys
+        val currentById = expectedById.keys
             .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
-            .flatMap { batch -> getActiveMemoVersionsBatch(batch) }
-            .associate { it.id to it.updatedAt }
-        check(currentVersionById.keys == expectedVersions.keys) {
+            .flatMap { batch -> getActiveMemosWithRefsBatch(batch) }
+            .associateBy { it.memo.id }
+        check(currentById.keys == expectedById.keys) {
             "Some memos were not found or are no longer active."
         }
-        check(expectedVersions.all { (id, version) -> currentVersionById[id] == version }) {
+        check(
+            expectedById.all { (id, expected) ->
+                val current = currentById.getValue(id)
+                current.withNormalizedPositions() == expected.withNormalizedPositions()
+            }
+        ) {
             "Some memos were modified since they were read."
         }
 
@@ -163,5 +166,15 @@ interface MemoBulkDao : MemoDao {
         current: List<MemoImageEntity>,
         incoming: List<MemoImageEntity>
     ): Boolean = current.sortedBy { it.position } == incoming.sortedBy { it.position }
+
+    // Deleting a tag can leave gaps in positions; only the relative order is meaningful.
+    private fun MemoWithRefs.withNormalizedPositions(): MemoWithRefs = copy(
+        tagRefs = tagRefs.sortedBy { it.position }.mapIndexed { index, ref ->
+            ref.copy(position = index)
+        },
+        imageRefs = imageRefs.sortedBy { it.position }.mapIndexed { index, ref ->
+            ref.copy(position = index)
+        }
+    )
 
 }

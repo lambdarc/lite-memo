@@ -9,6 +9,7 @@ import com.lambdarc.litememo.data.local.entity.MemoEntity
 import com.lambdarc.litememo.data.local.entity.MemoImageEntity
 import com.lambdarc.litememo.data.local.entity.MemoTagRefEntity
 import com.lambdarc.litememo.data.local.entity.TagEntity
+import com.lambdarc.litememo.data.local.model.MemoWithRefs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -472,10 +473,10 @@ class RoomDaoInstrumentedTest {
         // Act
         // Error: every memo must still be active before any replacement begins
         val error = runCatching {
-            memoBulkDao.upsertActiveMemosWithVersionCheckAndCollectRemovedFileNames(
-                expectedVersions = mapOf(
-                    "memo-active" to 1_000L,
-                    "memo-trashed" to 1_000L
+            memoBulkDao.upsertActiveMemosWithSnapshotCheckAndCollectRemovedFileNames(
+                expectedMemos = listOf(
+                    MemoWithRefs(memoEntity(id = "memo-active"), emptyList(), emptyList()),
+                    MemoWithRefs(memoEntity(id = "memo-trashed"), emptyList(), emptyList())
                 ),
                 memos = listOf(
                     memoEntity(id = "memo-active", title = "Active after")
@@ -489,6 +490,33 @@ class RoomDaoInstrumentedTest {
         // Assert
         assertEquals(IllegalStateException::class.java, error?.javaClass)
         assertEquals("Active before", activeTitle)
+    }
+
+    @Test
+    fun errorSnapshotCheckRejectsSameTimestampEditBeforeWritingAnyMember() = runTest {
+        // Arrange
+        val first = memoEntity(id = "first", title = "First")
+        val second = memoEntity(id = "second", title = "Second")
+        memoDao.upsertMemo(first)
+        memoDao.upsertMemo(second)
+        val expected = memoBulkDao.getActiveMemosWithRefs(listOf("first", "second"))
+        memoDao.upsertMemo(second.copy(body = "Concurrent edit"))
+
+        // Act
+        // Error: content conflicts abort the whole transaction even when timestamps match.
+        val error = runCatching {
+            memoBulkDao.upsertActiveMemosWithSnapshotCheckAndCollectRemovedFileNames(
+                expectedMemos = expected,
+                memos = listOf(first.copy(isFavorite = true), second.copy(isFavorite = true)),
+                tagRefsByMemoId = emptyMap(),
+                imageRefsByMemoId = emptyMap()
+            )
+        }.exceptionOrNull()
+        val actual = memoBulkDao.getActiveMemosWithRefs(listOf("first", "second"))
+
+        // Assert
+        assertEquals(IllegalStateException::class.java, error?.javaClass)
+        assertEquals(listOf(first, second.copy(body = "Concurrent edit")), actual.map { it.memo })
     }
 
     @Test

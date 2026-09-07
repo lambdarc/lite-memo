@@ -5,8 +5,8 @@ import com.lambdarc.litememo.data.local.entity.MemoEntity
 import com.lambdarc.litememo.data.local.entity.MemoImageEntity
 import com.lambdarc.litememo.data.local.entity.MemoTagRefEntity
 import com.lambdarc.litememo.data.local.model.MemoSummaryProjection
-import com.lambdarc.litememo.data.local.model.MemoVersionProjection
 import com.lambdarc.litememo.data.local.model.MemoWithRefs
+import com.lambdarc.litememo.data.mapper.toDomain
 import com.lambdarc.litememo.domain.memoFixture
 import com.lambdarc.litememo.domain.memoImageFixture
 import com.lambdarc.litememo.domain.memoSummaryFixture
@@ -699,8 +699,10 @@ class RoomMemoRepositoryTest {
             repository.saveActiveMemoBulkWrites(
                 listOf(
                     ActiveMemoBulkWrite.Update(
-                        memoId = MemoId("memo-1"),
-                        expectedUpdatedAt = TimestampMillis(1_000L),
+                        expectedMemo = memoWithRefs(
+                            memoId = "memo-1",
+                            updatedAt = 1_000L
+                        ).toDomain(),
                         updatedMemo = memoFixture(
                             id = "memo-1",
                             updatedAt = 1_000L,
@@ -732,8 +734,10 @@ class RoomMemoRepositoryTest {
             repository.saveActiveMemoBulkWrites(
                 listOf(
                     ActiveMemoBulkWrite.Update(
-                        memoId = MemoId("memo-1"),
-                        expectedUpdatedAt = TimestampMillis(1_000L),
+                        expectedMemo = memoWithRefs(
+                            memoId = "memo-1",
+                            updatedAt = 1_000L
+                        ).toDomain(),
                         updatedMemo = memoFixture(id = "memo-1", updatedAt = 6_000L)
                     )
                 )
@@ -762,8 +766,10 @@ class RoomMemoRepositoryTest {
             repository.saveActiveMemoBulkWrites(
                 listOf(
                     ActiveMemoBulkWrite.CheckOnly(
-                        memoId = MemoId("memo-missing"),
-                        expectedUpdatedAt = TimestampMillis(1_000L)
+                        expectedMemo = memoWithRefs(
+                            memoId = "memo-missing",
+                            updatedAt = 1_000L
+                        ).toDomain()
                     )
                 )
             )
@@ -952,12 +958,6 @@ class RoomMemoRepositoryTest {
             memosWithRefs.value
                 .filter { it.memo.id in ids && it.memo.deletedAt == null }
                 .map { it.memo.id }
-
-        override suspend fun getActiveMemoVersionsBatch(
-            ids: List<String>
-        ): List<MemoVersionProjection> = memosWithRefs.value
-            .filter { it.memo.id in ids && it.memo.deletedAt == null }
-            .map { MemoVersionProjection(id = it.memo.id, updatedAt = it.memo.updatedAt) }
 
         override suspend fun getImageRefsForMemosBatch(
             memoIds: List<String>
