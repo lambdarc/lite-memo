@@ -1,6 +1,6 @@
 ---
 name: data-implementation
-description: 保存、読み込み、ファイル入出力、外部データとの変換が絡む依頼で使う。Lite Memo の Data 層の Repository 実装、mapper、DataStore、export/import、ContentResolver を担当する。
+description: Lite Memo の Data 層の入出力実装を変更する依頼で使う。Repository 実装、mapper、DataStore、export/import、ContentResolver を担当する。画面だけの変更は対象外。
 ---
 
 # 目的
@@ -36,8 +36,8 @@ Lite Memo の data 層で、domain の interface を既存データ源に接続�
 2. domain interface の期待値と data source の制約を分けて読む。
 3. reference の観点に沿って実装し、変換は mapper、Android 依存は data 層 / app entry に閉じる。
 4. 複数の役割クラスに跨る場合は、mapper・data source・domain interface の整合を確認する。
-5. 振る舞いを JVM Unit Test または androidTest で押さえる。
-6. 変更内容に該当する検証をすべて実行する。Kotlin 変更は `./gradlew :app:ktlintCheck :app:detekt :app:testProdDebugUnitTest`、Room / DataStore / ContentResolver を跨ぐ変更は `./gradlew :app:connectedDevDebugAndroidTest` で検証し、複数に該当するときは各 task を組み合わせる。task 一覧の正本は [`docs/development-setup.md`](../../../docs/development-setup.md)。
+5. 変更した振る舞いに対するテストの要否を判断し、必要なら JVM Unit Test または androidTest で検証する。
+6. 変更した振る舞いと影響範囲に応じて検証を選ぶ。選択方針と実行コマンドは [`docs/development-setup.md`](../../../docs/development-setup.md) の「ローカルでの検証」に従う。
 7. 変更内容、実行した task と結果、未実施の検証と理由を簡潔に報告する。
 
 # 注意事項

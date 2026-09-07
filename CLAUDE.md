@@ -50,3 +50,5 @@ Claude Code 向け skill は `.claude/skills/` で管理する。Codex 向けの
 - UI は Kotlin / Jetpack Compose / Material 3 を軸にする
 - 構造は Clean Architecture + MVVM を軸にする
 - 未導入の技術は、実装済みとして扱わない
+- ユーザーの明示指示と Skill が衝突したら、ユーザー指示を優先し、衝突した Skill を報告する
+- 可逆で影響の小さい操作は確認せず、合理的に推測して最後まで進める。不可逆な操作は、対象操作へのユーザーの承認がまだない場合に確認する
