@@ -91,6 +91,35 @@ class CalendarDateTest {
         assertEquals(CalendarDate(LocalDate.of(2026, 6, 1)), date)
     }
 
+    @Test
+    fun boundaryToTimestampRangeClampsTokyoEpochBoundary() {
+        // Arrange
+        val value = CalendarDate(LocalDate.of(1970, 1, 1))
+
+        // Act
+        // Boundary: the local start precedes the earliest persistable timestamp.
+        val range = value.toTimestampRange(ZoneId.of("Asia/Tokyo"))
+
+        // Assert
+        assertEquals(
+            TimestampRange(TimestampMillis(0L), timestamp("1970-01-01T15:00:00Z")),
+            range
+        )
+    }
+
+    @Test
+    fun boundaryToTimestampRangeReturnsEmptyRangeBeforeEpoch() {
+        // Arrange
+        val value = CalendarDate(LocalDate.of(1960, 1, 1))
+
+        // Act
+        // Boundary: dates entirely before the epoch cannot contain saved memos.
+        val range = value.toTimestampRange(ZoneId.of("UTC"))
+
+        // Assert
+        assertEquals(TimestampRange(TimestampMillis(0L), TimestampMillis(0L)), range)
+    }
+
     private fun timestamp(value: String): TimestampMillis =
         TimestampMillis(Instant.parse(value).toEpochMilli())
 }

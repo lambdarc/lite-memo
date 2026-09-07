@@ -10,9 +10,11 @@ import java.time.ZoneId
 value class CalendarDate(val value: LocalDate) {
 
     fun toTimestampRange(zoneId: ZoneId): TimestampRange = TimestampRange(
-        fromInclusive = TimestampMillis(value.atStartOfDay(zoneId).toInstant().toEpochMilli()),
+        fromInclusive = TimestampMillis(
+            value.atStartOfDay(zoneId).toInstant().toEpochMilli().coerceAtLeast(0L)
+        ),
         toExclusive = TimestampMillis(
-            value.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+            value.plusDays(1).atStartOfDay(zoneId).toInstant().toEpochMilli().coerceAtLeast(0L)
         )
     )
 

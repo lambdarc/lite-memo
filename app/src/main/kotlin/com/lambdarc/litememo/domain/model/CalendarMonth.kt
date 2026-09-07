@@ -10,10 +10,11 @@ value class CalendarMonth(val value: YearMonth) {
 
     fun toTimestampRange(zoneId: ZoneId): TimestampRange = TimestampRange(
         fromInclusive = TimestampMillis(
-            value.atDay(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+            value.atDay(1).atStartOfDay(zoneId).toInstant().toEpochMilli().coerceAtLeast(0L)
         ),
         toExclusive = TimestampMillis(
             value.plusMonths(1).atDay(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+                .coerceAtLeast(0L)
         )
     )
 
