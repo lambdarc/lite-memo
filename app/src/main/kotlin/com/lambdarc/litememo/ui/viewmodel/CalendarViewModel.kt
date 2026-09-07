@@ -7,7 +7,7 @@ import com.lambdarc.litememo.domain.model.CalendarMonth
 import com.lambdarc.litememo.domain.model.CalendarMonthSummary
 import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.Tag
-import com.lambdarc.litememo.domain.provider.CurrentTimeProvider
+import com.lambdarc.litememo.domain.usecase.GetCurrentCalendarDateUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveCalendarMonthSummaryUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveMemosByCalendarDateUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
@@ -44,11 +44,11 @@ class CalendarViewModel @Inject constructor(
     private val observeTagsUseCase: ObserveTagsUseCase,
     private val searchMemosUseCase: SearchMemosUseCase,
     private val resolveMemoImagePathUseCase: ResolveMemoImagePathUseCase,
-    currentTimeProvider: CurrentTimeProvider,
+    getCurrentCalendarDateUseCase: GetCurrentCalendarDateUseCase,
     private val zoneId: ZoneId
 ) : ViewModel() {
 
-    private val initialDate = CalendarDate.from(currentTimeProvider.now(), zoneId)
+    private val initialDate = getCurrentCalendarDateUseCase()
     private val selectedMonth = MutableStateFlow(CalendarMonth(YearMonth.from(initialDate.value)))
     private val selectedDate = MutableStateFlow(initialDate)
     private val isCalendarExpanded = MutableStateFlow(true)

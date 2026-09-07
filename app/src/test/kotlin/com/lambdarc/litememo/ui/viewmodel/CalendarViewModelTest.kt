@@ -16,6 +16,7 @@ import com.lambdarc.litememo.domain.model.value.TimestampRange
 import com.lambdarc.litememo.domain.repository.FakeDisplaySettingsRepository
 import com.lambdarc.litememo.domain.repository.MemoRepository
 import com.lambdarc.litememo.domain.tagFixture
+import com.lambdarc.litememo.domain.usecase.GetCurrentCalendarDateUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveCalendarMonthSummaryUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveMemosByCalendarDateUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
@@ -401,7 +402,10 @@ class CalendarViewModelTest {
                 displaySettingsRepository = displaySettingsRepository
             ),
             resolveMemoImagePathUseCase = ResolveMemoImagePathUseCase(FakeMemoImageStore()),
-            currentTimeProvider = MutableTimeProvider(TimestampMillis(today)),
+            getCurrentCalendarDateUseCase = GetCurrentCalendarDateUseCase(
+                currentTimeProvider = MutableTimeProvider(TimestampMillis(today)),
+                zoneId = zone
+            ),
             zoneId = zone
         )
     }

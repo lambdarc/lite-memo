@@ -11,7 +11,7 @@ import com.lambdarc.litememo.domain.model.MemoSortOrder
 import com.lambdarc.litememo.domain.model.ThemeMode
 import com.lambdarc.litememo.domain.model.value.ExportFileReference
 import com.lambdarc.litememo.domain.model.value.MemoExportToken
-import com.lambdarc.litememo.domain.repository.MemoExportArchiveRepository
+import com.lambdarc.litememo.domain.usecase.DiscardMemoExportUseCase
 import com.lambdarc.litememo.domain.usecase.ImportMemosFromFileUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveAppLockEnabledUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveMemoSortOrderUseCase
@@ -20,6 +20,7 @@ import com.lambdarc.litememo.domain.usecase.PrepareMemoExportUseCase
 import com.lambdarc.litememo.domain.usecase.SetAppLockEnabledUseCase
 import com.lambdarc.litememo.domain.usecase.SetMemoSortOrderUseCase
 import com.lambdarc.litememo.domain.usecase.SetThemeModeUseCase
+import com.lambdarc.litememo.domain.usecase.WriteMemoExportUseCase
 import com.lambdarc.litememo.ui.auth.AppLockAuthenticationUiResult
 import com.lambdarc.litememo.ui.state.SettingsImportErrorDialogUiState
 import com.lambdarc.litememo.ui.state.SettingsUiState
@@ -48,7 +49,8 @@ class SettingsViewModel @Inject constructor(
     private val setMemoSortOrderUseCase: SetMemoSortOrderUseCase,
     private val setAppLockEnabledUseCase: SetAppLockEnabledUseCase,
     private val prepareMemoExportUseCase: PrepareMemoExportUseCase,
-    private val memoExportArchiveRepository: MemoExportArchiveRepository,
+    private val writeMemoExportUseCase: WriteMemoExportUseCase,
+    private val discardMemoExportUseCase: DiscardMemoExportUseCase,
     private val importMemosFromFileUseCase: ImportMemosFromFileUseCase,
     @param:ApplicationScope private val applicationScope: CoroutineScope,
     @param:AppVersion private val appVersion: String
@@ -196,7 +198,7 @@ class SettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             try {
-                memoExportArchiveRepository.write(token, reference)
+                writeMemoExportUseCase(token, reference)
                 _snackbarEvent.trySend(SettingsSnackbarUiEvent.ExportSuccess)
             } catch (e: CancellationException) {
                 throw e
@@ -204,7 +206,7 @@ class SettingsViewModel @Inject constructor(
                 _snackbarEvent.trySend(SettingsSnackbarUiEvent.ExportDestinationWriteError)
             } finally {
                 withContext(NonCancellable) {
-                    runCatching { memoExportArchiveRepository.discard(token) }
+                    runCatching { discardMemoExportUseCase(token) }
                 }
                 clearPreparedExport(token)
             }
@@ -222,7 +224,7 @@ class SettingsViewModel @Inject constructor(
         isExporting.value = false
         viewModelScope.launch {
             withContext(NonCancellable) {
-                runCatching { memoExportArchiveRepository.discard(token) }
+                runCatching { discardMemoExportUseCase(token) }
             }
         }
     }
@@ -275,7 +277,7 @@ class SettingsViewModel @Inject constructor(
         isExporting.value = false
         if (token != null) {
             applicationScope.launch {
-                runCatching { memoExportArchiveRepository.discard(token) }
+                runCatching { discardMemoExportUseCase(token) }
             }
         }
         super.onCleared()
