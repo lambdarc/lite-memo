@@ -96,7 +96,10 @@ interface MemoDao {
     )
     suspend fun getImageFileNamesForTrashedMemosDeletedAtOrBefore(cutoff: Long): List<String>
 
-    @Query("UPDATE memos SET deletedAt = :deletedAt WHERE id = :id AND deletedAt IS NULL")
+    @Query(
+        "UPDATE memos SET deletedAt = MAX(:deletedAt, updatedAt) " +
+            "WHERE id = :id AND deletedAt IS NULL"
+    )
     suspend fun moveMemoToTrash(id: String, deletedAt: Long): Int
 
     @Query("UPDATE memos SET deletedAt = NULL WHERE id = :id AND deletedAt IS NOT NULL")

@@ -32,6 +32,9 @@ interface TagDao {
     @Update
     suspend fun updateTags(tags: List<TagEntity>)
 
+    @Query("UPDATE tags SET name = :name WHERE id = :id")
+    suspend fun updateTagName(id: String, name: String)
+
     @Query("DELETE FROM tags WHERE id = :id")
     suspend fun deleteTag(id: String)
 
@@ -42,12 +45,20 @@ interface TagDao {
     suspend fun insertOrUpdateAllTags(tags: List<TagEntity>) {
         if (tags.isEmpty()) return
 
-        val existingIds = tags.map { it.id }
+        val storedById = tags.map { it.id }
             .chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
-            .flatMapTo(mutableSetOf()) { ids -> getTagsByIds(ids).map { it.id } }
-        val (existing, added) = tags.partition { it.id in existingIds }
+            .flatMap { ids -> getTagsByIds(ids) }
+            .associateBy { it.id }
+        val (existing, added) = tags.partition { it.id in storedById }
+        existing
+            .filter { tag -> storedById.getValue(tag.id).name != tag.name }
+            .forEach { tag -> updateTagName(tag.id, temporaryTagName(tag.id)) }
         if (added.isNotEmpty()) insertTags(added)
         if (existing.isNotEmpty()) updateTags(existing)
     }
 
 }
+
+private fun temporaryTagName(id: String): String = "$TEMPORARY_TAG_NAME_PREFIX$id"
+
+private const val TEMPORARY_TAG_NAME_PREFIX = "\uE000renaming:"

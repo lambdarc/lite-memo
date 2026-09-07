@@ -16,7 +16,7 @@ Data 層の方針とメモ画像の扱いは [`docs/architecture.md`](architectu
 メモを中心に、タグと画像が参照で紐づきます。
 
 - `memos`: メモ本体。`id` が主キー。`createdAt` と `deletedAt` に index を持つ
-- `tags`: タグ。`id` が主キー。`name` に unique index を持ち、同名タグを DB 層で拒否する
+- `tags`: タグ。`id` が主キー。`name` に unique index を持ち、同名タグを DB 層で拒否する。取り込みでタグ間の名前の移動や入れ替えが起きるため、`TagDao.insertOrUpdateAllTags` は名前が変わる行を一時名へ退避してから追加・更新する
 - `memo_tag_refs`: メモとタグの多対多。`(memoId, tagId)` が複合主キー。`(memoId, position)` の unique index でメモ内のタグ順を保つ
 - `memo_images`: 添付画像のメタデータ。`id` が主キー。`(memoId, position)` の unique index で表示順を保つ。実ファイルは Room の外にあり、`fileName` だけを持つ
 
@@ -31,6 +31,7 @@ Data 層の方針とメモ画像の扱いは [`docs/architecture.md`](architectu
 - ほぼ全てのクエリがこの述語で分岐する。新しいクエリを足すときも、どちらを対象にするか必ず決める
 - `deletedAt` に index があるのはこの分岐のため
 - ごみ箱への移動と復元は `deletedAt` の UPDATE で、更新行数を返す。対象がすでにその状態なら 0 行になり、呼び出し側はこれを失敗として扱う
+- ごみ箱へ移す UPDATE は `deletedAt` に保存時点の `updatedAt` 以上の値を書く。呼び出し側が時刻を決めてから書き込むまでに別の更新が入っても、domain の `deletedAt >= updatedAt` を満たす行だけが残る
 - 物理削除は原則として、ごみ箱内メモの完全削除と 30 日経過分の一括削除に限る
 
 この原則の例外がひとつあります。`MemoDao.discardMemo` は `deletedAt` を問わず物理削除する唯一のクエリです。
