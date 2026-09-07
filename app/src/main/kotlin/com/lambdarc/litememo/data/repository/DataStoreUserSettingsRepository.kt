@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.lambdarc.litememo.data.util.dataOrEmptyOnIoError
+import com.lambdarc.litememo.data.util.enabledOnIoError
 import com.lambdarc.litememo.di.UserSettingsDataStore
 import com.lambdarc.litememo.domain.model.MemoSortOrder
 import com.lambdarc.litememo.domain.model.ThemeMode
@@ -38,9 +39,9 @@ class DataStoreUserSettingsRepository @Inject constructor(
             ?: MemoSortOrder.UPDATED_NEWEST
     }
 
-    override fun observeAppLockEnabled(): Flow<Boolean> = preferencesFlow.map { prefs ->
-        prefs[APP_LOCK_ENABLED_KEY] ?: false
-    }
+    override fun observeAppLockEnabled(): Flow<Boolean> = dataStore.data
+        .map { prefs -> prefs[APP_LOCK_ENABLED_KEY] ?: false }
+        .enabledOnIoError()
 
     override fun observeTutorialCompleted(): Flow<Boolean> = preferencesFlow.map { prefs ->
         prefs[TUTORIAL_COMPLETED_KEY] ?: false

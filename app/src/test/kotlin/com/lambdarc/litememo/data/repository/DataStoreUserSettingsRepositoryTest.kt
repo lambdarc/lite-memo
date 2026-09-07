@@ -9,12 +9,15 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.lambdarc.litememo.domain.model.MemoSortOrder
 import com.lambdarc.litememo.domain.model.ThemeMode
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
+import java.io.IOException
 
 class DataStoreUserSettingsRepositoryTest {
 
@@ -215,6 +218,41 @@ class DataStoreUserSettingsRepositoryTest {
 
         // Assert
         assertEquals(true, stored)
+    }
+
+    @Test
+    fun errorObserveAppLockEnabledKeepsLockWhenPreferencesAreUnreadable() = runTest {
+        // Arrange
+        val repository = DataStoreUserSettingsRepository(UnreadableDataStore())
+
+        // Act
+        // Error: an unreadable settings file must not be reported as "lock disabled".
+        val result = repository.observeAppLockEnabled().first()
+
+        // Assert
+        assertEquals(true, result)
+    }
+
+    @Test
+    fun errorObserveThemeModeFallsBackToDefaultWhenPreferencesAreUnreadable() = runTest {
+        // Arrange
+        val repository = DataStoreUserSettingsRepository(UnreadableDataStore())
+
+        // Act
+        // Error: display settings stay recoverable with defaults, unlike the lock flag.
+        val result = repository.observeThemeMode().first()
+
+        // Assert
+        assertEquals(ThemeMode.SYSTEM, result)
+    }
+
+    private class UnreadableDataStore : DataStore<Preferences> {
+
+        override val data: Flow<Preferences> = flow { throw IOException("unreadable") }
+
+        override suspend fun updateData(
+            transform: suspend (Preferences) -> Preferences
+        ): Preferences = throw IOException("unreadable")
     }
 
     private fun repository(scope: CoroutineScope): DataStoreUserSettingsRepository =
