@@ -1,11 +1,11 @@
 # viewmodel
 
-画面ごとの ViewModel で UI state を公開し、UseCase または domain の抽象へ依存する。
+画面ごとの ViewModel で UI state を公開し、UseCase へ依存する。
 
 ## 確認する対象
 
 - `ui/viewmodel/` の対象 ViewModel と、公開する `XxxUiState`（StateFlow）
-- 使用する UseCase / domain abstraction と、one-shot event の Channel
+- 使用する UseCase と、one-shot event の Channel
 
 ## 実装時の注意
 
