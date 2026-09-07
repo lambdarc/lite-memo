@@ -97,7 +97,8 @@ fun CalendarScreen(
     onRetry: () -> Unit,
     onMemoClick: (MemoId) -> Unit,
     onCreateMemoClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    canCreateMemo: Boolean = true
 ) {
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -120,16 +121,18 @@ fun CalendarScreen(
                     onSearchQueryChange = onSearchQueryChange,
                     onMemoClick = onMemoClick
                 )
-                FloatingActionButton(
-                    onClick = onCreateMemoClick,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 16.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = stringResource(R.string.create_memo)
-                    )
+                if (canCreateMemo) {
+                    FloatingActionButton(
+                        onClick = onCreateMemoClick,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 16.dp, bottom = 16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = stringResource(R.string.create_memo)
+                        )
+                    }
                 }
             }
         }

@@ -179,9 +179,11 @@ class CalendarViewModel @Inject constructor(
         retryTrigger.update { it + 1 }
     }
 
-    fun selectedDateMillis(): Long {
+    fun selectedDateMillis(): Long? {
         val date = selectedDate.value.value
-        return date.atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val startOfDay = date.atStartOfDay(zoneId).toInstant().toEpochMilli()
+        if (startOfDay >= 0L) return startOfDay
+        return 0L.takeIf { Instant.EPOCH.atZone(zoneId).toLocalDate() == date }
     }
 
     fun selectDateFromPicker(millis: Long) {
