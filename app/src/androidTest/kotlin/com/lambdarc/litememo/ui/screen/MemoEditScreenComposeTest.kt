@@ -142,6 +142,7 @@ class MemoEditScreenComposeTest {
                     onDelete = {},
                     onBackRequest = {},
                     onRetry = {},
+                    onRetryTags = {},
                     onAttachImageRequest = onAttachImageRequest,
                     onImageRemove = onImageRemove,
                     onShareMemo = {}

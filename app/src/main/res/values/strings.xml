@@ -84,6 +84,7 @@
     <string name="memo_edit_attach_image">画像を追加</string>
     <string name="memo_edit_remove_image">画像を削除</string>
     <string name="memo_edit_image_attach_error">画像を追加できませんでした</string>
+    <string name="memo_edit_tag_load_error">タグを読み込めませんでした。入力内容はそのまま保持されています。</string>
     <string name="attached_image_description">添付画像</string>
     <string name="delete_memo">削除</string>
     <string name="navigate_back">戻る</string>

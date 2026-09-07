@@ -33,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -74,70 +75,24 @@ fun MemoEditScreen(
     onDelete: () -> Unit,
     onBackRequest: () -> Unit,
     onRetry: () -> Unit,
+    onRetryTags: () -> Unit,
     onAttachImageRequest: () -> Unit,
     onImageRemove: (String) -> Unit,
     onShareMemo: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val canEdit = !uiState.isLoading && !uiState.hasError && !uiState.isDeletePending
     Scaffold(
         modifier = modifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                navigationIcon = {
-                    IconButton(onClick = onBackRequest) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.navigate_back)
-                        )
-                    }
-                },
-                title = {},
-                actions = {
-                    if (!uiState.isDeletePending) {
-                        IconButton(
-                            onClick = onAttachImageRequest,
-                            modifier = Modifier.testTag(MemoEditTestTags.ATTACH_IMAGE_BUTTON)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.AddPhotoAlternate,
-                                contentDescription = stringResource(
-                                    R.string.memo_edit_attach_image
-                                )
-                            )
-                        }
-                        var menuExpanded by remember { mutableStateOf(false) }
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = stringResource(R.string.more_options)
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false }
-                        ) {
-                            val hasContent = uiState.title.isNotBlank() || uiState.body.isNotBlank()
-                            DropdownMenuItem(
-                                text = { Text(text = stringResource(R.string.share_memo)) },
-                                onClick = {
-                                    menuExpanded = false
-                                    onShareMemo()
-                                },
-                                enabled = hasContent
-                            )
-                        }
-                    }
-                    if (uiState.memoId != null && !uiState.isDeletePending) {
-                        IconButton(onClick = onDelete) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = stringResource(R.string.delete_memo)
-                            )
-                        }
-                    }
-                }
+            MemoEditTopBar(
+                uiState = uiState,
+                canEdit = canEdit,
+                onBackRequest = onBackRequest,
+                onAttachImageRequest = onAttachImageRequest,
+                onShareMemo = onShareMemo,
+                onDelete = onDelete
             )
         }
     ) { innerPadding ->
@@ -190,7 +145,18 @@ fun MemoEditScreen(
                             innerTextField()
                         }
                     )
-                    if (uiState.availableTags.isNotEmpty()) {
+                    if (uiState.hasTagError) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Column {
+                            Text(
+                                text = stringResource(R.string.memo_edit_tag_load_error),
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            TextButton(onClick = onRetryTags) {
+                                Text(text = stringResource(R.string.retry_label))
+                            }
+                        }
+                    } else if (uiState.availableTags.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -282,6 +248,72 @@ fun MemoEditScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MemoEditTopBar(
+    uiState: MemoEditUiState,
+    canEdit: Boolean,
+    onBackRequest: () -> Unit,
+    onAttachImageRequest: () -> Unit,
+    onShareMemo: () -> Unit,
+    onDelete: () -> Unit
+) {
+    TopAppBar(
+        windowInsets = WindowInsets(0, 0, 0, 0),
+        navigationIcon = {
+            IconButton(onClick = onBackRequest) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.navigate_back)
+                )
+            }
+        },
+        title = {},
+        actions = {
+            if (canEdit) {
+                IconButton(
+                    onClick = onAttachImageRequest,
+                    modifier = Modifier.testTag(MemoEditTestTags.ATTACH_IMAGE_BUTTON)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AddPhotoAlternate,
+                        contentDescription = stringResource(R.string.memo_edit_attach_image)
+                    )
+                }
+                var menuExpanded by remember { mutableStateOf(false) }
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = stringResource(R.string.more_options)
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    val hasContent = uiState.title.isNotBlank() || uiState.body.isNotBlank()
+                    DropdownMenuItem(
+                        text = { Text(text = stringResource(R.string.share_memo)) },
+                        onClick = {
+                            menuExpanded = false
+                            onShareMemo()
+                        },
+                        enabled = hasContent
+                    )
+                }
+            }
+            if (uiState.memoId != null && canEdit) {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = stringResource(R.string.delete_memo)
+                    )
+                }
+            }
+        }
+    )
+}
+
 @Preview(showBackground = true)
 @Composable
 private fun MemoEditScreenPreview() {
@@ -300,6 +332,7 @@ private fun MemoEditScreenPreview() {
             onDelete = {},
             onBackRequest = {},
             onRetry = {},
+            onRetryTags = {},
             onAttachImageRequest = {},
             onImageRemove = {},
             onShareMemo = {}
