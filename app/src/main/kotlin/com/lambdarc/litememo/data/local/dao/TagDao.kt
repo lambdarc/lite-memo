@@ -32,6 +32,9 @@ interface TagDao {
     @Update
     suspend fun updateTags(tags: List<TagEntity>)
 
+    @Query("SELECT name FROM tags WHERE name LIKE :prefix || '%'")
+    suspend fun findTagNamesStartingWith(prefix: String): List<String>
+
     @Query("UPDATE tags SET name = :name WHERE id = :id")
     suspend fun updateTagName(id: String, name: String)
 
@@ -50,15 +53,30 @@ interface TagDao {
             .flatMap { ids -> getTagsByIds(ids) }
             .associateBy { it.id }
         val (existing, added) = tags.partition { it.id in storedById }
-        existing
-            .filter { tag -> storedById.getValue(tag.id).name != tag.name }
-            .forEach { tag -> updateTagName(tag.id, temporaryTagName(tag.id)) }
+        val renamed = existing.filter { tag -> storedById.getValue(tag.id).name != tag.name }
+        if (renamed.isNotEmpty()) {
+            val reserved = (tags.map { it.name } + findTagNamesStartingWith(TEMP_NAME_PREFIX))
+                .toMutableSet()
+            renamed.forEach { tag ->
+                val temporaryName = temporaryTagName(tag.id, reserved)
+                reserved += temporaryName
+                updateTagName(tag.id, temporaryName)
+            }
+        }
         if (added.isNotEmpty()) insertTags(added)
         if (existing.isNotEmpty()) updateTags(existing)
     }
 
 }
 
-private fun temporaryTagName(id: String): String = "$TEMPORARY_TAG_NAME_PREFIX$id"
+private fun temporaryTagName(id: String, reserved: Set<String>): String {
+    var candidate = "$TEMP_NAME_PREFIX$id"
+    var attempt = 0
+    while (candidate in reserved) {
+        attempt++
+        candidate = "$TEMP_NAME_PREFIX$attempt-$id"
+    }
+    return candidate
+}
 
-private const val TEMPORARY_TAG_NAME_PREFIX = "\uE000renaming:"
+private const val TEMP_NAME_PREFIX = "\uE000renaming:"

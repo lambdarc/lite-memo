@@ -272,6 +272,9 @@ class RoomTagRepositoryTest {
             savedTag = tags.lastOrNull()
         }
 
+        override suspend fun findTagNamesStartingWith(prefix: String): List<String> =
+            tags.value.map { it.name }.filter { it.startsWith(prefix) }
+
         override suspend fun updateTagName(id: String, name: String) {
             tags.update { current ->
                 current.map { tag -> if (tag.id == id) tag.copy(name = name) else tag }

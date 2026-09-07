@@ -772,6 +772,28 @@ class RoomDaoInstrumentedTest {
         assertEquals(mapOf("tag-1" to "Private", "tag-2" to "Work"), namesById)
     }
 
+    @Test
+    fun boundaryInsertOrUpdateAllTagsAcceptsNameMatchingTemporaryName() = runTest {
+        // Arrange
+        tagDao.insertOrUpdateAllTags(listOf(tagEntity(id = "tag-1", name = "Work")))
+
+        // Act
+        // Boundary: a tag named like the internal rename placeholder still imports.
+        tagDao.insertOrUpdateAllTags(
+            listOf(
+                tagEntity(id = "tag-1", name = "Private"),
+                tagEntity(id = "tag-2", name = "\uE000renaming:tag-1")
+            )
+        )
+        val namesById = tagDao.getAllTags().associate { it.id to it.name }
+
+        // Assert
+        assertEquals(
+            mapOf("tag-1" to "Private", "tag-2" to "\uE000renaming:tag-1"),
+            namesById
+        )
+    }
+
     private fun memoEntity(
         id: String,
         title: String = "Title",
