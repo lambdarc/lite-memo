@@ -130,13 +130,11 @@ class ApplyMemoBulkActionUseCase @Inject constructor(
             val updatedMemo = updatedMemoOrNullIfUnchanged(memo)
             if (updatedMemo == null) {
                 ActiveMemoBulkWrite.CheckOnly(
-                    memoId = memo.id,
-                    expectedUpdatedAt = memo.updatedAt
+                    expectedMemo = memo
                 )
             } else {
                 ActiveMemoBulkWrite.Update(
-                    memoId = memo.id,
-                    expectedUpdatedAt = memo.updatedAt,
+                    expectedMemo = memo,
                     updatedMemo = updatedMemo
                 )
             }

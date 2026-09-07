@@ -1,5 +1,6 @@
 package com.lambdarc.litememo.domain.usecase
 
+import com.lambdarc.litememo.domain.model.ActiveMemoBulkWrite
 import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.updatedAtFrom
 import com.lambdarc.litememo.domain.model.value.MemoId
@@ -23,7 +24,9 @@ class SetMemoFavoriteUseCase @Inject constructor(
             updatedAt = memo.updatedAtFrom(now),
             isFavorite = isFavorite
         )
-        memoRepository.saveMemo(updatedMemo)
+        memoRepository.saveActiveMemoBulkWrites(
+            listOf(ActiveMemoBulkWrite.Update(expectedMemo = memo, updatedMemo = updatedMemo))
+        )
         return updatedMemo
     }
 

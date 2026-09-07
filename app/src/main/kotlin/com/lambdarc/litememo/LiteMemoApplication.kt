@@ -4,8 +4,8 @@ import android.app.Application
 import android.util.Log
 import com.google.android.gms.ads.MobileAds
 import com.lambdarc.litememo.di.ApplicationScope
-import com.lambdarc.litememo.domain.repository.MemoExportArchiveRepository
-import com.lambdarc.litememo.domain.repository.MemoImportArchiveRepository
+import com.lambdarc.litememo.domain.usecase.DeleteAbandonedPreparedExportsUseCase
+import com.lambdarc.litememo.domain.usecase.DeleteUnreferencedImportImagesUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveRecentMemosUseCase
 import com.lambdarc.litememo.ui.widget.data.WidgetMemoLoader
 import com.lambdarc.litememo.ui.widget.data.WidgetRefresher
@@ -36,10 +36,10 @@ class LiteMemoApplication : Application() {
     lateinit var observeRecentMemosUseCase: ObserveRecentMemosUseCase
 
     @Inject
-    lateinit var memoImportArchiveRepository: MemoImportArchiveRepository
+    lateinit var deleteUnreferencedImportImagesUseCase: DeleteUnreferencedImportImagesUseCase
 
     @Inject
-    lateinit var memoExportArchiveRepository: MemoExportArchiveRepository
+    lateinit var deleteAbandonedPreparedExportsUseCase: DeleteAbandonedPreparedExportsUseCase
 
     override fun onCreate() {
         super.onCreate()
@@ -54,7 +54,7 @@ class LiteMemoApplication : Application() {
     private fun deleteAbandonedPreparedExports() {
         applicationScope.launch {
             runCatching {
-                memoExportArchiveRepository.deleteAbandonedPreparedExports()
+                deleteAbandonedPreparedExportsUseCase()
             }.onFailure { error ->
                 if (error is CancellationException) throw error
                 Log.w(EXPORT_CLEANUP_TAG, "Abandoned prepared export cleanup failed")
@@ -65,7 +65,7 @@ class LiteMemoApplication : Application() {
     private fun deleteUnreferencedImportImages() {
         applicationScope.launch {
             runCatching {
-                memoImportArchiveRepository.deleteUnreferencedImportImages()
+                deleteUnreferencedImportImagesUseCase()
             }.onFailure { error ->
                 if (error is CancellationException) throw error
                 Log.w(IMPORT_CLEANUP_TAG, "Abandoned import image cleanup failed")

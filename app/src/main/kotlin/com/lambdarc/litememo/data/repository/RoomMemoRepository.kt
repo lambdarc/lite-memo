@@ -6,6 +6,7 @@ import com.lambdarc.litememo.data.mapper.toDomain
 import com.lambdarc.litememo.data.mapper.toEntity
 import com.lambdarc.litememo.data.mapper.toImageRefs
 import com.lambdarc.litememo.data.mapper.toImageRefsByMemoId
+import com.lambdarc.litememo.data.mapper.toMemoWithRefs
 import com.lambdarc.litememo.data.mapper.toTagRefs
 import com.lambdarc.litememo.data.mapper.toTagRefsByMemoId
 import com.lambdarc.litememo.data.util.deleteImageFiles
@@ -100,10 +101,8 @@ class RoomMemoRepository @Inject constructor(
             .filterIsInstance<ActiveMemoBulkWrite.Update>()
             .map { it.updatedMemo }
         val removedFileNames = memoBulkDao
-            .upsertActiveMemosWithVersionCheckAndCollectRemovedFileNames(
-                expectedVersions = writes.associate {
-                    it.memoId.value to it.expectedUpdatedAt.value
-                },
+            .upsertActiveMemosWithSnapshotCheckAndCollectRemovedFileNames(
+                expectedMemos = writes.map { it.expectedMemo.toMemoWithRefs() },
                 memos = updatedMemos.map { it.toEntity() },
                 tagRefsByMemoId = updatedMemos.toTagRefsByMemoId(),
                 imageRefsByMemoId = updatedMemos.toImageRefsByMemoId()

@@ -1,22 +1,19 @@
 package com.lambdarc.litememo.domain.model
 
 import com.lambdarc.litememo.domain.model.value.MemoId
-import com.lambdarc.litememo.domain.model.value.TimestampMillis
 
 sealed interface ActiveMemoBulkWrite {
 
-    val memoId: MemoId
-    val expectedUpdatedAt: TimestampMillis
+    val expectedMemo: Memo
+    val memoId: MemoId get() = expectedMemo.id
 
-    data class Update(
-        override val memoId: MemoId,
-        override val expectedUpdatedAt: TimestampMillis,
-        val updatedMemo: Memo
-    ) : ActiveMemoBulkWrite
+    data class Update(override val expectedMemo: Memo, val updatedMemo: Memo) :
+        ActiveMemoBulkWrite {
+        init {
+            require(expectedMemo.id == updatedMemo.id) { "Memo identity must not change." }
+        }
+    }
 
-    data class CheckOnly(
-        override val memoId: MemoId,
-        override val expectedUpdatedAt: TimestampMillis
-    ) : ActiveMemoBulkWrite
+    data class CheckOnly(override val expectedMemo: Memo) : ActiveMemoBulkWrite
 
 }

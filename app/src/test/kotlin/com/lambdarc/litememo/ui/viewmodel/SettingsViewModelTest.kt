@@ -2,6 +2,7 @@ package com.lambdarc.litememo.ui.viewmodel
 
 import androidx.lifecycle.ViewModelStore
 import app.cash.turbine.test
+import com.lambdarc.litememo.domain.FakeMemoExportArchiveRepository
 import com.lambdarc.litememo.domain.FakeMemoRepository
 import com.lambdarc.litememo.domain.FakeTagRepository
 import com.lambdarc.litememo.domain.MutableTimeProvider
@@ -15,6 +16,7 @@ import com.lambdarc.litememo.domain.model.value.TagName
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.repository.FakeUserSettingsRepository
 import com.lambdarc.litememo.domain.repository.MemoExportArchiveRepository
+import com.lambdarc.litememo.domain.usecase.DiscardMemoExportUseCase
 import com.lambdarc.litememo.domain.usecase.ExportMemosUseCase
 import com.lambdarc.litememo.domain.usecase.ImportMemosFromFileUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveAppLockEnabledUseCase
@@ -24,6 +26,7 @@ import com.lambdarc.litememo.domain.usecase.PrepareMemoExportUseCase
 import com.lambdarc.litememo.domain.usecase.SetAppLockEnabledUseCase
 import com.lambdarc.litememo.domain.usecase.SetMemoSortOrderUseCase
 import com.lambdarc.litememo.domain.usecase.SetThemeModeUseCase
+import com.lambdarc.litememo.domain.usecase.WriteMemoExportUseCase
 import com.lambdarc.litememo.ui.auth.AppLockAuthenticationUiResult
 import com.lambdarc.litememo.ui.state.SettingsImportErrorDialogUiState
 import io.mockk.coEvery
@@ -683,46 +686,12 @@ class SettingsViewModelTest {
                 exportMemosUseCase,
                 exportRepository
             ),
-            memoExportArchiveRepository = exportRepository,
+            writeMemoExportUseCase = WriteMemoExportUseCase(exportRepository),
+            discardMemoExportUseCase = DiscardMemoExportUseCase(exportRepository),
             importMemosFromFileUseCase = importUseCase,
             applicationScope = CoroutineScope(SupervisorJob() + dispatcher),
             appVersion = "1.0.0"
         )
-    }
-
-    private class FakeMemoExportArchiveRepository(
-        private val prepareGate: CompletableDeferred<Unit>? = null,
-        private val prepareError: Throwable? = null,
-        private val writeError: Throwable? = null,
-        private val discardGate: CompletableDeferred<Unit>? = null
-    ) : MemoExportArchiveRepository {
-
-        val preparedData = mutableListOf<ExportData>()
-        val writes = mutableListOf<Pair<MemoExportToken, ExportFileReference>>()
-        val discardedTokens = mutableListOf<MemoExportToken>()
-
-        override suspend fun prepare(data: ExportData): MemoExportToken {
-            preparedData += data
-            prepareGate?.await()
-            prepareError?.let { throw it }
-            return TOKEN
-        }
-
-        override suspend fun write(token: MemoExportToken, destination: ExportFileReference) {
-            writes += token to destination
-            writeError?.let { throw it }
-        }
-
-        override suspend fun discard(token: MemoExportToken) {
-            discardedTokens += token
-            discardGate?.await()
-        }
-
-        override suspend fun deleteAbandonedPreparedExports() = Unit
-
-        companion object {
-            val TOKEN = MemoExportToken("prepared-1")
-        }
     }
 
     private companion object {

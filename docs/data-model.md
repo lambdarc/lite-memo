@@ -64,11 +64,13 @@ Repository 側の削除は `NonCancellable` で囲み、commit 後にキャン�
 
 ## 楽観的ロック
 
-複数メモをまとめて更新する経路だけ、`updatedAt` を version として使った競合検出を行います。
+読み出し時のメモ本体・タグ参照・画像参照を保存時に比較して競合を検出します。
 
-- 対象は一括のお気に入り切り替えとタグ付け / タグ外し
-- 読み出し時の `updatedAt` を期待値として渡し、書き込み時に一致しなければ `IllegalStateException` を送出して transaction ごと中止する
-- ごみ箱への一括移動と、単一メモの保存・お気に入り切り替えはこの経路を通らず、競合検出をしない
+- 対象は単件・一括のお気に入り切り替えと、一括のタグ付け / タグ外し
+- `ActiveMemoBulkWrite.expectedMemo` に読み出し時の内容を渡す。全対象が有効で内容も一致することを同一 transaction 内で確認し、不一致なら `IllegalStateException` を送出して全件中止する
+- 時計の巻き戻りなどで `updatedAt` が変わらなくても、本文や参照の変更を検出する。参照は相対的な順序を比較し、タグ削除で生じる position の欠番は無視する
+- 検出のため、対象メモの本体とタグ参照・画像参照を保存直前に読み直す。内容を変えない `CheckOnly` も同じ読み直しを伴うため、選択件数に比例して読み込み量が増える。正確な検出を優先してこのコストを許容する
+- ごみ箱への一括移動と単一メモの保存はこの経路を通らず、競合検出をしない
 - 送出される例外は専用型ではないため、UI では他の失敗と区別していない
 
 ## DAO の構成
@@ -78,8 +80,8 @@ Repository 側の削除は `NonCancellable` で囲み、commit 後にキャン�
 - `TagDao`: タグの参照・更新
 
 クエリ結果は用途ごとに projection を分けます。
-`MemoWithRefs` はタグ参照と画像参照を伴う完全な取得、`MemoSummaryProjection` はウィジェット向けの最小限、
-`MemoVersionProjection` は楽観的ロックの version 読み出しに使います。
+`MemoWithRefs` は競合検出にも使うタグ参照と画像参照を伴う完全な取得、
+`MemoSummaryProjection` はウィジェット向けの最小限の取得に使います。
 
 ## schema export と migration
 

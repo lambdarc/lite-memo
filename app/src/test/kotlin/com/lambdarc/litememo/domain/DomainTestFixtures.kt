@@ -11,6 +11,7 @@ import com.lambdarc.litememo.domain.model.Tag
 import com.lambdarc.litememo.domain.model.value.ExportFileReference
 import com.lambdarc.litememo.domain.model.value.ImageSourceReference
 import com.lambdarc.litememo.domain.model.value.MemoBody
+import com.lambdarc.litememo.domain.model.value.MemoExportToken
 import com.lambdarc.litememo.domain.model.value.MemoId
 import com.lambdarc.litememo.domain.model.value.MemoImageFileName
 import com.lambdarc.litememo.domain.model.value.MemoImageId
@@ -25,11 +26,13 @@ import com.lambdarc.litememo.domain.model.value.TimestampRange
 import com.lambdarc.litememo.domain.provider.CurrentTimeProvider
 import com.lambdarc.litememo.domain.provider.MemoIdProvider
 import com.lambdarc.litememo.domain.provider.TagIdProvider
+import com.lambdarc.litememo.domain.repository.MemoExportArchiveRepository
 import com.lambdarc.litememo.domain.repository.MemoImageStore
 import com.lambdarc.litememo.domain.repository.MemoImportArchiveRepository
 import com.lambdarc.litememo.domain.repository.MemoImportRepository
 import com.lambdarc.litememo.domain.repository.MemoRepository
 import com.lambdarc.litememo.domain.repository.TagRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -179,7 +182,7 @@ class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepositor
             val current = checkNotNull(activeMemoById[write.memoId]) {
                 "Memo not found or not active: ${write.memoId.value}"
             }
-            check(current.updatedAt == write.expectedUpdatedAt) {
+            check(current == write.expectedMemo) {
                 "Memo was modified since it was read: ${write.memoId.value}"
             }
         }
@@ -289,6 +292,45 @@ class FakeMemoImportRepository : MemoImportRepository {
 
     override suspend fun import(data: ExportData) {
         importedData += data
+    }
+
+}
+
+class FakeMemoExportArchiveRepository(
+    private val prepareGate: CompletableDeferred<Unit>? = null,
+    private val prepareError: Throwable? = null,
+    private val writeError: Throwable? = null,
+    private val discardGate: CompletableDeferred<Unit>? = null
+) : MemoExportArchiveRepository {
+
+    val preparedData = mutableListOf<ExportData>()
+    val writes = mutableListOf<Pair<MemoExportToken, ExportFileReference>>()
+    val discardedTokens = mutableListOf<MemoExportToken>()
+    var deleteAbandonedCallCount = 0
+
+    override suspend fun prepare(data: ExportData): MemoExportToken {
+        preparedData += data
+        prepareGate?.await()
+        prepareError?.let { throw it }
+        return TOKEN
+    }
+
+    override suspend fun write(token: MemoExportToken, destination: ExportFileReference) {
+        writes += token to destination
+        writeError?.let { throw it }
+    }
+
+    override suspend fun discard(token: MemoExportToken) {
+        discardedTokens += token
+        discardGate?.await()
+    }
+
+    override suspend fun deleteAbandonedPreparedExports() {
+        deleteAbandonedCallCount++
+    }
+
+    companion object {
+        val TOKEN = MemoExportToken("prepared-1")
     }
 
 }

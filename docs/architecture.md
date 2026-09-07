@@ -8,7 +8,7 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 - `ui` は `data` の実装詳細に依存せず、必要なビジネスルールと抽象を `domain` 経由で利用する
 - `data` は `domain` の Repository interface / provider を実装し、Room、DataStore、外部 SDK などのデータ源を扱う
 - Domain 層は Android Framework に依存しない
-- UseCase はビジネスルール、複数処理の調停、再利用する操作の境界として置き、単純委譲のためだけには増やさない
+- UseCase は UI entry point から domain の操作へ到達する唯一の窓口とし、単純委譲であっても境界として置く
 - Android UI と密接な SDK や OS API は UI / app entry 側に閉じ、データ源に関わる Android 依存は domain の抽象を data が実装する
 - 依存注入は Hilt で行い、`LiteMemoApplication` と app 直下の `di` / `data.di` を composition boundary とする。app 直下の `di` はアプリ全体の binding、`data.di` は data 層の binding を担う
 - Glance ウィジェットのように `@AndroidEntryPoint` を使えない UI entry point は、`ui.widget.di` の `@EntryPoint` から `SingletonComponent` の依存を取得する
@@ -73,9 +73,9 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 ## UseCase
 
 - 画面から直接 Repository implementation を呼ばない
-- ViewModel や Glance などの UI entry point は、必要に応じて UseCase または domain の Repository interface / provider に依存する
-- UseCase を置く場合は、できるだけ1つの明確な操作を表す
-- ビジネスルール、複数 Repository の調停、複数画面からの再利用がない単純委譲は、層の形をそろえるためだけに UseCase 化しない
+- ViewModel や Glance などの UI entry point は常に UseCase に依存し、domain の Repository interface / provider へ直接依存しない
+- UseCase は、できるだけ1つの明確な操作を表す
+- ビジネスルールも調停も持たない単純委譲でも、UI と domain の依存を切る境界として UseCase を置く
 - 認証、Navigation、Activity Result など UI と密接な Android API は UI / app entry 側で扱い、結果だけを ViewModel や domain の操作へ渡す
 
 ## Value Object
