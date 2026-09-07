@@ -116,8 +116,11 @@ class StagingMemoImportArchiveRepository @Inject constructor(
         val referenced = fileNames.chunked(SQLITE_QUERY_PARAMETER_BATCH_SIZE)
             .flatMap { chunk -> memoDao.findReferencedImageFileNames(chunk) }
             .toSet()
-        fileNames.filterNot { it in referenced }
-            .forEach { imageFileDataSource.deleteImage(it) }
+        val undeleted = fileNames.filterNot { it in referenced }
+            .filterNot { imageFileDataSource.deleteImage(it) }
+        if (undeleted.isNotEmpty()) {
+            throw IOException("Failed to delete imported image files: $undeleted")
+        }
     }
 
     private fun importedFileName(

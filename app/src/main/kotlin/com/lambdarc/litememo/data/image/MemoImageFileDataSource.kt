@@ -66,10 +66,9 @@ class MemoImageFileDataSource @Inject constructor(
                 .map { it.name }
         }
 
-    suspend fun deleteImage(fileName: String) {
-        withContext(ioDispatcher) {
-            File(imagesDir(), fileName).delete()
-        }
+    suspend fun deleteImage(fileName: String): Boolean = withContext(ioDispatcher) {
+        val file = File(imagesDir(), fileName)
+        file.delete() || !file.exists()
     }
 
     fun imageFilePath(fileName: String): String = File(imagesDir(), fileName).absolutePath
