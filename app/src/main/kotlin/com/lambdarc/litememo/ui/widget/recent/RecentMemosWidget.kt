@@ -54,7 +54,10 @@ class RecentMemosWidget : GlanceAppWidget() {
             context.applicationContext,
             WidgetEntryPoint::class.java
         )
-        val loader = WidgetMemoLoader(entryPoint.observeRecentMemosUseCase())
+        val loader = WidgetMemoLoader(
+            observeRecentMemosUseCase = entryPoint.observeRecentMemosUseCase(),
+            observeAppLockEnabledUseCase = entryPoint.observeAppLockEnabledUseCase()
+        )
         val initial = runCatching {
             loader.loadRecent()
         }.getOrElse {

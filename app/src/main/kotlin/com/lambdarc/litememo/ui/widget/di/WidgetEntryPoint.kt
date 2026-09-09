@@ -1,5 +1,6 @@
 package com.lambdarc.litememo.ui.widget.di
 
+import com.lambdarc.litememo.domain.usecase.ObserveAppLockEnabledUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveRecentMemosUseCase
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -9,4 +10,5 @@ import dagger.hilt.components.SingletonComponent
 @InstallIn(SingletonComponent::class)
 interface WidgetEntryPoint {
     fun observeRecentMemosUseCase(): ObserveRecentMemosUseCase
+    fun observeAppLockEnabledUseCase(): ObserveAppLockEnabledUseCase
 }

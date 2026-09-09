@@ -6,8 +6,9 @@ import com.google.android.gms.ads.MobileAds
 import com.lambdarc.litememo.di.ApplicationScope
 import com.lambdarc.litememo.domain.usecase.DeleteAbandonedPreparedExportsUseCase
 import com.lambdarc.litememo.domain.usecase.DeleteUnreferencedImportImagesUseCase
+import com.lambdarc.litememo.domain.usecase.ObserveAppLockEnabledUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveRecentMemosUseCase
-import com.lambdarc.litememo.ui.widget.data.WidgetMemoLoader
+import com.lambdarc.litememo.ui.widget.data.RECENT_MEMOS_LIMIT
 import com.lambdarc.litememo.ui.widget.data.WidgetRefresher
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CancellationException
@@ -36,6 +37,9 @@ class LiteMemoApplication : Application() {
     lateinit var observeRecentMemosUseCase: ObserveRecentMemosUseCase
 
     @Inject
+    lateinit var observeAppLockEnabledUseCase: ObserveAppLockEnabledUseCase
+
+    @Inject
     lateinit var deleteUnreferencedImportImagesUseCase: DeleteUnreferencedImportImagesUseCase
 
     @Inject
@@ -49,6 +53,7 @@ class LiteMemoApplication : Application() {
         deleteUnreferencedImportImages()
         deleteAbandonedPreparedExports()
         observeMemosForWidgetRefresh()
+        observeAppLockForWidgetRefresh()
     }
 
     private fun deleteAbandonedPreparedExports() {
@@ -75,7 +80,7 @@ class LiteMemoApplication : Application() {
 
     private fun observeMemosForWidgetRefresh() {
         applicationScope.launch {
-            WidgetMemoLoader(observeRecentMemosUseCase).observeRecent()
+            observeRecentMemosUseCase(RECENT_MEMOS_LIMIT)
                 .retryWhen { cause, _ ->
                     if (cause is CancellationException) {
                         false
@@ -89,13 +94,37 @@ class LiteMemoApplication : Application() {
                 .distinctUntilChanged()
                 .debounce(WIDGET_REFRESH_DEBOUNCE_MS)
                 .collect {
-                    runCatching {
-                        WidgetRefresher.refreshLists(this@LiteMemoApplication)
-                    }.onFailure { error ->
-                        if (error is CancellationException) throw error
-                        Log.w(WIDGET_REFRESH_TAG, "Widget refresh failed", error)
+                    refreshRecentMemoWidgets()
+                }
+        }
+    }
+
+    private fun observeAppLockForWidgetRefresh() {
+        applicationScope.launch {
+            observeAppLockEnabledUseCase()
+                .retryWhen { cause, _ ->
+                    if (cause is CancellationException) {
+                        false
+                    } else {
+                        Log.w(WIDGET_REFRESH_TAG, "App lock observation failed; retrying", cause)
+                        refreshRecentMemoWidgets()
+                        delay(WIDGET_REFRESH_DEBOUNCE_MS)
+                        true
                     }
                 }
+                .distinctUntilChanged()
+                .collect {
+                    refreshRecentMemoWidgets()
+                }
+        }
+    }
+
+    private suspend fun refreshRecentMemoWidgets() {
+        runCatching {
+            WidgetRefresher.refreshLists(this@LiteMemoApplication)
+        }.onFailure { error ->
+            if (error is CancellationException) throw error
+            Log.w(WIDGET_REFRESH_TAG, "Widget refresh failed", error)
         }
     }
 }

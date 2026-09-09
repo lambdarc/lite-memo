@@ -16,6 +16,8 @@
 最近のメモは `WidgetMemoLoader` が取得します。ViewModel を挟まず、UseCase を直接呼びます。
 
 - 取得は `ObserveRecentMemosUseCase` 経由で、件数は `RECENT_MEMOS_LIMIT` の 8 件
+- `ObserveAppLockEnabledUseCase` も購読し、アプリロック設定が有効な間は解錠状態にかかわらず空リストを返す
+- アプリロック設定が未確定の間はメモを表示せず、設定の読み出しに失敗した場合も有効として扱う
 - ごみ箱のメモは含めない。お気に入りを優先し、更新日時、作成日時、`id` の順で並べる
 - クエリの並び順と tie-break は [`docs/data-model.md`](data-model.md) の制約に従う。変更すると instrumented test が落ちる
 
@@ -29,7 +31,7 @@
 Hilt の生成コードによる注入経路に乗らないからです。
 
 代わりに `ui/widget/di` の `@EntryPoint` から `EntryPointAccessors.fromApplication` で取り出します。
-公開しているのは `ObserveRecentMemosUseCase` の 1 つだけで、取得箇所も最近のメモの `provideGlance` 1 箇所です。
+公開しているのは `ObserveRecentMemosUseCase` と `ObserveAppLockEnabledUseCase` で、取得箇所は最近のメモの `provideGlance` 1 箇所です。
 新規メモ側はデータ依存が無いため、この経路を使いません。
 
 ## 更新の契機
@@ -46,6 +48,10 @@ Hilt の生成コードによる注入経路に乗らないからです。
 
 この購読は application scope で動き、プロセスの生存期間を通じて生きています。
 画面が表示されているかどうかとは無関係です。
+
+アプリロック設定は別の Flow として購読します。初回の設定値と、その後の on / off の切り替えごとに、
+debounce を挟まず最近のメモウィジェットへ更新を掛けます。これによりプロセス起動時に残っている表示と、
+設定変更前の表示を新しい設定へ追従させます。ランチャーへの反映時刻は OS のウィジェット更新処理に依存します。
 
 実際の更新は `WidgetRefresher` が行い、配置済みのウィジェットが無ければ何もせず、
 あれば最近のメモウィジェットへ `updateAll` を掛けます。
