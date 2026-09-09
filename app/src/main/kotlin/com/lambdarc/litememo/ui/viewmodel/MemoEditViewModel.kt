@@ -30,11 +30,15 @@ import com.lambdarc.litememo.ui.state.MemoEditUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -42,6 +46,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
@@ -94,18 +99,34 @@ class MemoEditViewModel @Inject constructor(
     private var autosaveJob: Job? = null
     private var isFinishing = false
     private var activePersistImageIds: Set<String> = emptySet()
+    private var tagsJob: Job? = null
 
     init {
         loadInitialState()
-        observeTagsUseCase()
+        observeTags()
+    }
+
+    fun retryTags() {
+        observeTags()
+    }
+
+    private fun observeTags() {
+        tagsJob?.cancel()
+        _uiState.update { it.copy(hasTagError = false) }
+        tagsJob = observeTagsUseCase()
             .onEach { tags ->
                 _uiState.update { state ->
                     val validTagIds = tags.map { it.id }.toSet()
                     state.copy(
                         availableTags = tags.map { TagUiModel.fromDomain(it) },
-                        selectedTagIds = state.selectedTagIds.intersect(validTagIds)
+                        selectedTagIds = state.selectedTagIds.intersect(validTagIds),
+                        hasTagError = false
                     )
                 }
+            }
+            .catch { error ->
+                if (error is CancellationException) throw error
+                _uiState.update { it.copy(hasTagError = true) }
             }
             .launchIn(viewModelScope)
     }
@@ -141,23 +162,31 @@ class MemoEditViewModel @Inject constructor(
 
     fun attachImages(sourceUris: List<String>) {
         if (sourceUris.isEmpty()) return
-        if (isFinishing || _uiState.value.isDeletePending) return
+        if (!canEdit(_uiState.value)) return
         viewModelScope.launch {
             val attached = mutableListOf<MemoImageUiModel>()
             var hasFailure = false
-            sourceUris.forEach { uri ->
-                try {
-                    val image = attachMemoImageUseCase(ImageSourceReference(uri))
-                    attached += MemoImageUiModel.fromDomain(
-                        image = image,
-                        resolveImagePath = resolveMemoImagePathUseCase::invoke,
-                        isPersisted = false
-                    )
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Throwable) {
-                    hasFailure = true
+            try {
+                sourceUris.forEach { uri ->
+                    try {
+                        withContext(NonCancellable) {
+                            val image = attachMemoImageUseCase(ImageSourceReference(uri))
+                            attached += MemoImageUiModel.fromDomain(
+                                image = image,
+                                resolveImagePath = resolveMemoImagePathUseCase::invoke,
+                                isPersisted = false
+                            )
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Throwable) {
+                        hasFailure = true
+                    }
+                    currentCoroutineContext().ensureActive()
                 }
+            } catch (e: CancellationException) {
+                withContext(NonCancellable) { deleteCopiedImagesQuietly(attached) }
+                throw e
             }
 
             if (isFinishing || _uiState.value.isDeletePending) {
@@ -218,6 +247,12 @@ class MemoEditViewModel @Inject constructor(
         if (_uiState.value.isDeletePending || isFinishing) return
         isFinishing = true
         autosaveJob?.cancel()
+        val initialState = _uiState.value
+        if (initialMemoId != null && (initialState.isLoading || initialState.hasError)) {
+            clearSavedState()
+            _navigationEvent.trySend(MemoEditNavigationUiEvent.NavigateBack)
+            return
+        }
         viewModelScope.launch {
             val state = _uiState.value
             if (state.isContentBlank()) {
@@ -246,7 +281,10 @@ class MemoEditViewModel @Inject constructor(
             val savedState = savedStateEdit()
             if (savedState != null) {
                 _uiState.update { current ->
-                    savedState.copy(availableTags = current.availableTags)
+                    savedState.copy(
+                        availableTags = current.availableTags,
+                        hasTagError = current.hasTagError
+                    )
                 }
                 return@launch
             }
@@ -262,7 +300,10 @@ class MemoEditViewModel @Inject constructor(
                     return@launch
                 }
                 _uiState.update { current ->
-                    memo.toUiState().copy(availableTags = current.availableTags)
+                    memo.toUiState().copy(
+                        availableTags = current.availableTags,
+                        hasTagError = current.hasTagError
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -273,7 +314,7 @@ class MemoEditViewModel @Inject constructor(
     }
 
     private fun updateEditState(transform: (MemoEditUiState) -> MemoEditUiState) {
-        if (isFinishing || _uiState.value.isDeletePending) return
+        if (!canEdit(_uiState.value)) return
         val nextState = transform(_uiState.value)
         _uiState.value = nextState
         persistSavedState(nextState)
@@ -453,6 +494,9 @@ class MemoEditViewModel @Inject constructor(
 
     private fun MemoEditUiState.isContentBlank(): Boolean =
         title.isBlank() && body.isBlank() && images.isEmpty()
+
+    private fun canEdit(state: MemoEditUiState): Boolean =
+        !isFinishing && !state.isDeletePending && !state.isLoading && !state.hasError
 
     private companion object {
         const val AUTOSAVE_DEBOUNCE_MILLIS = 1_000L

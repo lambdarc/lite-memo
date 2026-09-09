@@ -80,6 +80,7 @@ fun MemoEditRoute(
         onDelete = { viewModel.delete() },
         onBackRequest = { viewModel.finishEditing() },
         onRetry = { viewModel.reload() },
+        onRetryTags = { viewModel.retryTags() },
         onAttachImageRequest = {
             pickImagesLauncher.launch(
                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)

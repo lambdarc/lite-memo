@@ -85,6 +85,7 @@
     <string name="memo_edit_attach_image">Attach image</string>
     <string name="memo_edit_remove_image">Remove image</string>
     <string name="memo_edit_image_attach_error">Couldn\'t attach the image</string>
+    <string name="memo_edit_tag_load_error">Couldn\'t load tags. Your memo remains unchanged.</string>
     <string name="attached_image_description">Attached image</string>
     <string name="delete_memo">Delete</string>
     <string name="navigate_back">Back</string>

@@ -27,12 +27,13 @@ fun CalendarRoute(
         onDatePickerRequest = { viewModel.showDatePicker() },
         onDatePickerDismiss = { viewModel.dismissDatePicker() },
         onDatePick = { date -> viewModel.selectDateFromPicker(date) },
+        canCreateMemo = viewModel.selectedDateMillis() != null,
         onSearchToggle = { viewModel.toggleSearch() },
         onSearchQueryChange = { viewModel.updateSearchQuery(it) },
         onRetry = { viewModel.retry() },
         onMemoClick = onMemoClick,
         onCreateMemoClick = {
-            viewModel.selectedDateMillis().let(onCreateMemoClick)
+            viewModel.selectedDateMillis()?.let(onCreateMemoClick)
         },
         modifier = modifier
     )
