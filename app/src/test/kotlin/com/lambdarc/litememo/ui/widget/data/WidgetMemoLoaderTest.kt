@@ -159,6 +159,7 @@ class WidgetMemoLoaderTest {
         // Flow: memo content remains hidden until the app lock setting emits
         loader.observeRecent().test {
             expectNoEvents()
+            verify(exactly = 0) { observeRecentMemosUseCase.invoke(any()) }
             appLockEnabled.emit(false)
             assertEquals(listOf(MemoId("a")), awaitItem().map { it.id })
             cancelAndIgnoreRemainingEvents()

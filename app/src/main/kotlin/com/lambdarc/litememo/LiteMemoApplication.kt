@@ -14,14 +14,19 @@ import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 private const val WIDGET_REFRESH_DEBOUNCE_MS = 500L
+private const val APP_LOCK_RETRY_MAX_DELAY_MS = 30_000L
 private const val WIDGET_REFRESH_TAG = "WidgetRefresh"
 private const val IMPORT_CLEANUP_TAG = "ImportCleanup"
 private const val EXPORT_CLEANUP_TAG = "ExportCleanup"
@@ -102,17 +107,10 @@ class LiteMemoApplication : Application() {
     private fun observeAppLockForWidgetRefresh() {
         applicationScope.launch {
             observeAppLockEnabledUseCase()
-                .retryWhen { cause, _ ->
-                    if (cause is CancellationException) {
-                        false
-                    } else {
-                        Log.w(WIDGET_REFRESH_TAG, "App lock observation failed; retrying", cause)
-                        refreshRecentMemoWidgets()
-                        delay(WIDGET_REFRESH_DEBOUNCE_MS)
-                        true
-                    }
+                .retryAppLockObservation {
+                    Log.w(WIDGET_REFRESH_TAG, "App lock observation failed; retrying", it)
+                    refreshRecentMemoWidgets()
                 }
-                .distinctUntilChanged()
                 .collect {
                     refreshRecentMemoWidgets()
                 }
@@ -127,4 +125,38 @@ class LiteMemoApplication : Application() {
             Log.w(WIDGET_REFRESH_TAG, "Widget refresh failed", error)
         }
     }
+}
+
+internal fun <T> Flow<T>.retryAppLockObservation(
+    initialDelayMillis: Long = WIDGET_REFRESH_DEBOUNCE_MS,
+    maxDelayMillis: Long = APP_LOCK_RETRY_MAX_DELAY_MS,
+    onFailureEpisode: suspend (Throwable) -> Unit
+): Flow<T> = flow {
+    require(initialDelayMillis > 0)
+    require(maxDelayMillis >= initialDelayMillis)
+    var retryDelayMillis = initialDelayMillis
+    var failureEpisodeReported = false
+
+    emitAll(
+        this@retryAppLockObservation
+            .distinctUntilChanged()
+            .onEach {
+                retryDelayMillis = initialDelayMillis
+                failureEpisodeReported = false
+            }
+            .retryWhen { error, _ ->
+                if (error is CancellationException) return@retryWhen false
+                if (!failureEpisodeReported) {
+                    onFailureEpisode(error)
+                    failureEpisodeReported = true
+                }
+                delay(retryDelayMillis)
+                retryDelayMillis = if (retryDelayMillis >= maxDelayMillis / 2) {
+                    maxDelayMillis
+                } else {
+                    retryDelayMillis * 2
+                }
+                true
+            }
+    )
 }
