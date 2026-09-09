@@ -122,6 +122,7 @@ fun MemoEditScreen(
                     BasicTextField(
                         value = uiState.title,
                         onValueChange = onTitleChange,
+                        enabled = canEdit,
                         modifier = Modifier
                             .fillMaxWidth()
                             .semantics { contentDescription = titleLabel }
@@ -167,6 +168,7 @@ fun MemoEditScreen(
                                 FilterChip(
                                     selected = selected,
                                     onClick = { onTagToggle(tag.id) },
+                                    enabled = canEdit,
                                     label = { Text(text = tag.name) },
                                     leadingIcon = {
                                         Box(
@@ -200,6 +202,7 @@ fun MemoEditScreen(
                                     )
                                     IconButton(
                                         onClick = { onImageRemove(image.id) },
+                                        enabled = canEdit,
                                         modifier = Modifier
                                             .align(Alignment.TopEnd)
                                             .size(32.dp)
@@ -220,6 +223,7 @@ fun MemoEditScreen(
                     BasicTextField(
                         value = uiState.body,
                         onValueChange = onBodyChange,
+                        enabled = canEdit,
                         modifier = Modifier
                             .fillMaxSize()
                             .focusRequester(bodyFocusRequester)
