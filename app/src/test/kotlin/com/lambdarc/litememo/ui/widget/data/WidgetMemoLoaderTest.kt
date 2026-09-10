@@ -1,12 +1,17 @@
 package com.lambdarc.litememo.ui.widget.data
 
+import app.cash.turbine.test
 import com.lambdarc.litememo.domain.memoSummaryFixture
 import com.lambdarc.litememo.domain.model.value.MemoId
+import com.lambdarc.litememo.domain.usecase.ObserveAppLockEnabledUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveRecentMemosUseCase
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertAll
@@ -14,11 +19,20 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.io.IOException
 
 class WidgetMemoLoaderTest {
 
     private val observeRecentMemosUseCase = mockk<ObserveRecentMemosUseCase>()
-    private val loader = WidgetMemoLoader(observeRecentMemosUseCase)
+    private val observeAppLockEnabledUseCase = mockk<ObserveAppLockEnabledUseCase>()
+    private val loader = WidgetMemoLoader(
+        observeRecentMemosUseCase = observeRecentMemosUseCase,
+        observeAppLockEnabledUseCase = observeAppLockEnabledUseCase
+    )
+
+    init {
+        every { observeAppLockEnabledUseCase.invoke() } returns flowOf(false)
+    }
 
     @Test
     fun normalLoadRecentMapsUseCaseOrder() = runTest {
@@ -78,6 +92,96 @@ class WidgetMemoLoaderTest {
 
         // Assert
         assertEquals(listOf(MemoId("a"), MemoId("b")), items.map { it.id })
+    }
+
+    @Test
+    fun flowObserveRecentHidesItemsWhenAppLockChangesFromDisabledToEnabled() = runTest {
+        // Arrange
+        val appLockEnabled = MutableStateFlow(false)
+        every { observeAppLockEnabledUseCase.invoke() } returns appLockEnabled
+        every { observeRecentMemosUseCase.invoke(any()) } returns MutableStateFlow(
+            listOf(memoSummaryFixture(id = "a", title = "A"))
+        )
+
+        // Act & Assert
+        // Flow: enabling app lock hides content even while the app process remains active
+        loader.observeRecent().test {
+            assertEquals(listOf(MemoId("a")), awaitItem().map { it.id })
+            appLockEnabled.value = true
+            assertTrue(awaitItem().isEmpty())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun flowObserveRecentRestoresItemsWhenAppLockChangesFromEnabledToDisabled() = runTest {
+        // Arrange
+        val appLockEnabled = MutableStateFlow(true)
+        every { observeAppLockEnabledUseCase.invoke() } returns appLockEnabled
+        every { observeRecentMemosUseCase.invoke(any()) } returns MutableStateFlow(
+            listOf(memoSummaryFixture(id = "a", title = "A"))
+        )
+
+        // Act & Assert
+        // Flow: disabling app lock restores the current widget content
+        loader.observeRecent().test {
+            assertTrue(awaitItem().isEmpty())
+            appLockEnabled.value = false
+            assertEquals(listOf(MemoId("a")), awaitItem().map { it.id })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun interactionObserveRecentDoesNotReadMemosWhileAppLockIsEnabled() = runTest {
+        // Arrange
+        every { observeAppLockEnabledUseCase.invoke() } returns flowOf(true)
+
+        // Act
+        // Interaction: locked widgets emit an empty state without waiting for memo storage
+        val items = loader.observeRecent().first()
+
+        // Assert
+        assertTrue(items.isEmpty())
+        verify(exactly = 0) { observeRecentMemosUseCase.invoke(any()) }
+    }
+
+    @Test
+    fun flowObserveRecentDoesNotEmitItemsBeforeAppLockSettingIsKnown() = runTest {
+        // Arrange
+        val appLockEnabled = MutableSharedFlow<Boolean>()
+        every { observeAppLockEnabledUseCase.invoke() } returns appLockEnabled
+        every { observeRecentMemosUseCase.invoke(any()) } returns MutableStateFlow(
+            listOf(memoSummaryFixture(id = "a", title = "A"))
+        )
+
+        // Act & Assert
+        // Flow: memo content remains hidden until the app lock setting emits
+        loader.observeRecent().test {
+            expectNoEvents()
+            verify(exactly = 0) { observeRecentMemosUseCase.invoke(any()) }
+            appLockEnabled.emit(false)
+            assertEquals(listOf(MemoId("a")), awaitItem().map { it.id })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun errorObserveRecentHidesItemsWhenAppLockSettingReadFails() = runTest {
+        // Arrange
+        every { observeAppLockEnabledUseCase.invoke() } returns flow {
+            throw IOException("read failed")
+        }
+        every { observeRecentMemosUseCase.invoke(any()) } returns flowOf(
+            listOf(memoSummaryFixture(id = "a", title = "A"))
+        )
+
+        // Act
+        // Error: a settings read failure fails closed
+        val items = loader.observeRecent().first()
+
+        // Assert
+        assertTrue(items.isEmpty())
     }
 
     @Test
