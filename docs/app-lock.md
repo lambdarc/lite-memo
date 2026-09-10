@@ -52,6 +52,24 @@
 利用可否の判定は `canAuthenticate` が成功を返すかどうかだけを見ています。
 未登録、ハードウェア非搭載、一時的に使用不可といった理由は区別していません。
 
+## 守れる範囲
+
+アプリロックは、端末を解錠できる誰かがアプリを開くことを防ぐための UX 上のゲートです。
+端末のプロセスへ介入できる攻撃者に対する防御ではありません。
+
+メモの本文、画像、DataStore はいずれも平文で保存しています。
+`BiometricPrompt` へ `CryptoObject` を渡していないのはこのためです。
+`KeyStore` の鍵で `onAuthenticationSucceeded` を裏付けても、
+プロンプトを迂回できる攻撃者はそもそも `databases/` を直接読めるため、守れる対象が増えません。
+
+導入しようとした場合の制約も残しておきます。
+`CryptoObject` は `BIOMETRIC_WEAK` と併用できず、`KeyguardManager` の確認画面にも存在しないため、
+掛かるのは API 30 以上の経路だけです。
+`setUserAuthenticationRequired` の鍵は生体の再登録で無効化されるため、復旧の導線も別に要ります。
+
+CodeQL の `java/android/insecure-local-authentication` はこの理由で dismiss しています。
+平文保存をやめるなら、この判断ごと見直します。
+
 ## 失敗の扱い
 
 認証結果は成功 / 失敗 / キャンセル / 認証情報なし / 利用不可の 5 つです。
