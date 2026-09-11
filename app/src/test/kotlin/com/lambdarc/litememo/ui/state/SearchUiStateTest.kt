@@ -1,16 +1,14 @@
 package com.lambdarc.litememo.ui.state
 
 import app.cash.turbine.test
+import com.lambdarc.litememo.domain.FakeMemoRepository
 import com.lambdarc.litememo.domain.memoFixture
 import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.value.MemoId
+import com.lambdarc.litememo.domain.model.value.SearchQuery
 import com.lambdarc.litememo.domain.repository.FakeDisplaySettingsRepository
-import com.lambdarc.litememo.domain.repository.MemoRepository
 import com.lambdarc.litememo.domain.usecase.SearchMemosUseCase
 import com.lambdarc.litememo.ui.model.MemoUiModel
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
@@ -223,7 +221,7 @@ class SearchUiStateTest {
             awaitItem()
             controls.query("   ")
             awaitItem()
-            verify(exactly = 0) { repository.observeActiveMemosBySearchQuery(any()) }
+            assertEquals(emptyList<SearchQuery>(), repository.searchedQueries)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -243,7 +241,7 @@ class SearchUiStateTest {
             controls.query("shopping")
             advanceTimeBy(249.milliseconds)
             runCurrent()
-            verify(exactly = 0) { repository.observeActiveMemosBySearchQuery(any()) }
+            assertEquals(emptyList<SearchQuery>(), repository.searchedQueries)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -371,7 +369,7 @@ class SearchUiStateTest {
             awaitItem()
             advanceTimeBy(1.milliseconds)
             runCurrent()
-            verify(exactly = 0) { repository.observeActiveMemosBySearchQuery(any()) }
+            assertEquals(emptyList<SearchQuery>(), repository.searchedQueries)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -413,7 +411,7 @@ class SearchUiStateTest {
 
     private fun searchResults(
         controls: Flow<SearchUiState>,
-        repository: MemoRepository = memoRepository()
+        repository: FakeMemoRepository = memoRepository()
     ): Flow<MemoSearchUiResult> = controls.searchMemoResults(
         SearchMemosUseCase(
             memoRepository = repository,
@@ -423,11 +421,7 @@ class SearchUiStateTest {
 
     private fun memoRepository(
         search: (String) -> Flow<List<Memo>> = { flowOf(emptyList()) }
-    ): MemoRepository = mockk<MemoRepository>().also { repository ->
-        every { repository.observeActiveMemosBySearchQuery(any()) } answers {
-            search(firstArg<String>())
-        }
-    }
+    ): FakeMemoRepository = FakeMemoRepository(searchResults = search)
 
     private fun memoUiModel() = MemoUiModel(
         id = MemoId("memo-1"),

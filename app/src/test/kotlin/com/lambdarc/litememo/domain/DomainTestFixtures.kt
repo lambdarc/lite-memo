@@ -94,10 +94,15 @@ fun epochMillis(value: String): Long = Instant.parse(value).toEpochMilli()
 
 data class TrashMoveRecord(val memoId: MemoId, val deletedAt: TimestampMillis)
 
-class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepository {
+class FakeMemoRepository(
+    initialMemos: List<Memo> = emptyList(),
+    private val searchResults: ((String) -> Flow<List<Memo>>)? = null
+) : MemoRepository {
 
     private val memos = MutableStateFlow(initialMemos)
     val savedMemos = mutableListOf<Memo>()
+    val recentLimits = mutableListOf<Int>()
+    val searchedQueries = mutableListOf<SearchQuery>()
     val activeBulkSaveExpectedIdBatches = mutableListOf<List<MemoId>>()
     val movedToTrash = mutableListOf<TrashMoveRecord>()
     val restoredIds = mutableListOf<MemoId>()
@@ -108,32 +113,38 @@ class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepositor
     override fun observeActiveMemos(): Flow<List<Memo>> =
         memos.map { list -> list.filter { it.deletedAt == null } }
 
-    override fun observeRecentActiveMemos(limit: Int): Flow<List<MemoSummary>> = memos.map { list ->
-        list.filter { it.deletedAt == null }
-            .sortedWith(
-                compareByDescending<Memo> { it.isFavorite }
-                    .thenByDescending { it.updatedAt.value }
-                    .thenByDescending { it.createdAt.value }
-            )
-            .take(limit)
-            .map { memo ->
-                MemoSummary(
-                    id = memo.id,
-                    title = memo.title,
-                    body = memo.body,
-                    isFavorite = memo.isFavorite
+    override fun observeRecentActiveMemos(limit: Int): Flow<List<MemoSummary>> {
+        recentLimits += limit
+        return memos.map { list ->
+            list.filter { it.deletedAt == null }
+                .sortedWith(
+                    compareByDescending<Memo> { it.isFavorite }
+                        .thenByDescending { it.updatedAt.value }
+                        .thenByDescending { it.createdAt.value }
                 )
-            }
+                .take(limit)
+                .map { memo ->
+                    MemoSummary(
+                        id = memo.id,
+                        title = memo.title,
+                        body = memo.body,
+                        isFavorite = memo.isFavorite
+                    )
+                }
+        }
     }
 
-    override fun observeActiveMemosBySearchQuery(query: SearchQuery): Flow<List<Memo>> =
-        memos.map { list ->
+    override fun observeActiveMemosBySearchQuery(query: SearchQuery): Flow<List<Memo>> {
+        searchedQueries += query
+        searchResults?.let { results -> return results(query.value) }
+        return memos.map { list ->
             list.filter { memo ->
                 val matchesQuery = memo.title.value.contains(query.value, ignoreCase = true) ||
                     memo.body.value.contains(query.value, ignoreCase = true)
                 memo.deletedAt == null && matchesQuery
             }
         }
+    }
 
     override fun observeActiveMemosCreatedBetween(range: TimestampRange): Flow<List<Memo>> {
         if (range.isEmpty) return flowOf(emptyList())
@@ -286,11 +297,15 @@ class FakeMemoRepository(initialMemos: List<Memo> = emptyList()) : MemoRepositor
 
 }
 
-class FakeMemoImportRepository : MemoImportRepository {
+class FakeMemoImportRepository(private val importGate: CompletableDeferred<Unit>? = null) :
+    MemoImportRepository {
 
     val importedData = mutableListOf<ExportData>()
+    var importError: Throwable? = null
 
     override suspend fun import(data: ExportData) {
+        importGate?.await()
+        importError?.let { throw it }
         importedData += data
     }
 
@@ -342,6 +357,7 @@ class FakeMemoImportArchiveRepository(private val stagedData: ExportData? = null
     val completedTokens = mutableListOf<MemoImportSessionToken>()
     val rolledBackTokens = mutableListOf<MemoImportSessionToken>()
     var stageError: Throwable? = null
+    var rollbackError: Throwable? = null
     var deleteUnreferencedCallCount = 0
 
     override suspend fun stageImportImages(reference: ExportFileReference): StagedMemoImport {
@@ -356,6 +372,7 @@ class FakeMemoImportArchiveRepository(private val stagedData: ExportData? = null
 
     override suspend fun rollbackStagedImport(token: MemoImportSessionToken) {
         rolledBackTokens += token
+        rollbackError?.let { throw it }
     }
 
     override suspend fun deleteUnreferencedImportImages() {
@@ -373,6 +390,7 @@ class FakeTagRepository(initialTags: List<Tag> = emptyList()) : TagRepository {
     private val tags = MutableStateFlow(initialTags)
     val savedTags = mutableListOf<Tag>()
     val deletedIds = mutableListOf<TagId>()
+    val getTagsByIdsCalls = mutableListOf<List<TagId>>()
 
     override fun observeTags(): Flow<List<Tag>> = tags
 
@@ -381,8 +399,10 @@ class FakeTagRepository(initialTags: List<Tag> = emptyList()) : TagRepository {
     override suspend fun findTagByName(name: TagName): Tag? =
         tags.value.firstOrNull { it.name == name }
 
-    override suspend fun getTagsByIds(ids: List<TagId>): List<Tag> =
-        tags.value.filter { it.id in ids }
+    override suspend fun getTagsByIds(ids: List<TagId>): List<Tag> {
+        getTagsByIdsCalls += ids
+        return tags.value.filter { it.id in ids }
+    }
 
     override suspend fun saveTag(tag: Tag) {
         savedTags += tag
@@ -427,13 +447,14 @@ class FakeMemoImageStore : MemoImageStore {
 class QueueMemoIdProvider(ids: List<MemoId> = listOf(MemoId("memo-1"))) : MemoIdProvider {
 
     private val memoIds = ids.toMutableList()
+    val issuedIds = mutableListOf<MemoId>()
 
     override fun newMemoId(): MemoId {
         if (memoIds.isEmpty()) {
             error("No more MemoId available in QueueMemoIdProvider.")
         }
 
-        return memoIds.removeAt(0)
+        return memoIds.removeAt(0).also { issuedIds += it }
     }
 }
 
