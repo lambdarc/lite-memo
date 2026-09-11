@@ -35,7 +35,7 @@ class WidgetMemoLoaderTest {
     }
 
     @Test
-    fun normalLoadRecentMapsUseCaseOrder() = runTest {
+    fun normalObserveRecentMapsUseCaseOrder() = runTest {
         // Arrange
         every { observeRecentMemosUseCase.invoke(any()) } returns flowOf(
             listOf(
@@ -46,32 +46,32 @@ class WidgetMemoLoaderTest {
         )
 
         // Act
-        val items = loader.loadRecent()
+        val items = loader.observeRecent().first()
 
         // Assert
         assertEquals(listOf(MemoId("a"), MemoId("b"), MemoId("c")), items.map { it.id })
     }
 
     @Test
-    fun interactionLoadRecentRequestsWidgetDisplayLimit() = runTest {
+    fun interactionObserveRecentRequestsWidgetDisplayLimit() = runTest {
         // Arrange
         every { observeRecentMemosUseCase.invoke(any()) } returns flowOf(emptyList())
 
         // Act
-        // Interaction: loading uses the same fixed limit as the widget scroll content
-        loader.loadRecent()
+        // Interaction: observing uses the same fixed limit as the widget scroll content
+        loader.observeRecent().first()
 
         // Assert
         verify { observeRecentMemosUseCase.invoke(8) }
     }
 
     @Test
-    fun normalLoadRecentReturnsEmptyForNoMemos() = runTest {
+    fun normalObserveRecentReturnsEmptyForNoMemos() = runTest {
         // Arrange
         every { observeRecentMemosUseCase.invoke(any()) } returns flowOf(emptyList())
 
         // Act
-        val items = loader.loadRecent()
+        val items = loader.observeRecent().first()
 
         // Assert
         assertTrue(items.isEmpty())
@@ -192,7 +192,7 @@ class WidgetMemoLoaderTest {
         )
 
         // Act
-        val item = loader.loadRecent().single()
+        val item = loader.observeRecent().first().single()
 
         // Assert
         assertTrue(item.isFavorite)
@@ -206,7 +206,7 @@ class WidgetMemoLoaderTest {
         )
 
         // Act
-        val item = loader.loadRecent().single()
+        val item = loader.observeRecent().first().single()
 
         // Assert
         assertAll(
@@ -223,7 +223,7 @@ class WidgetMemoLoaderTest {
         )
 
         // Act
-        val item = loader.loadRecent().single()
+        val item = loader.observeRecent().first().single()
 
         // Assert
         assertAll(
@@ -242,7 +242,7 @@ class WidgetMemoLoaderTest {
 
         // Act
         // Boundary: leading whitespace is removed before applying the body scan limit
-        val item = loader.loadRecent().single()
+        val item = loader.observeRecent().first().single()
 
         // Assert
         assertEquals("Visible body", item.title)
@@ -257,7 +257,7 @@ class WidgetMemoLoaderTest {
         )
 
         // Act
-        val item = loader.loadRecent().single()
+        val item = loader.observeRecent().first().single()
 
         // Assert
         assertAll(
@@ -275,7 +275,7 @@ class WidgetMemoLoaderTest {
         )
 
         // Act
-        val item = loader.loadRecent().single()
+        val item = loader.observeRecent().first().single()
 
         // Assert
         assertEquals(50, item.title.length)
@@ -289,7 +289,7 @@ class WidgetMemoLoaderTest {
         )
 
         // Act
-        val item = loader.loadRecent().single()
+        val item = loader.observeRecent().first().single()
 
         // Assert
         assertEquals(80, item.snippet.length)
@@ -305,7 +305,7 @@ class WidgetMemoLoaderTest {
         )
 
         // Act
-        val item = loader.loadRecent().single()
+        val item = loader.observeRecent().first().single()
 
         // Assert
         assertAll(
@@ -323,7 +323,7 @@ class WidgetMemoLoaderTest {
         )
 
         // Act
-        val item = loader.loadRecent().single()
+        val item = loader.observeRecent().first().single()
 
         // Assert
         assertAll(

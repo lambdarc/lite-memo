@@ -8,7 +8,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -33,8 +32,6 @@ class WidgetMemoLoader(
                     .map { memos -> memos.map { it.toWidgetItem() } }
             }
         }
-
-    suspend fun loadRecent(): List<WidgetItem> = observeRecent().first()
 
 }
 
