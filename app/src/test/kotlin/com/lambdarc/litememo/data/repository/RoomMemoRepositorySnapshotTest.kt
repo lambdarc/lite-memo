@@ -5,13 +5,12 @@ import com.lambdarc.litememo.data.local.entity.MemoImageEntity
 import com.lambdarc.litememo.data.local.entity.MemoTagRefEntity
 import com.lambdarc.litememo.data.mapper.toDomain
 import com.lambdarc.litememo.data.mapper.toMemoWithRefs
+import com.lambdarc.litememo.domain.FakeMemoImageStore
 import com.lambdarc.litememo.domain.memoFixture
 import com.lambdarc.litememo.domain.memoImageFixture
 import com.lambdarc.litememo.domain.model.ActiveMemoBulkWrite
+import com.lambdarc.litememo.domain.model.value.MemoImageFileName
 import com.lambdarc.litememo.domain.model.value.TagId
-import com.lambdarc.litememo.domain.repository.MemoImageStore
-import io.mockk.coVerify
-import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -26,7 +25,7 @@ class RoomMemoRepositorySnapshotTest {
             tagRefs = listOf(MemoTagRefEntity(memoId = "memo-1", tagId = "tag-1", position = 2))
         )
         val dao = RecordingMemoBulkDao(activeMemosById = mapOf("memo-1" to current))
-        val repository = RoomMemoRepository(dao, dao, mockk(relaxed = true))
+        val repository = RoomMemoRepository(dao, dao, FakeMemoImageStore())
 
         // Act
         // Boundary: normalized positions preserve the logical order and pass the check.
@@ -44,7 +43,7 @@ class RoomMemoRepositorySnapshotTest {
         val original = memoFixture().toMemoWithRefs()
         val current = original.copy(memo = original.memo.copy(body = "Concurrent edit"))
         val dao = RecordingMemoBulkDao(activeMemosById = mapOf("memo-1" to current))
-        val repository = RoomMemoRepository(dao, dao, mockk(relaxed = true))
+        val repository = RoomMemoRepository(dao, dao, FakeMemoImageStore())
 
         // Act
         // Error: equal timestamps do not make different content safe to overwrite.
@@ -74,7 +73,7 @@ class RoomMemoRepositorySnapshotTest {
             tagRefs = listOf(MemoTagRefEntity(memoId = "memo-1", tagId = "tag-1", position = 0))
         )
         val dao = RecordingMemoBulkDao(activeMemosById = mapOf("memo-1" to current))
-        val repository = RoomMemoRepository(dao, dao, mockk(relaxed = true))
+        val repository = RoomMemoRepository(dao, dao, FakeMemoImageStore())
 
         // Act
         // Error: unchanged members must also retain the observed tag references.
@@ -103,7 +102,7 @@ class RoomMemoRepositorySnapshotTest {
             )
         )
         val dao = RecordingMemoBulkDao(activeMemosById = mapOf("memo-1" to current))
-        val store = mockk<MemoImageStore>(relaxed = true)
+        val store = FakeMemoImageStore()
         val repository = RoomMemoRepository(dao, dao, store)
 
         // Act
@@ -120,8 +119,10 @@ class RoomMemoRepositorySnapshotTest {
         }.exceptionOrNull()
 
         // Assert
-        assertEquals(IllegalStateException::class.java, error?.javaClass)
-        coVerify(exactly = 0) { store.deleteImages(any()) }
+        assertAll(
+            { assertEquals(IllegalStateException::class.java, error?.javaClass) },
+            { assertEquals(emptyList<MemoImageFileName>(), store.deletedFileNames) }
+        )
     }
 
     @Test
@@ -133,7 +134,7 @@ class RoomMemoRepositorySnapshotTest {
             tagRefs = original.tagRefs.map { it.copy(position = 1 - it.position) }
         )
         val dao = RecordingMemoBulkDao(activeMemosById = mapOf("memo-1" to current))
-        val repository = RoomMemoRepository(dao, dao, mockk(relaxed = true))
+        val repository = RoomMemoRepository(dao, dao, FakeMemoImageStore())
 
         // Act
         // Error: normalizing gaps must not hide a reordering of the same tag set.
@@ -160,7 +161,7 @@ class RoomMemoRepositorySnapshotTest {
             imageRefs = original.imageRefs.map { it.copy(position = 1 - it.position) }
         )
         val dao = RecordingMemoBulkDao(activeMemosById = mapOf("memo-1" to current))
-        val store = mockk<MemoImageStore>(relaxed = true)
+        val store = FakeMemoImageStore()
         val repository = RoomMemoRepository(dao, dao, store)
 
         // Act
@@ -179,9 +180,9 @@ class RoomMemoRepositorySnapshotTest {
         // Assert
         assertAll(
             { assertEquals(IllegalStateException::class.java, error?.javaClass) },
-            { assertEquals(emptyList<String>(), dao.calls) }
+            { assertEquals(emptyList<String>(), dao.calls) },
+            { assertEquals(emptyList<MemoImageFileName>(), store.deletedFileNames) }
         )
-        coVerify(exactly = 0) { store.deleteImages(any()) }
     }
 
 }
