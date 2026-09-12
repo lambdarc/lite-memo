@@ -44,7 +44,6 @@ import com.lambdarc.litememo.ui.widget.data.WidgetItem
 import com.lambdarc.litememo.ui.widget.data.WidgetMemoLoader
 import com.lambdarc.litememo.ui.widget.di.WidgetEntryPoint
 import dagger.hilt.android.EntryPointAccessors
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.catch
 
 class RecentMemosWidget : GlanceAppWidget() {
@@ -54,18 +53,16 @@ class RecentMemosWidget : GlanceAppWidget() {
             context.applicationContext,
             WidgetEntryPoint::class.java
         )
-        val loader = WidgetMemoLoader(entryPoint.observeRecentMemosUseCase())
-        val initial = runCatching {
-            loader.loadRecent()
-        }.getOrElse {
-            if (it is CancellationException) throw it else emptyList()
-        }
+        val loader = WidgetMemoLoader(
+            observeRecentMemosUseCase = entryPoint.observeRecentMemosUseCase(),
+            observeAppLockEnabledUseCase = entryPoint.observeAppLockEnabledUseCase()
+        )
         provideContent {
             val items by remember {
                 loader.observeRecent().catch {
                     emit(emptyList())
                 }
-            }.collectAsState(initial = initial)
+            }.collectAsState(initial = emptyList())
             GlanceTheme(colors = WidgetColorProviders) {
                 RecentMemosContent(items)
             }

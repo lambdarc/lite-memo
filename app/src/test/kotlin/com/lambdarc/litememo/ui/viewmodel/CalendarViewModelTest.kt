@@ -16,6 +16,7 @@ import com.lambdarc.litememo.domain.model.value.TimestampRange
 import com.lambdarc.litememo.domain.repository.FakeDisplaySettingsRepository
 import com.lambdarc.litememo.domain.repository.MemoRepository
 import com.lambdarc.litememo.domain.tagFixture
+import com.lambdarc.litememo.domain.usecase.GetCurrentCalendarDateUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveCalendarMonthSummaryUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveMemosByCalendarDateUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
@@ -157,6 +158,52 @@ class CalendarViewModelTest {
         // Assert
         assertEquals(LocalDate.of(2026, 7, 3), state.selectedDate)
     }
+
+    @Test
+    fun boundarySelectedDateMillisUsesEpochForTokyoEpochDate() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel(zone = ZoneId.of("Asia/Tokyo"))
+        advanceUntilIdle()
+        viewModel.selectDate(LocalDate.of(1970, 1, 1))
+
+        // Act
+        // Boundary: epoch is valid on January 1 in Tokyo although local midnight is negative.
+        val millis = viewModel.selectedDateMillis()
+
+        // Assert
+        assertEquals(0L, millis)
+    }
+
+    @Test
+    fun boundarySelectedDateMillisUsesEpochForLosAngelesPreviousDate() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel(zone = ZoneId.of("America/Los_Angeles"))
+        advanceUntilIdle()
+        viewModel.selectDate(LocalDate.of(1969, 12, 31))
+
+        // Act
+        // Boundary: epoch belongs to December 31 in Los Angeles.
+        val millis = viewModel.selectedDateMillis()
+
+        // Assert
+        assertEquals(0L, millis)
+    }
+
+    @Test
+    fun boundarySelectedDateMillisReturnsNullBeforeFirstRepresentableLocalDate() =
+        runTest(dispatcher) {
+            // Arrange
+            val viewModel = calendarViewModel(zone = ZoneId.of("America/Los_Angeles"))
+            advanceUntilIdle()
+            viewModel.selectDate(LocalDate.of(1969, 12, 30))
+
+            // Act
+            // Boundary: a date containing no non-negative instant cannot create a memo.
+            val millis = viewModel.selectedDateMillis()
+
+            // Assert
+            assertEquals(null, millis)
+        }
 
     @Test
     fun stateTransitionCloseSearchResetsSearch() = runTest(dispatcher) {
@@ -401,7 +448,10 @@ class CalendarViewModelTest {
                 displaySettingsRepository = displaySettingsRepository
             ),
             resolveMemoImagePathUseCase = ResolveMemoImagePathUseCase(FakeMemoImageStore()),
-            currentTimeProvider = MutableTimeProvider(TimestampMillis(today)),
+            getCurrentCalendarDateUseCase = GetCurrentCalendarDateUseCase(
+                currentTimeProvider = MutableTimeProvider(TimestampMillis(today)),
+                zoneId = zone
+            ),
             zoneId = zone
         )
     }

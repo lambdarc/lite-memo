@@ -15,7 +15,6 @@ import com.lambdarc.litememo.domain.usecase.ObserveMemosUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.ResolveMemoImagePathUseCase
 import com.lambdarc.litememo.domain.usecase.SearchMemosUseCase
-import com.lambdarc.litememo.domain.usecase.SetMemoFavoriteUseCase
 import com.lambdarc.litememo.ui.model.MemoUiModel
 import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.HomeBulkTagDialogUiState
@@ -48,7 +47,6 @@ class HomeViewModel @Inject constructor(
     private val observeTagsUseCase: ObserveTagsUseCase,
     private val filterMemosUseCase: FilterMemosUseCase,
     private val searchMemosUseCase: SearchMemosUseCase,
-    private val setMemoFavoriteUseCase: SetMemoFavoriteUseCase,
     private val applyMemoBulkActionUseCase: ApplyMemoBulkActionUseCase,
     private val formatMemoTextUseCase: FormatMemoTextUseCase,
     private val resolveMemoImagePathUseCase: ResolveMemoImagePathUseCase
@@ -155,18 +153,6 @@ class HomeViewModel @Inject constructor(
 
     fun closeSearch() {
         searchControls.update { search -> search.closed() }
-    }
-
-    fun setMemoFavorite(memoId: MemoId, isFavorite: Boolean) {
-        viewModelScope.launch {
-            try {
-                setMemoFavoriteUseCase(memoId, isFavorite)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Throwable) {
-                _actionErrorEvent.trySend(Unit)
-            }
-        }
     }
 
     fun startSelection(memoId: MemoId) {

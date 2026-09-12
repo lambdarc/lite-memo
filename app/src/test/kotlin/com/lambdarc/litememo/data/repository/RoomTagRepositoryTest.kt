@@ -1,5 +1,6 @@
 package com.lambdarc.litememo.data.repository
 
+import com.lambdarc.litememo.data.local.dao.SQLITE_QUERY_PARAMETER_BATCH_SIZE
 import com.lambdarc.litememo.data.local.dao.TagDao
 import com.lambdarc.litememo.data.local.entity.TagEntity
 import com.lambdarc.litememo.domain.model.Tag
@@ -9,6 +10,7 @@ import com.lambdarc.litememo.domain.tagFixture
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -85,6 +87,45 @@ class RoomTagRepositoryTest {
 
         // Assert
         assertEquals(0, dao.getTagsByIdsCallCount)
+    }
+
+    @Test
+    fun boundaryGetTagsByIdsUsesSqliteSafeBatches() = runTest {
+        // Arrange
+        val ids = List(SQLITE_QUERY_PARAMETER_BATCH_SIZE + 1) { index -> "tag-$index" }
+        val dao = FakeTagDao(tags = ids.map { tagEntity(id = it) })
+        val repository = RoomTagRepository(dao)
+
+        // Act
+        // Boundary: id lookups stay below SQLite's bind limit and keep the requested order
+        val tags = repository.getTagsByIds(ids.map { TagId(it) })
+
+        // Assert
+        assertAll(
+            {
+                assertEquals(
+                    listOf(SQLITE_QUERY_PARAMETER_BATCH_SIZE, 1),
+                    dao.getTagsByIdsBatchSizes
+                )
+            },
+            { assertEquals(ids, tags.map { it.id.value }) }
+        )
+    }
+
+    @Test
+    fun boundaryGetTagsByIdsSkipsMissingIdsAcrossBatches() = runTest {
+        // Arrange
+        val ids = List(901) { index -> "tag-$index" }
+        val storedIds = ids - setOf("tag-0", "tag-900")
+        val dao = FakeTagDao(tags = storedIds.map { tagEntity(id = it) })
+        val repository = RoomTagRepository(dao)
+
+        // Act
+        // Boundary: ids missing at both batch edges are dropped without reordering the rest
+        val tags = repository.getTagsByIds(ids.map { TagId(it) })
+
+        // Assert
+        assertEquals(storedIds, tags.map { it.id.value })
     }
 
     @Test
@@ -196,6 +237,7 @@ class RoomTagRepositoryTest {
 
         private val tags = MutableStateFlow(tags)
         var getTagsByIdsCallCount = 0
+        val getTagsByIdsBatchSizes = mutableListOf<Int>()
         var savedTag: TagEntity? = null
         var savedTags: List<TagEntity> = emptyList()
         var insertedTags: List<TagEntity> = emptyList()
@@ -208,6 +250,7 @@ class RoomTagRepositoryTest {
 
         override suspend fun getTagsByIds(ids: List<String>): List<TagEntity> {
             getTagsByIdsCallCount += 1
+            getTagsByIdsBatchSizes += ids.size
             return tags.value.filter { it.id in ids }
         }
 
@@ -227,6 +270,15 @@ class RoomTagRepositoryTest {
             updatedTags = tags
             savedTags = tags
             savedTag = tags.lastOrNull()
+        }
+
+        override suspend fun findTagNamesStartingWith(prefix: String): List<String> =
+            tags.value.map { it.name }.filter { it.startsWith(prefix) }
+
+        override suspend fun updateTagName(id: String, name: String) {
+            tags.update { current ->
+                current.map { tag -> if (tag.id == id) tag.copy(name = name) else tag }
+            }
         }
 
         override suspend fun deleteTag(id: String) {

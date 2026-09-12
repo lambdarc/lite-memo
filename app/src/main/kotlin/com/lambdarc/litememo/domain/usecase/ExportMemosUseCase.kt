@@ -18,15 +18,11 @@ class ExportMemosUseCase @Inject constructor(
         val memos = memoRepository.getAllActiveMemos().sortedMemosForExport()
         val tags = tagRepository.getAllTags().sortedTagsForExport()
         return ExportData(
-            version = CURRENT_VERSION,
+            version = ExportData.CURRENT_VERSION,
             exportedAt = currentTimeProvider.now(),
             tags = tags,
             memos = memos
         )
-    }
-
-    companion object {
-        const val CURRENT_VERSION = 1
     }
 
 }

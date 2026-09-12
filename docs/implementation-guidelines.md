@@ -41,7 +41,8 @@
 - 非同期処理は Coroutines を使い、公開する suspend API を main-safe にする
 - ファイル操作など blocking I/O を行う実装が、注入した dispatcher への切り替えを所有する
 - `CancellationException` は再送出し、広い例外捕捉で coroutine のキャンセルを握りつぶさない
-- 永続化の使い分けは [`docs/architecture.md`](architecture.md) の Data 方針を正本とする
+- 永続化の使い分けは [`docs/architecture.md`](architecture.md) の Data 方針を、
+  テーブル構成とクエリの制約は [`docs/data-model.md`](data-model.md) を正本とする
 - 画像添付などの Android 依存 URI / ContentResolver は ViewModel に直接持ち込まない。配置は [`docs/architecture.md`](architecture.md) の メモ画像 方針を正本とする
 
 ## UI Event / Error
@@ -57,7 +58,7 @@
 
 ## Test
 
-- Unit Test の方針は `docs/unit-test.md` を確認する
+- Unit Test の方針は [`docs/unit-test.md`](unit-test.md) を確認する
 
 ## Localization
 

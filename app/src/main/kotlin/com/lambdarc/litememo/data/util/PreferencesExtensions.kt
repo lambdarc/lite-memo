@@ -10,3 +10,7 @@ import java.io.IOException
 fun DataStore<Preferences>.dataOrEmptyOnIoError(): Flow<Preferences> = data.catch { e ->
     if (e is IOException) emit(emptyPreferences()) else throw e
 }
+
+fun Flow<Boolean>.enabledOnIoError(): Flow<Boolean> = catch { e ->
+    if (e is IOException) emit(true) else throw e
+}

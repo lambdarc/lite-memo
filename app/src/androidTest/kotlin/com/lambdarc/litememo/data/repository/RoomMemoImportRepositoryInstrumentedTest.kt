@@ -24,7 +24,6 @@ import com.lambdarc.litememo.domain.model.value.TagId
 import com.lambdarc.litememo.domain.model.value.TagName
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.repository.MemoImageStore
-import com.lambdarc.litememo.domain.usecase.ExportMemosUseCase
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -270,7 +269,7 @@ class RoomMemoImportRepositoryInstrumentedTest {
 
     private fun exportData(tags: List<Tag> = emptyList(), memos: List<Memo> = emptyList()) =
         ExportData(
-            version = ExportMemosUseCase.CURRENT_VERSION,
+            version = ExportData.CURRENT_VERSION,
             exportedAt = TimestampMillis(2_000L),
             tags = tags,
             memos = memos

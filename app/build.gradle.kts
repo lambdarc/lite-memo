@@ -65,7 +65,6 @@ android {
         create("dev") {
             dimension = "environment"
             applicationIdSuffix = ".dev"
-            signingConfig = signingConfigs.getByName("debug")
         }
         create("prod") {
             dimension = "environment"
@@ -106,6 +105,13 @@ android {
     }
 }
 
+androidComponents {
+    // productFlavors 側で signingConfig を指定しても buildType 側の指定に上書きされるため、variant で適用する
+    onVariants(selector().withFlavor("environment" to "dev")) { variant ->
+        variant.signingConfig.setConfig(android.signingConfigs.getByName("debug"))
+    }
+}
+
 kotlin {
     jvmToolchain(17)
 }
@@ -116,7 +122,7 @@ ktlint {
     outputToConsole.set(true)
 }
 
-detekt {
+tasks.withType<Detekt>().configureEach {
     buildUponDefaultConfig = true
     config.setFrom(rootProject.file("config/detekt/detekt.yml"))
 }
@@ -154,8 +160,6 @@ val preCommitFilesProperty = providers.gradleProperty("preCommitFiles")
 
 tasks.register<Detekt>("detektPreCommit") {
     description = "Runs detekt only on files passed via -PpreCommitFiles."
-    buildUponDefaultConfig = true
-    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
     val files =
         preCommitFilesProperty.orNull
             ?.split(",")
@@ -216,6 +220,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.room.runtime)
 
@@ -252,10 +257,8 @@ dependencies {
     androidTestImplementation(platform(libs.kotlinx.serialization.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.androidx.test.runner)
-    androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.hilt.android.testing)
     androidTestImplementation(libs.kotlinx.coroutines.test)
     kspAndroidTest(libs.hilt.compiler)

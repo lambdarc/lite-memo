@@ -7,8 +7,14 @@ Lite Memo で Codex が最初に読む入口です。
 
 - [`docs/project-overview.md`](docs/project-overview.md): プロジェクト概要 / 主要な確認先 / 技術スタック
 - [`docs/architecture.md`](docs/architecture.md): Clean Architecture / MVVM の構造方針
+- [`docs/data-model.md`](docs/data-model.md): Room のテーブル構成 / 論理削除 / クエリの制約
+- [`docs/export-import-format.md`](docs/export-import-format.md): ZIP アーカイブの形式 / version / 検証と衝突解決
+- [`docs/memo-edit-lifecycle.md`](docs/memo-edit-lifecycle.md): 編集セッション / autosave / 終了と画像 cleanup
+- [`docs/app-lock.md`](docs/app-lock.md): アプリロックの発動条件 / 認証経路 / 設定の切り替え
+- [`docs/widget.md`](docs/widget.md): Glance ウィジェットの構成 / データ取得 / 更新の契機
 - [`docs/implementation-guidelines.md`](docs/implementation-guidelines.md): 実装時の基本方針
-- [`docs/development-setup.md`](docs/development-setup.md): 開発環境セットアップ / Git フック / 静的解析 / CI 相当チェック
+- [`docs/development-setup.md`](docs/development-setup.md): 開発環境セットアップ / Git フック / 静的解析 / ローカル検証
+- [`docs/ci.md`](docs/ci.md): CI の実行条件 / job 構成 / カバレッジ / キャッシュ / 命名規約
 - [`docs/unit-test.md`](docs/unit-test.md): Unit Test の方針
 - [`docs/review.md`](docs/review.md): コードレビューの形式
 
@@ -38,3 +44,5 @@ Codex 向け skill は `.agents/skills/` で管理する。Claude Code 向けの
 - UI は Kotlin / Jetpack Compose / Material 3 を軸にする
 - 構造は Clean Architecture + MVVM を軸にする
 - 未導入の技術は、実装済みとして扱わない
+- ユーザーの明示指示と Skill が衝突したら、ユーザー指示を優先し、衝突した Skill を報告する
+- 可逆で影響の小さい操作は確認せず、合理的に推測して最後まで進める。不可逆な操作は、対象操作へのユーザーの承認がまだない場合に確認する

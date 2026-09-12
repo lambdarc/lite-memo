@@ -2,12 +2,16 @@ package com.lambdarc.litememo.ui.viewmodel
 
 import androidx.lifecycle.ViewModelStore
 import app.cash.turbine.test
+import com.lambdarc.litememo.domain.FakeMemoExportArchiveRepository
+import com.lambdarc.litememo.domain.FakeMemoImportArchiveRepository
+import com.lambdarc.litememo.domain.FakeMemoImportRepository
 import com.lambdarc.litememo.domain.FakeMemoRepository
 import com.lambdarc.litememo.domain.FakeTagRepository
 import com.lambdarc.litememo.domain.MutableTimeProvider
 import com.lambdarc.litememo.domain.exception.ImportTagNameConflictException
 import com.lambdarc.litememo.domain.exception.MemoImportException
 import com.lambdarc.litememo.domain.exception.MemoImportFailureReason
+import com.lambdarc.litememo.domain.memoFixture
 import com.lambdarc.litememo.domain.model.ExportData
 import com.lambdarc.litememo.domain.model.value.ExportFileReference
 import com.lambdarc.litememo.domain.model.value.MemoExportToken
@@ -15,8 +19,10 @@ import com.lambdarc.litememo.domain.model.value.TagName
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.repository.FakeUserSettingsRepository
 import com.lambdarc.litememo.domain.repository.MemoExportArchiveRepository
+import com.lambdarc.litememo.domain.usecase.DiscardMemoExportUseCase
 import com.lambdarc.litememo.domain.usecase.ExportMemosUseCase
 import com.lambdarc.litememo.domain.usecase.ImportMemosFromFileUseCase
+import com.lambdarc.litememo.domain.usecase.ImportMemosUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveAppLockEnabledUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveMemoSortOrderUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveThemeModeUseCase
@@ -24,11 +30,9 @@ import com.lambdarc.litememo.domain.usecase.PrepareMemoExportUseCase
 import com.lambdarc.litememo.domain.usecase.SetAppLockEnabledUseCase
 import com.lambdarc.litememo.domain.usecase.SetMemoSortOrderUseCase
 import com.lambdarc.litememo.domain.usecase.SetThemeModeUseCase
+import com.lambdarc.litememo.domain.usecase.WriteMemoExportUseCase
 import com.lambdarc.litememo.ui.auth.AppLockAuthenticationUiResult
 import com.lambdarc.litememo.ui.state.SettingsImportErrorDialogUiState
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -309,9 +313,11 @@ class SettingsViewModelTest {
     @Test
     fun interactionConfirmImportCallsZipImportOnce() = runTest(dispatcher) {
         // Arrange
-        val importUseCase = mockk<ImportMemosFromFileUseCase>()
-        coEvery { importUseCase(IMPORT_REFERENCE) } returns Unit
-        val viewModel = viewModel(FakeMemoExportArchiveRepository(), importUseCase)
+        val archiveRepository = importArchiveRepository()
+        val viewModel = viewModel(
+            FakeMemoExportArchiveRepository(),
+            importMemosFromFileUseCase(archiveRepository)
+        )
         viewModel.onImportFileSelected(IMPORT_REFERENCE)
 
         // Act
@@ -320,16 +326,17 @@ class SettingsViewModelTest {
         advanceUntilIdle()
 
         // Assert
-        coVerify(exactly = 1) { importUseCase(IMPORT_REFERENCE) }
+        assertEquals(listOf(IMPORT_REFERENCE), archiveRepository.stagedReferences)
     }
 
     @Test
     fun stateTransitionConfirmImportMaintainsProgressState() = runTest(dispatcher) {
         // Arrange
         val gate = CompletableDeferred<Unit>()
-        val importUseCase = mockk<ImportMemosFromFileUseCase>()
-        coEvery { importUseCase(IMPORT_REFERENCE) } coAnswers { gate.await() }
-        val viewModel = viewModel(FakeMemoExportArchiveRepository(), importUseCase)
+        val viewModel = viewModel(
+            FakeMemoExportArchiveRepository(),
+            importMemosFromFileUseCase(importRepository = FakeMemoImportRepository(gate))
+        )
         viewModel.onImportFileSelected(IMPORT_REFERENCE)
 
         // Act
@@ -352,10 +359,11 @@ class SettingsViewModelTest {
     fun interactionPrepareExportDoesNotStartWhenImportIsRunning() = runTest(dispatcher) {
         // Arrange
         val gate = CompletableDeferred<Unit>()
-        val importUseCase = mockk<ImportMemosFromFileUseCase>()
-        coEvery { importUseCase(IMPORT_REFERENCE) } coAnswers { gate.await() }
         val repository = FakeMemoExportArchiveRepository()
-        val viewModel = viewModel(repository, importUseCase)
+        val viewModel = viewModel(
+            repository,
+            importMemosFromFileUseCase(importRepository = FakeMemoImportRepository(gate))
+        )
         viewModel.onImportFileSelected(IMPORT_REFERENCE)
         viewModel.confirmImport()
         runCurrent()
@@ -375,10 +383,10 @@ class SettingsViewModelTest {
     fun interactionConfirmImportDoesNotStartWhenExportIsRunning() = runTest(dispatcher) {
         // Arrange
         val prepareGate = CompletableDeferred<Unit>()
-        val importUseCase = mockk<ImportMemosFromFileUseCase>(relaxed = true)
+        val archiveRepository = importArchiveRepository()
         val viewModel = viewModel(
             FakeMemoExportArchiveRepository(prepareGate = prepareGate),
-            importUseCase
+            importMemosFromFileUseCase(archiveRepository)
         )
         viewModel.onImportFileSelected(IMPORT_REFERENCE)
         viewModel.prepareExport()
@@ -389,7 +397,7 @@ class SettingsViewModelTest {
         runCurrent()
 
         // Assert
-        coVerify(exactly = 0) { importUseCase(any()) }
+        assertEquals(emptyList<ExportFileReference>(), archiveRepository.stagedReferences)
         prepareGate.complete(Unit)
         advanceUntilIdle()
         viewModel.cancelPreparedExport()
@@ -399,9 +407,7 @@ class SettingsViewModelTest {
     @Test
     fun flowConfirmImportEmitsSuccessSnackbar() = runTest(dispatcher) {
         // Arrange
-        val importUseCase = mockk<ImportMemosFromFileUseCase>()
-        coEvery { importUseCase(IMPORT_REFERENCE) } returns Unit
-        val viewModel = viewModel(FakeMemoExportArchiveRepository(), importUseCase)
+        val viewModel = viewModel(FakeMemoExportArchiveRepository(), importMemosFromFileUseCase())
         viewModel.onImportFileSelected(IMPORT_REFERENCE)
 
         // Act & Assert
@@ -420,10 +426,7 @@ class SettingsViewModelTest {
     @Test
     fun flowConfirmImportShowsGenericErrorDialogWithoutSnackbar() = runTest(dispatcher) {
         // Arrange
-        val importUseCase = mockk<ImportMemosFromFileUseCase>()
-        coEvery { importUseCase(IMPORT_REFERENCE) } throws IllegalStateException("read failed")
-        val viewModel = viewModel(FakeMemoExportArchiveRepository(), importUseCase)
-        viewModel.onImportFileSelected(IMPORT_REFERENCE)
+        val viewModel = importFailingViewModel(IllegalStateException("read failed"))
 
         // Act & Assert
         // Flow/Error: unknown import failures are retained as dialog state.
@@ -443,12 +446,9 @@ class SettingsViewModelTest {
     @Test
     fun flowConfirmImportShowsAllConflictingTagNames() = runTest(dispatcher) {
         // Arrange
-        val importUseCase = mockk<ImportMemosFromFileUseCase>()
-        coEvery { importUseCase(IMPORT_REFERENCE) } throws ImportTagNameConflictException(
-            listOf(TagName("Home"), TagName("Work"))
+        val viewModel = importFailingViewModel(
+            ImportTagNameConflictException(listOf(TagName("Home"), TagName("Work")))
         )
-        val viewModel = viewModel(FakeMemoExportArchiveRepository(), importUseCase)
-        viewModel.onImportFileSelected(IMPORT_REFERENCE)
 
         // Act
         // Flow/Error: all conflicting names are retained for the dialog.
@@ -521,8 +521,11 @@ class SettingsViewModelTest {
     @Test
     fun boundaryConfirmImportDoesNothingWithoutPendingFile() = runTest(dispatcher) {
         // Arrange
-        val importUseCase = mockk<ImportMemosFromFileUseCase>(relaxed = true)
-        val viewModel = viewModel(FakeMemoExportArchiveRepository(), importUseCase)
+        val archiveRepository = importArchiveRepository()
+        val viewModel = viewModel(
+            FakeMemoExportArchiveRepository(),
+            importMemosFromFileUseCase(archiveRepository)
+        )
 
         // Act
         // Boundary: confirmation without a selected ZIP is a no-op.
@@ -530,14 +533,17 @@ class SettingsViewModelTest {
         advanceUntilIdle()
 
         // Assert
-        coVerify(exactly = 0) { importUseCase(any()) }
+        assertEquals(emptyList<ExportFileReference>(), archiveRepository.stagedReferences)
     }
 
     @Test
     fun boundaryDismissImportDialogClearsPendingReference() = runTest(dispatcher) {
         // Arrange
-        val importUseCase = mockk<ImportMemosFromFileUseCase>(relaxed = true)
-        val viewModel = viewModel(FakeMemoExportArchiveRepository(), importUseCase)
+        val archiveRepository = importArchiveRepository()
+        val viewModel = viewModel(
+            FakeMemoExportArchiveRepository(),
+            importMemosFromFileUseCase(archiveRepository)
+        )
         viewModel.onImportFileSelected(IMPORT_REFERENCE)
 
         // Act
@@ -547,7 +553,7 @@ class SettingsViewModelTest {
         advanceUntilIdle()
 
         // Assert
-        coVerify(exactly = 0) { importUseCase(any()) }
+        assertEquals(emptyList<ExportFileReference>(), archiveRepository.stagedReferences)
     }
 
     @Test
@@ -633,13 +639,25 @@ class SettingsViewModelTest {
         )
     }
 
-    private fun importFailingViewModel(reason: MemoImportFailureReason): SettingsViewModel {
-        val importUseCase = mockk<ImportMemosFromFileUseCase>()
-        coEvery { importUseCase(IMPORT_REFERENCE) } throws MemoImportException(reason, "failed")
-        return viewModel(FakeMemoExportArchiveRepository(), importUseCase).also {
+    private fun importFailingViewModel(reason: MemoImportFailureReason): SettingsViewModel =
+        importFailingViewModel(MemoImportException(reason, "failed"))
+
+    private fun importFailingViewModel(error: Throwable): SettingsViewModel {
+        val importRepository = FakeMemoImportRepository()
+        importRepository.importError = error
+        val useCase = importMemosFromFileUseCase(importRepository = importRepository)
+        return viewModel(FakeMemoExportArchiveRepository(), useCase).also {
             it.onImportFileSelected(IMPORT_REFERENCE)
         }
     }
+
+    private fun importArchiveRepository() =
+        FakeMemoImportArchiveRepository(stagedData = IMPORT_DATA)
+
+    private fun importMemosFromFileUseCase(
+        archiveRepository: FakeMemoImportArchiveRepository = importArchiveRepository(),
+        importRepository: FakeMemoImportRepository = FakeMemoImportRepository()
+    ) = ImportMemosFromFileUseCase(archiveRepository, ImportMemosUseCase(importRepository))
 
     private suspend fun assertAppLockFailure(
         result: AppLockAuthenticationUiResult,
@@ -664,7 +682,7 @@ class SettingsViewModelTest {
 
     private fun viewModel(
         exportRepository: MemoExportArchiveRepository,
-        importUseCase: ImportMemosFromFileUseCase = mockk(relaxed = true),
+        importUseCase: ImportMemosFromFileUseCase = importMemosFromFileUseCase(),
         settings: FakeUserSettingsRepository = FakeUserSettingsRepository()
     ): SettingsViewModel {
         val exportMemosUseCase = ExportMemosUseCase(
@@ -683,51 +701,23 @@ class SettingsViewModelTest {
                 exportMemosUseCase,
                 exportRepository
             ),
-            memoExportArchiveRepository = exportRepository,
+            writeMemoExportUseCase = WriteMemoExportUseCase(exportRepository),
+            discardMemoExportUseCase = DiscardMemoExportUseCase(exportRepository),
             importMemosFromFileUseCase = importUseCase,
             applicationScope = CoroutineScope(SupervisorJob() + dispatcher),
             appVersion = "1.0.0"
         )
     }
 
-    private class FakeMemoExportArchiveRepository(
-        private val prepareGate: CompletableDeferred<Unit>? = null,
-        private val prepareError: Throwable? = null,
-        private val writeError: Throwable? = null,
-        private val discardGate: CompletableDeferred<Unit>? = null
-    ) : MemoExportArchiveRepository {
-
-        val preparedData = mutableListOf<ExportData>()
-        val writes = mutableListOf<Pair<MemoExportToken, ExportFileReference>>()
-        val discardedTokens = mutableListOf<MemoExportToken>()
-
-        override suspend fun prepare(data: ExportData): MemoExportToken {
-            preparedData += data
-            prepareGate?.await()
-            prepareError?.let { throw it }
-            return TOKEN
-        }
-
-        override suspend fun write(token: MemoExportToken, destination: ExportFileReference) {
-            writes += token to destination
-            writeError?.let { throw it }
-        }
-
-        override suspend fun discard(token: MemoExportToken) {
-            discardedTokens += token
-            discardGate?.await()
-        }
-
-        override suspend fun deleteAbandonedPreparedExports() = Unit
-
-        companion object {
-            val TOKEN = MemoExportToken("prepared-1")
-        }
-    }
-
     private companion object {
         val DESTINATION = ExportFileReference("content://export.zip")
         val IMPORT_REFERENCE = ExportFileReference("content://import.zip")
+        val IMPORT_DATA = ExportData(
+            version = ExportData.CURRENT_VERSION,
+            exportedAt = TimestampMillis(1_000L),
+            tags = emptyList(),
+            memos = listOf(memoFixture())
+        )
     }
 
 }

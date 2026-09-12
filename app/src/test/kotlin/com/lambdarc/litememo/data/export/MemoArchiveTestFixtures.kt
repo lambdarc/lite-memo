@@ -4,6 +4,7 @@ import com.lambdarc.litememo.data.model.export.LiteMemoExportDto
 import com.lambdarc.litememo.data.model.export.MemoExportDto
 import com.lambdarc.litememo.data.model.export.MemoImageExportDto
 import com.lambdarc.litememo.data.model.export.TagExportDto
+import com.lambdarc.litememo.domain.model.ExportData
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -74,7 +75,7 @@ internal fun imageDtoFixture(
 )
 
 internal fun manifestFixture(
-    version: Int = MemoArchiveLayout.VERSION,
+    version: Int = ExportData.CURRENT_VERSION,
     exportedAt: Long = 5000L,
     tags: List<TagExportDto> = emptyList(),
     memos: List<MemoExportDto> = emptyList()

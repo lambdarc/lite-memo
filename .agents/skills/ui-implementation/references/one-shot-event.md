@@ -9,10 +9,7 @@ UI event を、保持すべき処理結果、UI callback、損失可能な Chann
 
 ## 実装時の注意
 
-- 保存成否など失ってはいけない処理結果は UI state に保持し、UI からの確認済み callback で消費する。
-- UI 操作を起点とする画面遷移や認証要求は UI callback として Navigation / UI helper へ渡す。
-- Channel event は、collector 不在や再生成で失われても処理結果や整合性に影響しない best-effort 通知に限る。
-- Channel 種別（`CONFLATED` / `BUFFERED` など）は docs の規約に従って選び、`BUFFERED` も取りこぼしのない配送手段として扱わない。
+- event 表現と Channel 種別は、適用条件を含めて [`docs/implementation-guidelines.md`](../../../../docs/implementation-guidelines.md#ui-event--error) を正本とする。軽微な保守を理由に、対象外の既存 event の移行へ範囲を広げない。
 - event 型は `XxxUiEvent` と命名して公開元の ViewModel と同じ `ui/viewmodel` に置き、接尾語だけの `ui/event` パッケージを作らない。
 
 ## テスト判断

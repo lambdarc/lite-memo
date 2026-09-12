@@ -4,7 +4,6 @@ import com.lambdarc.litememo.data.local.entity.MemoEntity
 import com.lambdarc.litememo.data.local.entity.MemoImageEntity
 import com.lambdarc.litememo.data.local.entity.MemoTagRefEntity
 import com.lambdarc.litememo.data.local.model.MemoSummaryProjection
-import com.lambdarc.litememo.data.local.model.MemoVersionProjection
 import com.lambdarc.litememo.data.local.model.MemoWithRefs
 import kotlinx.coroutines.flow.flowOf
 import org.junit.jupiter.api.Assertions.fail
@@ -44,10 +43,6 @@ internal class RecordingMemoBulkDao(
         activeMemoIdReads += ids
         return ids.filter { id -> activeMemoIds?.contains(id) ?: true }
     }
-
-    override suspend fun getActiveMemoVersionsBatch(
-        ids: List<String>
-    ): List<MemoVersionProjection> = emptyList()
 
     override suspend fun getTrashedMemoIdsBatch(ids: List<String>): List<String> {
         trashedMemoIdBatchSizes += ids.size

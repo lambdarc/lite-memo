@@ -26,6 +26,12 @@ fun Memo.toEntity() = MemoEntity(
     deletedAt = deletedAt?.value
 )
 
+fun Memo.toMemoWithRefs() = MemoWithRefs(
+    memo = toEntity(),
+    tagRefs = toTagRefs(),
+    imageRefs = toImageRefs()
+)
+
 fun Memo.toTagRefs() = tagIds.mapIndexed { index, tagId ->
     MemoTagRefEntity(
         memoId = id.value,

@@ -9,6 +9,7 @@ import com.lambdarc.litememo.data.local.entity.MemoEntity
 import com.lambdarc.litememo.data.local.entity.MemoImageEntity
 import com.lambdarc.litememo.data.local.entity.MemoTagRefEntity
 import com.lambdarc.litememo.data.local.entity.TagEntity
+import com.lambdarc.litememo.data.local.model.MemoWithRefs
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -472,10 +473,10 @@ class RoomDaoInstrumentedTest {
         // Act
         // Error: every memo must still be active before any replacement begins
         val error = runCatching {
-            memoBulkDao.upsertActiveMemosWithVersionCheckAndCollectRemovedFileNames(
-                expectedVersions = mapOf(
-                    "memo-active" to 1_000L,
-                    "memo-trashed" to 1_000L
+            memoBulkDao.upsertActiveMemosWithSnapshotCheckAndCollectRemovedFileNames(
+                expectedMemos = listOf(
+                    MemoWithRefs(memoEntity(id = "memo-active"), emptyList(), emptyList()),
+                    MemoWithRefs(memoEntity(id = "memo-trashed"), emptyList(), emptyList())
                 ),
                 memos = listOf(
                     memoEntity(id = "memo-active", title = "Active after")
@@ -489,6 +490,33 @@ class RoomDaoInstrumentedTest {
         // Assert
         assertEquals(IllegalStateException::class.java, error?.javaClass)
         assertEquals("Active before", activeTitle)
+    }
+
+    @Test
+    fun errorSnapshotCheckRejectsSameTimestampEditBeforeWritingAnyMember() = runTest {
+        // Arrange
+        val first = memoEntity(id = "first", title = "First")
+        val second = memoEntity(id = "second", title = "Second")
+        memoDao.upsertMemo(first)
+        memoDao.upsertMemo(second)
+        val expected = memoBulkDao.getActiveMemosWithRefs(listOf("first", "second"))
+        memoDao.upsertMemo(second.copy(body = "Concurrent edit"))
+
+        // Act
+        // Error: content conflicts abort the whole transaction even when timestamps match.
+        val error = runCatching {
+            memoBulkDao.upsertActiveMemosWithSnapshotCheckAndCollectRemovedFileNames(
+                expectedMemos = expected,
+                memos = listOf(first.copy(isFavorite = true), second.copy(isFavorite = true)),
+                tagRefsByMemoId = emptyMap(),
+                imageRefsByMemoId = emptyMap()
+            )
+        }.exceptionOrNull()
+        val actual = memoBulkDao.getActiveMemosWithRefs(listOf("first", "second"))
+
+        // Assert
+        assertEquals(IllegalStateException::class.java, error?.javaClass)
+        assertEquals(listOf(first, second.copy(body = "Concurrent edit")), actual.map { it.memo })
     }
 
     @Test
@@ -664,6 +692,106 @@ class RoomDaoInstrumentedTest {
 
         // Assert
         assertEquals(listOf("memo-new"), memos.map { it.memo.id })
+    }
+
+    @Test
+    fun boundaryMoveMemoToTrashKeepsDeletedAtAtOrAfterUpdatedAt() = runTest {
+        // Arrange
+        memoDao.upsertMemo(memoEntity(id = "memo-1", createdAt = 1_000L, updatedAt = 5_000L))
+
+        // Act
+        // Boundary: a stale deletedAt is raised to updatedAt so the row stays readable.
+        memoDao.moveMemoToTrash("memo-1", 2_000L)
+        val trashed = memoDao.observeTrashedMemosWithRefs().first().single().memo
+
+        // Assert
+        assertEquals(5_000L, trashed.deletedAt)
+    }
+
+    @Test
+    fun boundaryMoveMemosToTrashKeepsDeletedAtAtOrAfterUpdatedAt() = runTest {
+        // Arrange
+        memoDao.upsertMemo(memoEntity(id = "memo-1", createdAt = 1_000L, updatedAt = 5_000L))
+        memoDao.upsertMemo(memoEntity(id = "memo-2", createdAt = 1_000L, updatedAt = 1_000L))
+
+        // Act
+        // Boundary: the clamp applies per row, leaving newer deletedAt values untouched.
+        memoBulkDao.moveMemosToTrash(
+            linkedMapOf(
+                "memo-1" to 2_000L,
+                "memo-2" to 2_000L
+            )
+        )
+        val deletedAtById = memoDao.observeTrashedMemosWithRefs().first()
+            .associate { it.memo.id to it.memo.deletedAt }
+
+        // Assert
+        assertEquals(mapOf("memo-1" to 5_000L, "memo-2" to 2_000L), deletedAtById)
+    }
+
+    @Test
+    fun normalInsertOrUpdateAllTagsMovesNameBetweenTags() = runTest {
+        // Arrange
+        tagDao.insertOrUpdateAllTags(listOf(tagEntity(id = "tag-1", name = "Work")))
+
+        // Act
+        // Normal: a name released by one tag can be taken by another in the same write.
+        tagDao.insertOrUpdateAllTags(
+            listOf(
+                tagEntity(id = "tag-1", name = "Private"),
+                tagEntity(id = "tag-2", name = "Work")
+            )
+        )
+        val namesById = tagDao.getAllTags().associate { it.id to it.name }
+
+        // Assert
+        assertEquals(mapOf("tag-1" to "Private", "tag-2" to "Work"), namesById)
+    }
+
+    @Test
+    fun normalInsertOrUpdateAllTagsSwapsNamesBetweenExistingTags() = runTest {
+        // Arrange
+        tagDao.insertOrUpdateAllTags(
+            listOf(
+                tagEntity(id = "tag-1", name = "Work"),
+                tagEntity(id = "tag-2", name = "Private")
+            )
+        )
+
+        // Act
+        // Normal: swapping two stored names never violates the unique name index.
+        tagDao.insertOrUpdateAllTags(
+            listOf(
+                tagEntity(id = "tag-1", name = "Private"),
+                tagEntity(id = "tag-2", name = "Work")
+            )
+        )
+        val namesById = tagDao.getAllTags().associate { it.id to it.name }
+
+        // Assert
+        assertEquals(mapOf("tag-1" to "Private", "tag-2" to "Work"), namesById)
+    }
+
+    @Test
+    fun boundaryInsertOrUpdateAllTagsAcceptsNameMatchingTemporaryName() = runTest {
+        // Arrange
+        tagDao.insertOrUpdateAllTags(listOf(tagEntity(id = "tag-1", name = "Work")))
+
+        // Act
+        // Boundary: a tag named like the internal rename placeholder still imports.
+        tagDao.insertOrUpdateAllTags(
+            listOf(
+                tagEntity(id = "tag-1", name = "Private"),
+                tagEntity(id = "tag-2", name = "\uE000renaming:tag-1")
+            )
+        )
+        val namesById = tagDao.getAllTags().associate { it.id to it.name }
+
+        // Assert
+        assertEquals(
+            mapOf("tag-1" to "Private", "tag-2" to "\uE000renaming:tag-1"),
+            namesById
+        )
     }
 
     private fun memoEntity(

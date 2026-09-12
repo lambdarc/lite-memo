@@ -1,6 +1,7 @@
 package com.lambdarc.litememo.data.export
 
 import com.lambdarc.litememo.data.model.export.LiteMemoExportDto
+import com.lambdarc.litememo.domain.model.ExportData
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -237,7 +238,7 @@ class MemoArchiveReaderTest {
     @Test
     fun errorReadRejectsUnsupportedVersion() {
         // Arrange
-        val manifest = manifestFixture(version = MemoArchiveLayout.VERSION + 1)
+        val manifest = manifestFixture(version = ExportData.CURRENT_VERSION + 1)
         val archive = rawArchive(
             listOf(MemoArchiveLayout.MANIFEST_ENTRY_NAME to encodeManifest(manifest))
         )

@@ -1,6 +1,7 @@
 package com.lambdarc.litememo.ui.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelStore
 import app.cash.turbine.test
 import com.lambdarc.litememo.domain.FakeMemoImageStore
 import com.lambdarc.litememo.domain.FakeMemoRepository
@@ -10,11 +11,16 @@ import com.lambdarc.litememo.domain.QueueMemoIdProvider
 import com.lambdarc.litememo.domain.memoFixture
 import com.lambdarc.litememo.domain.memoImageFixture
 import com.lambdarc.litememo.domain.model.Memo
+import com.lambdarc.litememo.domain.model.MemoImage
+import com.lambdarc.litememo.domain.model.Tag
+import com.lambdarc.litememo.domain.model.value.ImageSourceReference
 import com.lambdarc.litememo.domain.model.value.MemoId
 import com.lambdarc.litememo.domain.model.value.MemoImageFileName
 import com.lambdarc.litememo.domain.model.value.TagId
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
+import com.lambdarc.litememo.domain.repository.MemoImageStore
 import com.lambdarc.litememo.domain.repository.MemoRepository
+import com.lambdarc.litememo.domain.repository.TagRepository
 import com.lambdarc.litememo.domain.tagFixture
 import com.lambdarc.litememo.domain.usecase.AttachMemoImageUseCase
 import com.lambdarc.litememo.domain.usecase.DeleteMemoImagesUseCase
@@ -30,6 +36,9 @@ import com.lambdarc.litememo.ui.model.MemoImageUiModel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -46,6 +55,7 @@ import org.junit.jupiter.api.Test
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass")
 class MemoEditViewModelTest {
 
     private lateinit var dispatcher: TestDispatcher
@@ -115,6 +125,137 @@ class MemoEditViewModelTest {
             { assertEquals(true, state.isFavorite) }
         )
     }
+
+    @Test
+    fun flowBackDuringExistingMemoLoadNavigatesWithoutDeletingOrSaving() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1")
+        val repository = BlockingGetMemoRepository(memo)
+        val imageStore = FakeMemoImageStore()
+        val viewModel = memoEditViewModel(
+            memo = memo,
+            memoRepository = repository,
+            memoImageStore = imageStore
+        )
+        runCurrent()
+
+        // Act & Assert
+        // Flow/Interaction: back during loading leaves the existing memo untouched.
+        viewModel.navigationEvent.test {
+            viewModel.updateTitle("Ignored")
+            viewModel.attachImages(listOf("content://images/ignored"))
+            viewModel.finishEditing()
+            assertEquals(MemoEditNavigationUiEvent.NavigateBack, awaitItem())
+        }
+
+        // Assert
+        assertAll(
+            { assertEquals(emptyList<Memo>(), repository.delegate.savedMemos) },
+            {
+                assertEquals(
+                    emptyList<MemoId>(),
+                    repository.delegate.movedToTrash.map { it.memoId }
+                )
+            },
+            { assertEquals(emptyList<ImageSourceReference>(), imageStore.savedSources) }
+        )
+    }
+
+    @Test
+    fun flowBackAfterExistingMemoLoadFailureNavigatesWithoutDeleting() = runTest(dispatcher) {
+        // Arrange
+        val repository = GetFailingMemoRepository()
+        val viewModel = memoEditViewModel(
+            savedStateHandle = SavedStateHandle(mapOf("memoId" to "memo-1")),
+            memoRepository = repository
+        )
+        advanceUntilIdle()
+        assertEquals(true, viewModel.uiState.value.hasError)
+
+        // Act & Assert
+        // Flow/Interaction: leaving a load error does not treat blank UI state as deletion.
+        viewModel.navigationEvent.test {
+            viewModel.finishEditing()
+            assertEquals(MemoEditNavigationUiEvent.NavigateBack, awaitItem())
+        }
+        assertEquals(emptyList<MemoId>(), repository.delegate.movedToTrash.map { it.memoId })
+    }
+
+    @Test
+    fun stateTransitionTagFailureSurvivesLaterMemoLoadAndRetryKeepsInput() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", title = "Existing")
+        val memoRepository = BlockingGetMemoRepository(memo)
+        val tagRepository = RetryableTagRepository()
+        val viewModel = memoEditViewModel(
+            memo = memo,
+            memoRepository = memoRepository,
+            tagRepository = tagRepository
+        )
+        runCurrent()
+        assertEquals(true, viewModel.uiState.value.hasTagError)
+        memoRepository.releaseGet.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(true, viewModel.uiState.value.hasTagError)
+        viewModel.updateTitle("Draft")
+
+        // Act
+        // StateTransition: tag retry replaces only tag state and keeps active memo input.
+        tagRepository.allowObservation()
+        viewModel.retryTags()
+        advanceUntilIdle()
+
+        // Assert
+        assertAll(
+            { assertEquals(false, viewModel.uiState.value.hasTagError) },
+            { assertEquals("Draft", viewModel.uiState.value.title) },
+            {
+                assertEquals(
+                    listOf("Recovered tag"),
+                    viewModel.uiState.value.availableTags.map {
+                        it.name
+                    }
+                )
+            }
+        )
+    }
+
+    @Test
+    fun coroutineViewModelClearDeletesImageWhoseCopyCompletesDuringCancellation() =
+        runTest(dispatcher) {
+            // Arrange
+            val imageStore = SequencedMemoImageStore()
+            val viewModel = memoEditViewModel(memoImageStore = imageStore)
+            val store = ViewModelStore().apply { put("memo-edit", viewModel) }
+            advanceUntilIdle()
+            viewModel.attachImages(
+                listOf("content://images/1", "content://images/2", "content://images/3")
+            )
+            runCurrent()
+            imageStore.secondSaveStarted.await()
+
+            // Act
+            // Coroutine/Interaction: destruction cleans a completed copy before it reaches UI state.
+            store.clear()
+            imageStore.releaseSecondSave.complete(Unit)
+            advanceUntilIdle()
+
+            // Assert
+            assertAll(
+                {
+                    assertEquals(
+                        listOf(MemoImageFileName("image-1.jpg"), MemoImageFileName("image-2.jpg")),
+                        imageStore.deletedFileNames
+                    )
+                },
+                {
+                    assertEquals(
+                        listOf("content://images/1", "content://images/2"),
+                        imageStore.savedSources.map { it.value }
+                    )
+                }
+            )
+        }
 
     @Test
     fun normalAutosavePersistsAfterDebounce() = runTest(dispatcher) {
@@ -740,9 +881,9 @@ class MemoEditViewModelTest {
             )
         } ?: SavedStateHandle(),
         memoRepository: MemoRepository = FakeMemoRepository(listOfNotNull(memo)),
-        memoImageStore: FakeMemoImageStore = FakeMemoImageStore()
+        memoImageStore: MemoImageStore = FakeMemoImageStore(),
+        tagRepository: TagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1")))
     ): MemoEditViewModel {
-        val tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1")))
         val timeProvider = MutableTimeProvider(TimestampMillis(2_000L))
         return MemoEditViewModel(
             savedStateHandle = savedStateHandle,
@@ -771,6 +912,72 @@ class MemoEditViewModelTest {
 
     private class SaveFailingMemoRepository : MemoRepository by FakeMemoRepository() {
         override suspend fun saveMemo(memo: Memo): Unit = error("Failed to save memo.")
+    }
+
+    private class GetFailingMemoRepository(
+        val delegate: FakeMemoRepository = FakeMemoRepository()
+    ) : MemoRepository by delegate {
+        override suspend fun getActiveMemo(id: MemoId): Memo? = error("Failed to load memo.")
+    }
+
+    private class BlockingGetMemoRepository(
+        private val memo: Memo,
+        val delegate: FakeMemoRepository = FakeMemoRepository(listOf(memo))
+    ) : MemoRepository by delegate {
+        val releaseGet = CompletableDeferred<Unit>()
+
+        override suspend fun getActiveMemo(id: MemoId): Memo? {
+            releaseGet.await()
+            return memo
+        }
+    }
+
+    private class RetryableTagRepository : TagRepository {
+        private var observationAllowed = false
+        private val recoveredTag = tagFixture(id = "tag-recovered", name = "Recovered tag")
+
+        fun allowObservation() {
+            observationAllowed = true
+        }
+
+        override fun observeTags(): Flow<List<Tag>> = if (observationAllowed) {
+            flowOf(listOf(recoveredTag))
+        } else {
+            flow { error("Failed to load tags.") }
+        }
+
+        override suspend fun getTag(id: TagId): Tag? = null
+        override suspend fun findTagByName(
+            name: com.lambdarc.litememo.domain.model.value.TagName
+        ): Tag? = null
+        override suspend fun getTagsByIds(ids: List<TagId>): List<Tag> = emptyList()
+        override suspend fun saveTag(tag: Tag) = Unit
+        override suspend fun deleteTag(id: TagId) = Unit
+        override suspend fun getAllTags(): List<Tag> = emptyList()
+    }
+
+    private class SequencedMemoImageStore : MemoImageStore {
+        val secondSaveStarted = CompletableDeferred<Unit>()
+        val releaseSecondSave = CompletableDeferred<Unit>()
+        val savedSources = mutableListOf<ImageSourceReference>()
+        val deletedFileNames = mutableListOf<MemoImageFileName>()
+
+        override suspend fun saveImage(source: ImageSourceReference): MemoImage {
+            savedSources += source
+            val number = savedSources.size
+            if (number == 2) {
+                secondSaveStarted.complete(Unit)
+                releaseSecondSave.await()
+            }
+            return memoImageFixture(id = "image-$number", fileName = "image-$number.jpg")
+        }
+
+        override suspend fun deleteImages(fileNames: List<MemoImageFileName>) {
+            deletedFileNames += fileNames
+        }
+
+        override fun resolveImagePath(fileName: MemoImageFileName): String =
+            "/images/${fileName.value}"
     }
 
     private class MoveToTrashFailingMemoRepository(memo: Memo) :

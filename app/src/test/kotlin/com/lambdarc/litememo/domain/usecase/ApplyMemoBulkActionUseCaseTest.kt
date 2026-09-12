@@ -510,7 +510,7 @@ class ApplyMemoBulkActionUseCaseTest {
     fun interactionMissingMemoDoesNotWriteAnyBulkAction() = runTest {
         // Arrange
         val memoRepository = mockk<MemoRepository>()
-        val tagRepository = mockk<TagRepository>(relaxed = true)
+        val tagRepository = mockk<TagRepository>()
         val timeProvider = mockk<CurrentTimeProvider>()
         coEvery { memoRepository.getActiveMemos(listOf(MemoId("missing"))) } returns emptyList()
         val useCase = ApplyMemoBulkActionUseCase(

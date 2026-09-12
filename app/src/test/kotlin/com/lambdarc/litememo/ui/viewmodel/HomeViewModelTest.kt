@@ -26,7 +26,6 @@ import com.lambdarc.litememo.domain.usecase.ObserveMemosUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.ResolveMemoImagePathUseCase
 import com.lambdarc.litememo.domain.usecase.SearchMemosUseCase
-import com.lambdarc.litememo.domain.usecase.SetMemoFavoriteUseCase
 import com.lambdarc.litememo.ui.state.HomeFilterUiState
 import com.lambdarc.litememo.ui.state.SearchUiState
 import kotlinx.coroutines.Dispatchers
@@ -316,38 +315,22 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun setMemoFavoriteUpdatesMemoFavoriteState() = runTest(dispatcher) {
+    fun stateTransitionSetSelectedMemosFavoriteMarksMemoAsFavorite() = runTest(dispatcher) {
         // Arrange
         val viewModel = homeViewModel(
             memos = listOf(memoFixture(id = "memo-1", title = "Favorite"))
         )
         advanceUntilIdle()
+        viewModel.startSelection(MemoId("memo-1"))
 
         // Act
-        viewModel.setMemoFavorite(MemoId("memo-1"), true)
+        // StateTransition: a bulk favorite action is reflected in the memo list state
+        viewModel.setSelectedMemosFavorite(true)
         advanceUntilIdle()
         val state = viewModel.uiState.first { it.memos.singleOrNull()?.isFavorite == true }
 
         // Assert
         assertTrue(state.memos.single().isFavorite)
-    }
-
-    @Test
-    fun setMemoFavoriteEmitsActionErrorWhenFavoriteUpdateFails() = runTest(dispatcher) {
-        // Arrange
-        val memo = memoFixture(id = "memo-1")
-        val viewModel = homeViewModel(
-            memoRepository = SaveFailingMemoRepository(memo)
-        )
-        advanceUntilIdle()
-
-        // Act & Assert
-        // Flow/Error: favorite update failure emits exactly one action error event.
-        viewModel.actionErrorEvent.test {
-            viewModel.setMemoFavorite(MemoId("memo-1"), true)
-            advanceUntilIdle()
-            assertEquals(Unit, awaitItem())
-        }
     }
 
     @Test
@@ -878,10 +861,6 @@ class HomeViewModelTest {
             observeTagsUseCase = ObserveTagsUseCase(tagRepository),
             filterMemosUseCase = FilterMemosUseCase(),
             searchMemosUseCase = SearchMemosUseCase(memoRepository, displaySettingsRepository),
-            setMemoFavoriteUseCase = SetMemoFavoriteUseCase(
-                memoRepository,
-                MutableTimeProvider(TimestampMillis(today + 1))
-            ),
             applyMemoBulkActionUseCase = ApplyMemoBulkActionUseCase(
                 memoRepository = memoRepository,
                 tagRepository = tagRepository,

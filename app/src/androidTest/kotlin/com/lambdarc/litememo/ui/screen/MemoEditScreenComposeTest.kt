@@ -5,9 +5,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -125,6 +128,43 @@ class MemoEditScreenComposeTest {
             .assertCountEquals(0)
     }
 
+    @Test
+    fun stateTransitionDeletePendingDisablesFormAndFailureEnablesItAgain() {
+        // Arrange
+        val tag = testTagUiModel()
+        val image = testMemoImageUiModel()
+        var uiState by mutableStateOf(
+            MemoEditUiState(
+                memoId = "memo-1",
+                title = "Title",
+                body = "Body",
+                availableTags = listOf(tag),
+                images = listOf(image)
+            )
+        )
+        setMemoEditScreen(uiState = { uiState })
+
+        // Act
+        // StateTransition: pending deletion disables every edit control until it finishes.
+        composeRule.runOnIdle { uiState = uiState.copy(isDeletePending = true) }
+
+        // Assert
+        composeRule.onNodeWithTag(MemoEditTestTags.TITLE_INPUT).assertIsNotEnabled()
+        composeRule.onNodeWithTag(MemoEditTestTags.BODY_INPUT).assertIsNotEnabled()
+        composeRule.onNodeWithText(tag.name).assertIsNotEnabled()
+        composeRule.onNodeWithTag(MemoEditTestTags.removeImageButton(image.id)).assertIsNotEnabled()
+
+        // Act
+        // StateTransition: a failed deletion restores form interaction without losing input.
+        composeRule.runOnIdle { uiState = uiState.copy(isDeletePending = false) }
+
+        // Assert
+        composeRule.onNodeWithTag(MemoEditTestTags.TITLE_INPUT).assertIsEnabled()
+        composeRule.onNodeWithTag(MemoEditTestTags.BODY_INPUT).assertIsEnabled()
+        composeRule.onNodeWithText(tag.name).assertIsEnabled()
+        composeRule.onNodeWithTag(MemoEditTestTags.removeImageButton(image.id)).assertIsEnabled()
+    }
+
     private fun setMemoEditScreen(
         uiState: () -> MemoEditUiState = { MemoEditUiState() },
         onTitleChange: (String) -> Unit = {},
@@ -142,6 +182,7 @@ class MemoEditScreenComposeTest {
                     onDelete = {},
                     onBackRequest = {},
                     onRetry = {},
+                    onRetryTags = {},
                     onAttachImageRequest = onAttachImageRequest,
                     onImageRemove = onImageRemove,
                     onShareMemo = {}

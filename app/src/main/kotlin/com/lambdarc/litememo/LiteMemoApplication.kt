@@ -4,23 +4,29 @@ import android.app.Application
 import android.util.Log
 import com.google.android.gms.ads.MobileAds
 import com.lambdarc.litememo.di.ApplicationScope
-import com.lambdarc.litememo.domain.repository.MemoExportArchiveRepository
-import com.lambdarc.litememo.domain.repository.MemoImportArchiveRepository
+import com.lambdarc.litememo.domain.usecase.DeleteAbandonedPreparedExportsUseCase
+import com.lambdarc.litememo.domain.usecase.DeleteUnreferencedImportImagesUseCase
+import com.lambdarc.litememo.domain.usecase.ObserveAppLockEnabledUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveRecentMemosUseCase
-import com.lambdarc.litememo.ui.widget.data.WidgetMemoLoader
+import com.lambdarc.litememo.ui.widget.data.RECENT_MEMOS_LIMIT
 import com.lambdarc.litememo.ui.widget.data.WidgetRefresher
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 private const val WIDGET_REFRESH_DEBOUNCE_MS = 500L
+private const val APP_LOCK_RETRY_MAX_DELAY_MS = 30_000L
 private const val WIDGET_REFRESH_TAG = "WidgetRefresh"
 private const val IMPORT_CLEANUP_TAG = "ImportCleanup"
 private const val EXPORT_CLEANUP_TAG = "ExportCleanup"
@@ -36,10 +42,13 @@ class LiteMemoApplication : Application() {
     lateinit var observeRecentMemosUseCase: ObserveRecentMemosUseCase
 
     @Inject
-    lateinit var memoImportArchiveRepository: MemoImportArchiveRepository
+    lateinit var observeAppLockEnabledUseCase: ObserveAppLockEnabledUseCase
 
     @Inject
-    lateinit var memoExportArchiveRepository: MemoExportArchiveRepository
+    lateinit var deleteUnreferencedImportImagesUseCase: DeleteUnreferencedImportImagesUseCase
+
+    @Inject
+    lateinit var deleteAbandonedPreparedExportsUseCase: DeleteAbandonedPreparedExportsUseCase
 
     override fun onCreate() {
         super.onCreate()
@@ -49,12 +58,13 @@ class LiteMemoApplication : Application() {
         deleteUnreferencedImportImages()
         deleteAbandonedPreparedExports()
         observeMemosForWidgetRefresh()
+        observeAppLockForWidgetRefresh()
     }
 
     private fun deleteAbandonedPreparedExports() {
         applicationScope.launch {
             runCatching {
-                memoExportArchiveRepository.deleteAbandonedPreparedExports()
+                deleteAbandonedPreparedExportsUseCase()
             }.onFailure { error ->
                 if (error is CancellationException) throw error
                 Log.w(EXPORT_CLEANUP_TAG, "Abandoned prepared export cleanup failed")
@@ -65,7 +75,7 @@ class LiteMemoApplication : Application() {
     private fun deleteUnreferencedImportImages() {
         applicationScope.launch {
             runCatching {
-                memoImportArchiveRepository.deleteUnreferencedImportImages()
+                deleteUnreferencedImportImagesUseCase()
             }.onFailure { error ->
                 if (error is CancellationException) throw error
                 Log.w(IMPORT_CLEANUP_TAG, "Abandoned import image cleanup failed")
@@ -75,7 +85,7 @@ class LiteMemoApplication : Application() {
 
     private fun observeMemosForWidgetRefresh() {
         applicationScope.launch {
-            WidgetMemoLoader(observeRecentMemosUseCase).observeRecent()
+            observeRecentMemosUseCase(RECENT_MEMOS_LIMIT)
                 .retryWhen { cause, _ ->
                     if (cause is CancellationException) {
                         false
@@ -89,13 +99,64 @@ class LiteMemoApplication : Application() {
                 .distinctUntilChanged()
                 .debounce(WIDGET_REFRESH_DEBOUNCE_MS)
                 .collect {
-                    runCatching {
-                        WidgetRefresher.refreshLists(this@LiteMemoApplication)
-                    }.onFailure { error ->
-                        if (error is CancellationException) throw error
-                        Log.w(WIDGET_REFRESH_TAG, "Widget refresh failed", error)
-                    }
+                    refreshRecentMemoWidgets()
                 }
         }
     }
+
+    private fun observeAppLockForWidgetRefresh() {
+        applicationScope.launch {
+            observeAppLockEnabledUseCase()
+                .retryAppLockObservation {
+                    Log.w(WIDGET_REFRESH_TAG, "App lock observation failed; retrying", it)
+                    refreshRecentMemoWidgets()
+                }
+                .collect {
+                    refreshRecentMemoWidgets()
+                }
+        }
+    }
+
+    private suspend fun refreshRecentMemoWidgets() {
+        runCatching {
+            WidgetRefresher.refreshLists(this@LiteMemoApplication)
+        }.onFailure { error ->
+            if (error is CancellationException) throw error
+            Log.w(WIDGET_REFRESH_TAG, "Widget refresh failed", error)
+        }
+    }
+}
+
+internal fun <T> Flow<T>.retryAppLockObservation(
+    initialDelayMillis: Long = WIDGET_REFRESH_DEBOUNCE_MS,
+    maxDelayMillis: Long = APP_LOCK_RETRY_MAX_DELAY_MS,
+    onFailureEpisode: suspend (Throwable) -> Unit
+): Flow<T> = flow {
+    require(initialDelayMillis > 0)
+    require(maxDelayMillis >= initialDelayMillis)
+    var retryDelayMillis = initialDelayMillis
+    var failureEpisodeReported = false
+
+    emitAll(
+        this@retryAppLockObservation
+            .distinctUntilChanged()
+            .onEach {
+                retryDelayMillis = initialDelayMillis
+                failureEpisodeReported = false
+            }
+            .retryWhen { error, _ ->
+                if (error is CancellationException) return@retryWhen false
+                if (!failureEpisodeReported) {
+                    onFailureEpisode(error)
+                    failureEpisodeReported = true
+                }
+                delay(retryDelayMillis)
+                retryDelayMillis = if (retryDelayMillis >= maxDelayMillis / 2) {
+                    maxDelayMillis
+                } else {
+                    retryDelayMillis * 2
+                }
+                true
+            }
+    )
 }

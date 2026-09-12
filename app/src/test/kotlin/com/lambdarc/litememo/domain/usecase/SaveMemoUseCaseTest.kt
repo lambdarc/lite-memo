@@ -12,17 +12,12 @@ import com.lambdarc.litememo.domain.model.value.MemoId
 import com.lambdarc.litememo.domain.model.value.MemoTitle
 import com.lambdarc.litememo.domain.model.value.TagId
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
-import com.lambdarc.litememo.domain.provider.CurrentTimeProvider
-import com.lambdarc.litememo.domain.provider.MemoIdProvider
-import com.lambdarc.litememo.domain.repository.MemoRepository
 import com.lambdarc.litememo.domain.repository.TagRepository
 import com.lambdarc.litememo.domain.tagFixture
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.confirmVerified
-import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -405,17 +400,15 @@ class SaveMemoUseCaseTest {
     fun interactionMissingTagDoesNotSaveMemoOrGenerateId() = runTest {
         // Arrange
         val missingTagId = TagId("missing")
-        val memoRepository = mockk<MemoRepository>(relaxed = true)
+        val memoRepository = FakeMemoRepository()
         val tagRepository = mockk<TagRepository>()
-        val memoIdProvider = mockk<MemoIdProvider>()
-        val timeProvider = mockk<CurrentTimeProvider>()
+        val memoIdProvider = QueueMemoIdProvider()
         coEvery { tagRepository.getTagsByIds(listOf(missingTagId)) } returns emptyList()
-        every { timeProvider.now() } returns TimestampMillis(1000L)
         val useCase = SaveMemoUseCase(
             memoRepository = memoRepository,
             tagRepository = tagRepository,
             memoIdProvider = memoIdProvider,
-            currentTimeProvider = timeProvider
+            currentTimeProvider = MutableTimeProvider(TimestampMillis(1000L))
         )
 
         // Act
@@ -430,28 +423,24 @@ class SaveMemoUseCaseTest {
         }.exceptionOrNull()
 
         // Assert
-        assertEquals(IllegalArgumentException::class.java, error?.javaClass)
+        assertAll(
+            { assertEquals(IllegalArgumentException::class.java, error?.javaClass) },
+            { assertEquals(emptyList<Any>(), memoRepository.savedMemos) },
+            { assertEquals(emptyList<MemoId>(), memoIdProvider.issuedIds) }
+        )
         coVerify(exactly = 1) { tagRepository.getTagsByIds(listOf(missingTagId)) }
-        coVerify(exactly = 0) { memoRepository.saveMemo(any()) }
-        verify(exactly = 0) { memoIdProvider.newMemoId() }
-        confirmVerified(tagRepository, memoIdProvider)
+        confirmVerified(tagRepository)
     }
 
     @Test
     fun boundaryEmptyTagIdsSkipsTagValidation() = runTest {
         // Arrange
-        val memoRepository = mockk<MemoRepository>()
         val tagRepository = mockk<TagRepository>()
-        val memoIdProvider = mockk<MemoIdProvider>()
-        val timeProvider = mockk<CurrentTimeProvider>()
-        coEvery { memoRepository.saveMemo(any()) } returns Unit
-        every { memoIdProvider.newMemoId() } returns MemoId("generated-id")
-        every { timeProvider.now() } returns TimestampMillis(1000L)
         val useCase = SaveMemoUseCase(
-            memoRepository = memoRepository,
+            memoRepository = FakeMemoRepository(),
             tagRepository = tagRepository,
-            memoIdProvider = memoIdProvider,
-            currentTimeProvider = timeProvider
+            memoIdProvider = QueueMemoIdProvider(listOf(MemoId("generated-id"))),
+            currentTimeProvider = MutableTimeProvider(TimestampMillis(1000L))
         )
 
         // Act
@@ -467,18 +456,12 @@ class SaveMemoUseCaseTest {
     fun interactionUpdatingExistingMemoDoesNotGenerateNewMemoId() = runTest {
         // Arrange
         val existing = memoFixture(id = "memo-1")
-        val memoRepository = mockk<MemoRepository>()
-        val tagRepository = mockk<TagRepository>()
-        val memoIdProvider = mockk<MemoIdProvider>()
-        val timeProvider = mockk<CurrentTimeProvider>()
-        coEvery { memoRepository.getActiveMemo(existing.id) } returns existing
-        coEvery { memoRepository.saveMemo(any()) } returns Unit
-        every { timeProvider.now() } returns TimestampMillis(2000L)
+        val memoIdProvider = QueueMemoIdProvider()
         val useCase = SaveMemoUseCase(
-            memoRepository = memoRepository,
-            tagRepository = tagRepository,
+            memoRepository = FakeMemoRepository(listOf(existing)),
+            tagRepository = FakeTagRepository(),
             memoIdProvider = memoIdProvider,
-            currentTimeProvider = timeProvider
+            currentTimeProvider = MutableTimeProvider(TimestampMillis(2000L))
         )
 
         // Act
@@ -492,28 +475,23 @@ class SaveMemoUseCaseTest {
         )
 
         // Assert
-        assertEquals(existing.id, memo.id)
-        verify(exactly = 0) { memoIdProvider.newMemoId() }
-        confirmVerified(memoIdProvider)
+        assertAll(
+            { assertEquals(existing.id, memo.id) },
+            { assertEquals(emptyList<MemoId>(), memoIdProvider.issuedIds) }
+        )
     }
 
     @Test
     fun interactionMissingCommandIdValidatesTagsAndSavesWithoutGeneratingId() = runTest {
         // Arrange
-        val memoRepository = mockk<MemoRepository>()
-        val tagRepository = mockk<TagRepository>()
-        val memoIdProvider = mockk<MemoIdProvider>()
-        val timeProvider = mockk<CurrentTimeProvider>()
-        every { timeProvider.now() } returns TimestampMillis(1000L)
-        coEvery { memoRepository.getActiveMemo(MemoId("missing")) } returns null
-        coEvery { tagRepository.getTagsByIds(listOf(TagId("tag-1"))) } returns
-            listOf(tagFixture(id = "tag-1"))
-        coEvery { memoRepository.saveMemo(any()) } returns Unit
+        val memoRepository = FakeMemoRepository()
+        val tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1")))
+        val memoIdProvider = QueueMemoIdProvider()
         val useCase = SaveMemoUseCase(
             memoRepository = memoRepository,
             tagRepository = tagRepository,
             memoIdProvider = memoIdProvider,
-            currentTimeProvider = timeProvider
+            currentTimeProvider = MutableTimeProvider(TimestampMillis(1000L))
         )
 
         // Act
@@ -528,11 +506,12 @@ class SaveMemoUseCaseTest {
         )
 
         // Assert
-        assertEquals(MemoId("missing"), memo.id)
-        coVerify(exactly = 1) { tagRepository.getTagsByIds(listOf(TagId("tag-1"))) }
-        coVerify(exactly = 1) { memoRepository.saveMemo(any()) }
-        verify(exactly = 0) { memoIdProvider.newMemoId() }
-        confirmVerified(memoIdProvider)
+        assertAll(
+            { assertEquals(MemoId("missing"), memo.id) },
+            { assertEquals(listOf(listOf(TagId("tag-1"))), tagRepository.getTagsByIdsCalls) },
+            { assertEquals(listOf(MemoId("missing")), memoRepository.savedMemos.map { it.id }) },
+            { assertEquals(emptyList<MemoId>(), memoIdProvider.issuedIds) }
+        )
     }
 
     @Test

@@ -1,21 +1,41 @@
 package com.lambdarc.litememo.ui.widget.data
 
 import com.lambdarc.litememo.domain.model.MemoSummary
+import com.lambdarc.litememo.domain.usecase.ObserveAppLockEnabledUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveRecentMemosUseCase
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
-class WidgetMemoLoader(private val observeRecentMemosUseCase: ObserveRecentMemosUseCase) {
+class WidgetMemoLoader(
+    private val observeRecentMemosUseCase: ObserveRecentMemosUseCase,
+    private val observeAppLockEnabledUseCase: ObserveAppLockEnabledUseCase
+) {
 
-    fun observeRecent(): Flow<List<WidgetItem>> = observeRecentMemosUseCase(RECENT_MEMOS_LIMIT)
-        .map { memos -> memos.map { it.toWidgetItem() } }
-
-    suspend fun loadRecent(): List<WidgetItem> = observeRecent().first()
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeRecent(): Flow<List<WidgetItem>> = observeAppLockEnabledUseCase()
+        .catch { error ->
+            if (error is CancellationException) throw error
+            emit(true)
+        }
+        .distinctUntilChanged()
+        .flatMapLatest { appLockEnabled ->
+            if (appLockEnabled) {
+                flowOf(emptyList())
+            } else {
+                observeRecentMemosUseCase(RECENT_MEMOS_LIMIT)
+                    .map { memos -> memos.map { it.toWidgetItem() } }
+            }
+        }
 
 }
 
-private const val RECENT_MEMOS_LIMIT = 8
+internal const val RECENT_MEMOS_LIMIT = 8
 private const val MAX_TITLE_LENGTH = 50
 private const val MAX_SNIPPET_LENGTH = 80
 

@@ -10,7 +10,6 @@ import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.Tag
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.tagFixture
-import com.lambdarc.litememo.domain.usecase.ExportMemosUseCase
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -57,7 +56,7 @@ class RoomMemoImportRepositoryTest {
 
     private fun exportData(tags: List<Tag> = emptyList(), memos: List<Memo> = emptyList()) =
         ExportData(
-            version = ExportMemosUseCase.CURRENT_VERSION,
+            version = ExportData.CURRENT_VERSION,
             exportedAt = TimestampMillis(1_000L),
             tags = tags,
             memos = memos

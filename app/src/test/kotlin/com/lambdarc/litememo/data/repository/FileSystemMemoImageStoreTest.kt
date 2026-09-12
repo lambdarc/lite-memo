@@ -76,7 +76,7 @@ class FileSystemMemoImageStoreTest {
     fun interactionDeleteImagesDelegatesEachFileName() = runTest {
         // Arrange
         val dataSource = mockk<MemoImageFileDataSource>()
-        coEvery { dataSource.deleteImage(any()) } returns Unit
+        coEvery { dataSource.deleteImage(any()) } returns true
         val store = FileSystemMemoImageStore(dataSource, FixedMemoImageIdProvider("image-1"))
 
         // Act

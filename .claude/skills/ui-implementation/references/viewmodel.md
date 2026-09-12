@@ -1,15 +1,15 @@
 # viewmodel
 
-画面ごとの ViewModel で UI state を公開し、UseCase または domain の抽象へ依存する。
+画面ごとの ViewModel で UI state を公開し、UseCase へ依存する。
 
 ## 確認する対象
 
 - `ui/viewmodel/` の対象 ViewModel と、公開する `XxxUiState`（StateFlow）
-- 使用する UseCase / domain abstraction と、one-shot event の Channel
+- 使用する UseCase と、one-shot event の Channel
 
 ## 実装時の注意
 
-- UI state は StateFlow で公開し、必要な UseCase または domain の Repository interface / provider に依存する。
+- UI state は StateFlow で公開し、依存は UseCase に限る。domain の Repository interface / provider へ直接依存しない。
 - Android View / Context 依存を ViewModel に直接持ち込まない。
 - 失ってはいけない処理結果は UI state に保持して確認済み callback で消費し、失われても影響しない通知だけ Channel event に流す（`one-shot-event.md`）。
 - 画面固有の状態とドメインモデルを混ぜすぎない。
