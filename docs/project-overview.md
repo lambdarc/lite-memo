@@ -89,7 +89,7 @@ ZIP アーカイブの形式は [`docs/export-import-format.md`](export-import-f
 - MockK（モック）
 - Turbine（`StateFlow` / event stream の検証）
 - JUnit 4 / AndroidX Test（instrumented test）
-- Compose UI Test / Espresso / Room testing（instrumented test）
+- Compose UI Test / Room testing / Hilt testing（instrumented test）
 - Kover（カバレッジ計測）
 
 テストの方針は [`docs/unit-test.md`](unit-test.md) を、カバレッジの集計対象は [`docs/ci.md`](ci.md) を正本とします。

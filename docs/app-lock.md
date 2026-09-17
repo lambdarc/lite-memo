@@ -76,6 +76,7 @@ CodeQL の `java/android/insecure-local-authentication` はこの理由で dismi
 
 - 失敗とキャンセルはロック状態のまま、文言を変えて再試行ボタンを出す
 - 認証情報なしのときだけ、再試行ではなくセキュリティ設定への導線を出す
+- 利用不可（`ERROR_HW_UNAVAILABLE` / `ERROR_HW_NOT_PRESENT` / `ERROR_SECURITY_UPDATE_REQUIRED`）は状態を `UNAVAILABLE` にし、専用の文言と再試行ボタンを出す。復帰時の `onStart()` はこの状態でも認証を要求する
 - 生体認証のロックアウト（`ERROR_LOCKOUT` / `ERROR_LOCKOUT_PERMANENT`）は個別に扱っておらず、一般の失敗と同じ表示になる
 
 ロックアウトを区別していないのは既知の制約です。
@@ -100,6 +101,7 @@ API 30 未満の生体認証のみの経路では、利用者にロックアウ�
 - `AppLockAuthenticator` は `onCreate` で作り直すが、認証シートと結果の受け渡しは androidx 側が Activity 再生成をまたいで保つ
 - ごみ箱の期限切れ削除は、解錠の成功時と、アプリロックが無効だと分かった時点が入口になる。画面の描画完了とは連動しない
 - この削除の 1 回制限は `MainViewModel` のフィールドで持つ。保証されるのは ViewModel インスタンス単位であり、プロセス単位ではない
+- `TrashViewModel` の生成時と再試行時にも同じ削除を実行する。こちらに 1 回制限は無い
 - `MainActivity` は `singleTop` のため、ウィジェットからの起動では `onNewIntent` が呼ばれる。ロックの状態機械は Activity の生存期間に紐づくため、この経路では初期化されない
 
 認証中に Activity が再生成されても、認証はやり直しになりません。

@@ -40,7 +40,7 @@ DataStore や Repository という分類だけで一律に `androidTest` へ置�
 
 ## 命名
 
-- テストクラス名は対象クラス名に `Test` を付ける
+- JVM Unit Test のテストクラス名は対象クラス名に `Test` を付ける。instrumented test の命名は後述の Instrumented Test を参照する
 - テスト関数名は英語で、検証する振る舞いが分かる名前にする
 - 日本語の関数名やバッククォート関数名は使わない
 
@@ -269,6 +269,10 @@ private class SaveViewModel : ViewModel() {
 
 instrumented test は JUnit 4 と AndroidX Test の runner / rule を使います。
 テスト関数名、AAA コメント、観点 prefix / comment の方針は JVM Unit Test とそろえ、coroutine を扱う場合だけ `runTest` を使います。
+
+テストクラス名は対象クラス名に `InstrumentedTest` を、Compose UI Test は Screen 名に `ComposeTest` を付けます。
+Room DAO は `RoomDaoInstrumentedTest` に 3 つの DAO をまとめ、DAO ごとに分けません。
+Screen テストの fixture は `ComposeScreenTestFixtures` に置きます。
 
 `testInstrumentationRunner` に指定している `HiltTestRunner` は、`@CustomTestApplication(Application::class)` が生成する素の `Application` へ差し替えます。
 これにより `LiteMemoApplication.onCreate()` の MobileAds 初期化、import / export の cleanup、ウィジェット更新の Flow 収集が instrumented test 中に走りません。
