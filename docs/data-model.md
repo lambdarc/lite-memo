@@ -16,8 +16,8 @@ Data 層の方針とメモ画像の扱いは [`docs/architecture.md`](architectu
 メモを中心に、タグと画像が参照で紐づきます。
 
 - `memos`: メモ本体。`id` が主キー。`createdAt` と `deletedAt` に index を持つ
-- `tags`: タグ。`id` が主キー。`name` に unique index を持ち、同名タグを DB 層で拒否する。取り込みでタグ間の名前の移動や入れ替えが起きるため、`TagDao.insertOrUpdateAllTags` は名前が変わる行を一時名へ退避してから追加・更新する
-- `memo_tag_refs`: メモとタグの多対多。`(memoId, tagId)` が複合主キー。`(memoId, position)` の unique index でメモ内のタグ順を保つ
+- `tags`: タグ。`id` が主キー。`name` に unique index を持ち、同名タグを DB 層で拒否する。`(createdAt, id)` の index を持ち、タグ一覧はこの順で返す。取り込みでタグ間の名前の移動や入れ替えが起きるため、`TagDao.insertOrUpdateAllTags` は名前が変わる行を一時名へ退避してから追加・更新する
+- `memo_tag_refs`: メモとタグの多対多。`(memoId, tagId)` が複合主キー。`(memoId, position)` の unique index でメモ内のタグ順を保ち、`tagId` の index でタグ側からの参照を引く
 - `memo_images`: 添付画像のメタデータ。`id` が主キー。`(memoId, position)` の unique index で表示順を保つ。実ファイルは Room の外にあり、`fileName` だけを持つ
 
 `memo_tag_refs` と `memo_images` は `memos` へ、`memo_tag_refs` は `tags` へ、いずれも `ON DELETE CASCADE` の外部キーを持ちます。
@@ -58,16 +58,16 @@ Repository 側の削除は `NonCancellable` で囲み、commit 後にキャン�
 
 - `IN (:ids)` を使うクエリは、呼び出し側で 900 件ずつ chunk する。SQLite の変数上限を超えないための措置で、`SQLITE_QUERY_PARAMETER_BATCH_SIZE` を使う
 - 期間で絞るクエリは `createdAt >= :from AND createdAt < :to` の半開区間にする。終端と同じ時刻のメモは含めない
-- SQL で一覧の順序を確定するクエリは、同じ優先キーの行順も契約に含める場合、`id` を最後の並び順に加える。現状では `observeRecentActiveMemos` がこの tie-break を持つ。その他のメモ一覧は Domain 層で並べ替えるか、ごみ箱のように同一時刻内の順序を規定していない
+- SQL で一覧の順序を確定するクエリは、同じ優先キーの行順も契約に含める場合、`id` を最後の並び順に加える。現状では `observeRecentActiveMemos` と、`TagDao` の `observeTags` / `getAllTags`（`createdAt ASC, id ASC`）がこの tie-break を持つ。その他のメモ一覧は Domain 層で並べ替えるか、ごみ箱のように同一時刻内の順序を規定していない
 - 検索は `LIKE :pattern ESCAPE '\'` を使う。ユーザー入力の `%` `_` `\` は `RoomMemoRepository` の `toEscapedLikePattern` でエスケープしてから渡す
 
-半開区間の境界と `observeRecentActiveMemos` の `id` tie-break は instrumented test で固定しています。挙動を変えるとテストが落ちます。
+半開区間の境界、`observeRecentActiveMemos` の `id` tie-break、タグ一覧の `createdAt` → `id` 順は instrumented test で固定しています。挙動を変えるとテストが落ちます。
 
 ## 楽観的ロック
 
 読み出し時のメモ本体・タグ参照・画像参照を保存時に比較して競合を検出します。
 
-- 対象は単件・一括のお気に入り切り替えと、一括のタグ付け / タグ外し
+- 対象は選択メモへの一括操作で、お気に入り切り替えとタグ付け / タグ外しがある。単一メモのお気に入り変更も編集画面の保存を除きこの一括操作を通る
 - `ActiveMemoBulkWrite.expectedMemo` に読み出し時の内容を渡す。全対象が有効で内容も一致することを同一 transaction 内で確認し、不一致なら `IllegalStateException` を送出して全件中止する
 - 時計の巻き戻りなどで `updatedAt` が変わらなくても、本文や参照の変更を検出する。参照は相対的な順序を比較し、タグ削除で生じる position の欠番は無視する
 - 検出のため、対象メモの本体とタグ参照・画像参照を保存直前に読み直す。内容を変えない `CheckOnly` も同じ読み直しを伴うため、選択件数に比例して読み込み量が増える。正確な検出を優先してこのコストを許容する

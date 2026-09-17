@@ -12,7 +12,8 @@ Data 層の実装方針は [`docs/architecture.md`](architecture.md) の Data �
 - `manifest.json`: アーカイブ直下に 1 つ。**必ず先頭のエントリ**として書き、読み込み側も先頭に無ければ不正として扱う
 - `images/00000001` 形式: 画像本体。`images/` の下に 8 桁ゼロ埋めの連番で、拡張子もサブディレクトリも持たない。番号は 1 から始まり、manifest に現れる画像の順で振る
 
-画像エントリは無圧縮で書きます。`manifest.json` だけは通常の圧縮が掛かります。
+画像エントリは method を `DEFLATED` のまま圧縮レベル 0（`Deflater.NO_COMPRESSION`）で書き、`STORED` にはしません。
+`manifest.json` だけは通常の圧縮が掛かります。
 
 LiteMemo 独自のマジックバイトはありません。アーカイブの識別は 2 段階で行います。
 

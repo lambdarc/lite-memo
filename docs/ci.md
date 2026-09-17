@@ -7,7 +7,7 @@
 
 - draft ではない Pull Request は、base branch にかかわらず `ci.yml` の対象とする
 - CodeQL は `develop` / `main` を base にする Pull Request だけを対象とする
-- `develop` / `main` を base にする Pull Request では、静的解析と JVM Unit Test に加えて release / R8 build を検証する
+- `develop` / `main` を base にする Pull Request と `main` への push では、静的解析と JVM Unit Test に加えて release / R8 build を検証する
 - `ci.yml` と CodeQL の push 検証は `main` だけを対象とし、`develop` への push では実行しない
 - coverage は draft ではない Pull Request と、`main` への push で生成する。PR コメントは同一リポジトリからの Pull Request にだけ追加する
 - draft の Pull Request は全 job を skip し、ready for review にした時点で CI を開始する。CodeQL は base が `develop` / `main` の場合だけ開始する

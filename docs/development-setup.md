@@ -110,5 +110,4 @@ Gradle から同じアプリ検証を直接実行する場合は次のとおり�
 .\gradlew.bat :app:connectedDevDebugAndroidTest
 ```
 
-Gradle Wrapper Validation、GitHub Actions Validation、CodeQL などの workflow 固有チェックは、
-上記コマンドだけでは再現しません。最終結果は GitHub Actions で確認します。
+workflow 固有チェックは上記コマンドでは再現しないため、job 構成は [`docs/ci.md`](ci.md) を参照し、最終結果は GitHub Actions で確認します。
