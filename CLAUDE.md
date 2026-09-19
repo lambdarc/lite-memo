@@ -23,17 +23,17 @@ Lite Memo で Claude Code が最初に読む入口です。
 作業の種類に応じて、必要な Skill を最初に確認します。
 Claude Code 向け skill は `.claude/skills/` で管理する。Codex 向けの `.agents/skills/` とは自動同期しない。
 
-- `ui-implementation`: Compose / ViewModel / UI state / 画面テスト
+- `ui-implementation`: 画面まわりの実装をするときに使う（Compose / ViewModel / UI state / 画面テスト）
   - [`.claude/skills/ui-implementation/SKILL.md`](.claude/skills/ui-implementation/SKILL.md)
-- `domain-implementation`: model / value object / UseCase / Repository interface
+- `domain-implementation`: 業務ルールまわりの実装をするときに使う（model / value object / UseCase / Repository interface）
   - [`.claude/skills/domain-implementation/SKILL.md`](.claude/skills/domain-implementation/SKILL.md)
-- `data-implementation`: Repository 実装 / mapper / DataStore / export-import
+- `data-implementation`: データ入出力の実装をするときに使う（Repository 実装 / mapper / DataStore / export-import）
   - [`.claude/skills/data-implementation/SKILL.md`](.claude/skills/data-implementation/SKILL.md)
-- `db-implementation`: Room entity / DAO / migration / schema
+- `db-implementation`: DB まわりの実装をするときに使う（Room entity / DAO / migration / schema）
   - [`.claude/skills/db-implementation/SKILL.md`](.claude/skills/db-implementation/SKILL.md)
-- `test-implementation`: Unit Test / androidTest / coroutine / Flow 検証
+- `test-implementation`: テストの実装をするときに使う（Unit Test / androidTest / coroutine / Flow 検証）
   - [`.claude/skills/test-implementation/SKILL.md`](.claude/skills/test-implementation/SKILL.md)
-- `implementation-review`: 実装後レビューと指摘整理
+- `implementation-review`: 実装をレビューするときに使う（依存方向 / 責務分離 / migration / UI state / テスト不足）
   - [`.claude/skills/implementation-review/SKILL.md`](.claude/skills/implementation-review/SKILL.md)
 
 ## コーディング規約
