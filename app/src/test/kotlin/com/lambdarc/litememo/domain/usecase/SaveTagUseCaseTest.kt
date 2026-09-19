@@ -3,6 +3,7 @@ package com.lambdarc.litememo.domain.usecase
 import com.lambdarc.litememo.domain.FakeTagRepository
 import com.lambdarc.litememo.domain.MutableTimeProvider
 import com.lambdarc.litememo.domain.QueueTagIdProvider
+import com.lambdarc.litememo.domain.exception.DuplicateTagNameException
 import com.lambdarc.litememo.domain.model.SaveTagCommand
 import com.lambdarc.litememo.domain.model.Tag
 import com.lambdarc.litememo.domain.model.value.TagColor
@@ -11,49 +12,51 @@ import com.lambdarc.litememo.domain.model.value.TagName
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.repository.TagRepository
 import com.lambdarc.litememo.domain.tagFixture
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 
 class SaveTagUseCaseTest {
 
     @Test
-    fun invokeCreatesTagWithGeneratedId() = runTest {
+    fun normalCreatePersistsAndReturnsGeneratedTag() = runTest {
         // Arrange
-        val useCase =
-            saveTagUseCase(tagIdProvider = QueueTagIdProvider(listOf(TagId("generated-tag"))))
+        val repository = FakeTagRepository()
+        val useCase = saveTagUseCase(
+            tagRepository = repository,
+            tagIdProvider = QueueTagIdProvider(listOf(TagId("generated-tag"))),
+            timeProvider = MutableTimeProvider(TimestampMillis(2000L))
+        )
+        val expected = tagFixture(id = "generated-tag", name = "Work", createdAt = 2000L)
 
         // Act
+        // Normal: the returned and persisted tag have the generated id and current time.
         val tag = useCase(SaveTagCommand(name = TagName("Work"), color = TagColor(0xFF6750A4)))
 
         // Assert
-        assertEquals(TagId("generated-tag"), tag.id)
+        assertAll(
+            { assertEquals(expected, tag) },
+            { assertEquals(listOf(expected), repository.savedTags) }
+        )
     }
 
     @Test
-    fun invokeCreatesTagWithCurrentTime() = runTest {
-        // Arrange
-        val useCase = saveTagUseCase(timeProvider = MutableTimeProvider(TimestampMillis(2000L)))
-
-        // Act
-        val tag = useCase(SaveTagCommand(name = TagName("Work"), color = TagColor(0xFF6750A4)))
-
-        // Assert
-        assertEquals(TimestampMillis(2000L), tag.createdAt)
-    }
-
-    @Test
-    fun invokePreservesCreatedAtWhenUpdatingExistingTag() = runTest {
+    fun normalUpdatePreservesIdentityAndCreationTime() = runTest {
         // Arrange
         val existing = tagFixture(id = "tag-1", createdAt = 1000L)
         val useCase = saveTagUseCase(
             tagRepository = FakeTagRepository(listOf(existing)),
+            tagIdProvider = QueueTagIdProvider(emptyList()),
             timeProvider = MutableTimeProvider(TimestampMillis(3000L))
         )
 
         // Act
+        // Normal: updating preserves identity and creation time without generating an id.
         val tag =
             useCase(
                 SaveTagCommand(
@@ -64,36 +67,18 @@ class SaveTagUseCaseTest {
             )
 
         // Assert
-        assertEquals(TimestampMillis(1000L), tag.createdAt)
+        assertEquals(existing.copy(name = TagName("New"), color = TagColor(0xFF006D3B)), tag)
     }
 
     @Test
-    fun invokeThrowsWhenTagIdDoesNotExist() {
-        // Arrange
-        val useCase = saveTagUseCase()
-
-        // Act & Assert
-        assertThrows(IllegalArgumentException::class.java) {
-            runTest {
-                useCase(
-                    SaveTagCommand(
-                        id = TagId("client-id"),
-                        name = TagName("New"),
-                        color = TagColor(0xFF006D3B)
-                    )
-                )
-            }
-        }
-    }
-
-    @Test
-    fun invokeDoesNotSaveTagWhenTagIdDoesNotExist() = runTest {
+    fun errorMissingTagRejectsUpdateWithoutSaving() = runTest {
         // Arrange
         val repository = FakeTagRepository()
         val useCase = saveTagUseCase(tagRepository = repository)
 
-        // Act
-        try {
+        // Act & Assert
+        // Error: a missing update target fails without creating a new tag.
+        assertThrows<IllegalArgumentException> {
             useCase(
                 SaveTagCommand(
                     id = TagId("client-id"),
@@ -101,24 +86,20 @@ class SaveTagUseCaseTest {
                     color = TagColor(0xFF006D3B)
                 )
             )
-        } catch (_: IllegalArgumentException) {
         }
-
-        // Assert
-        assertEquals(emptyList<Any>(), repository.savedTags)
+        assertTrue(repository.savedTags.isEmpty())
     }
 
     @Test
-    fun invokeThrowsWhenTagNameAlreadyExists() {
+    fun errorCreateRejectsDuplicateName() = runTest {
         // Arrange
         val existing = tagFixture(id = "tag-1", name = "Work")
         val useCase = saveTagUseCase(tagRepository = FakeTagRepository(listOf(existing)))
 
         // Act & Assert
-        assertThrows(IllegalArgumentException::class.java) {
-            runTest {
-                useCase(SaveTagCommand(name = TagName("Work"), color = TagColor(0xFF6750A4)))
-            }
+        // Error: an existing name cannot be used for a new tag.
+        assertThrows<DuplicateTagNameException> {
+            useCase(SaveTagCommand(name = TagName("Work"), color = TagColor(0xFF6750A4)))
         }
     }
 
@@ -145,28 +126,33 @@ class SaveTagUseCaseTest {
     fun boundaryInvokeAllowsSameNameWithDifferentLetterCase() = runTest {
         // Arrange
         val existing = tagFixture(id = "tag-1", name = "Work")
-        val useCase = saveTagUseCase(tagRepository = FakeTagRepository(listOf(existing)))
+        val repository = FakeTagRepository(listOf(existing))
+        val useCase = saveTagUseCase(
+            tagRepository = repository,
+            tagIdProvider = QueueTagIdProvider(listOf(TagId("new-tag")))
+        )
 
         // Act
         // Boundary: name uniqueness stays case-sensitive.
         val tag = useCase(SaveTagCommand(name = TagName("work"), color = TagColor(0xFF6750A4)))
 
         // Assert
-        assertEquals(TagName("work"), tag.name)
+        assertAll(
+            { assertEquals(TagName("work"), tag.name) },
+            { assertEquals(listOf("Work", "work"), repository.currentTags().map { it.name.value }) }
+        )
     }
 
     @Test
-    fun boundaryInvokeThrowsWhenTrimmedNameAlreadyExists() {
+    fun boundaryInvokeThrowsWhenTrimmedNameAlreadyExists() = runTest {
         // Arrange
         val existing = tagFixture(id = "tag-1", name = "Work")
         val useCase = saveTagUseCase(tagRepository = FakeTagRepository(listOf(existing)))
 
         // Act & Assert
         // Boundary: the trimmed TagName value is what gets looked up.
-        assertThrows(IllegalArgumentException::class.java) {
-            runTest {
-                useCase(SaveTagCommand(name = TagName("  Work  "), color = TagColor(0xFF6750A4)))
-            }
+        assertThrows<DuplicateTagNameException> {
+            useCase(SaveTagCommand(name = TagName("  Work  "), color = TagColor(0xFF6750A4)))
         }
     }
 
@@ -188,29 +174,74 @@ class SaveTagUseCaseTest {
         assertEquals(TagId("generated-tag"), tag.id)
     }
 
-    private class GetAllTagsFailingTagRepository(initialTags: List<Tag>) : TagRepository {
-
-        private val repository = FakeTagRepository(initialTags)
-
-        override fun observeTags(): Flow<List<Tag>> = repository.observeTags()
-
-        override suspend fun getTag(id: TagId): Tag? = repository.getTag(id)
-
-        override suspend fun findTagByName(name: TagName): Tag? = repository.findTagByName(name)
-
-        override suspend fun getTagsByIds(ids: List<TagId>): List<Tag> =
-            repository.getTagsByIds(ids)
-
-        override suspend fun saveTag(tag: Tag) = repository.saveTag(tag)
-
-        override suspend fun deleteTag(id: TagId) = repository.deleteTag(id)
-
+    private class GetAllTagsFailingTagRepository(initialTags: List<Tag>) :
+        TagRepository by FakeTagRepository(initialTags) {
         override suspend fun getAllTags(): List<Tag> =
             error("SaveTagUseCase must not load all tags.")
     }
 
+    @Test
+    fun errorDuplicateNameRejectsRenameWithoutChangingTags() = runTest {
+        // Arrange
+        val existing = tagFixture(id = "tag-1", name = "Work")
+        val other = tagFixture(id = "tag-2", name = "Home")
+        val repository = FakeTagRepository(listOf(existing, other))
+        val useCase = saveTagUseCase(tagRepository = repository)
+
+        // Act & Assert
+        // Error: a conflicting rename preserves both tags and never persists an update.
+        assertThrows<DuplicateTagNameException> {
+            useCase(SaveTagCommand(id = existing.id, name = other.name, color = existing.color))
+        }
+        assertAll(
+            { assertTrue(repository.savedTags.isEmpty()) },
+            { assertEquals(listOf(existing, other), repository.currentTags()) }
+        )
+    }
+
+    @Test
+    fun errorSaveFailurePropagatesToCaller() = runTest {
+        // Arrange
+        val failure = IllegalStateException("Storage unavailable")
+        val repository = object : TagRepository by FakeTagRepository() {
+            override suspend fun saveTag(tag: Tag) = throw failure
+        }
+        val useCase = saveTagUseCase(tagRepository = repository)
+
+        // Act & Assert
+        // Error: persistence failure must not be reported as a successful save.
+        val thrown = assertThrows<IllegalStateException> {
+            useCase(SaveTagCommand(name = TagName("Work"), color = TagColor(0xFF6750A4)))
+        }
+        assertSame(failure, thrown)
+    }
+
+    @Test
+    fun coroutineCancelledLookupDoesNotSaveOrGenerateId() = runTest {
+        // Arrange
+        val failure = CancellationException("Cancelled lookup")
+        val delegate = FakeTagRepository()
+        val repository = object : TagRepository by delegate {
+            override suspend fun findTagByName(name: TagName) = throw failure
+        }
+        val useCase = saveTagUseCase(
+            tagRepository = repository,
+            tagIdProvider = QueueTagIdProvider(emptyList())
+        )
+
+        // Act & Assert
+        // Coroutine: cancellation escapes lookup before a tag is created.
+        val thrown = assertThrows<CancellationException> {
+            useCase(SaveTagCommand(name = TagName("Work"), color = TagColor(0xFF6750A4)))
+        }
+        assertAll(
+            { assertSame(failure, thrown) },
+            { assertTrue(delegate.savedTags.isEmpty()) }
+        )
+    }
+
     private fun saveTagUseCase(
-        tagRepository: FakeTagRepository = FakeTagRepository(),
+        tagRepository: TagRepository = FakeTagRepository(),
         tagIdProvider: QueueTagIdProvider = QueueTagIdProvider(),
         timeProvider: MutableTimeProvider = MutableTimeProvider()
     ) = SaveTagUseCase(
