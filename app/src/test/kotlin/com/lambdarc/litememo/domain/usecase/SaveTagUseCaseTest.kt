@@ -49,8 +49,10 @@ class SaveTagUseCaseTest {
     fun normalUpdatePreservesIdentityAndCreationTime() = runTest {
         // Arrange
         val existing = tagFixture(id = "tag-1", createdAt = 1000L)
+        val repository = FakeTagRepository(listOf(existing))
+        val expected = existing.copy(name = TagName("New"), color = TagColor(0xFF006D3B))
         val useCase = saveTagUseCase(
-            tagRepository = FakeTagRepository(listOf(existing)),
+            tagRepository = repository,
             tagIdProvider = QueueTagIdProvider(emptyList()),
             timeProvider = MutableTimeProvider(TimestampMillis(3000L))
         )
@@ -67,7 +69,10 @@ class SaveTagUseCaseTest {
             )
 
         // Assert
-        assertEquals(existing.copy(name = TagName("New"), color = TagColor(0xFF006D3B)), tag)
+        assertAll(
+            { assertEquals(expected, tag) },
+            { assertEquals(listOf(expected), repository.savedTags) }
+        )
     }
 
     @Test
@@ -94,13 +99,18 @@ class SaveTagUseCaseTest {
     fun errorCreateRejectsDuplicateName() = runTest {
         // Arrange
         val existing = tagFixture(id = "tag-1", name = "Work")
-        val useCase = saveTagUseCase(tagRepository = FakeTagRepository(listOf(existing)))
+        val repository = FakeTagRepository(listOf(existing))
+        val useCase = saveTagUseCase(tagRepository = repository)
 
         // Act & Assert
         // Error: an existing name cannot be used for a new tag.
         assertThrows<DuplicateTagNameException> {
             useCase(SaveTagCommand(name = TagName("Work"), color = TagColor(0xFF6750A4)))
         }
+        assertAll(
+            { assertTrue(repository.savedTags.isEmpty()) },
+            { assertEquals(listOf(existing), repository.currentTags()) }
+        )
     }
 
     @Test
@@ -147,13 +157,18 @@ class SaveTagUseCaseTest {
     fun boundaryInvokeThrowsWhenTrimmedNameAlreadyExists() = runTest {
         // Arrange
         val existing = tagFixture(id = "tag-1", name = "Work")
-        val useCase = saveTagUseCase(tagRepository = FakeTagRepository(listOf(existing)))
+        val repository = FakeTagRepository(listOf(existing))
+        val useCase = saveTagUseCase(tagRepository = repository)
 
         // Act & Assert
         // Boundary: the trimmed TagName value is what gets looked up.
         assertThrows<DuplicateTagNameException> {
             useCase(SaveTagCommand(name = TagName("  Work  "), color = TagColor(0xFF6750A4)))
         }
+        assertAll(
+            { assertTrue(repository.savedTags.isEmpty()) },
+            { assertEquals(listOf(existing), repository.currentTags()) }
+        )
     }
 
     @Test
