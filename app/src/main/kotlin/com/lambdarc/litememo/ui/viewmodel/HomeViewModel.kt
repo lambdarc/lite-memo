@@ -84,7 +84,10 @@ class HomeViewModel @Inject constructor(
             uiControls,
             searchResults
         ) { memos, tags, controls, searchResult ->
-            val tagUiModels = tags.map { TagUiModel.fromDomain(it) }
+            val tagUiModels = tags.map {
+                TagUiModel(id = it.id, name = it.name.value, colorArgb = it.color.argb)
+            }
+            val tagsById = tagUiModels.associateBy { it.id }
             val effectiveFilter = controls.filter.effectiveFilter(tags)
             val filteredMemos = filterMemosUseCase(memos, effectiveFilter.toDomainFilter())
             val memoById = memos.associateBy { it.id }
@@ -99,11 +102,19 @@ class HomeViewModel @Inject constructor(
                 ?.reduce { commonTagIds, tagIds -> commonTagIds intersect tagIds }
                 ?: emptySet()
             val search = controls.search.withResult(searchResult) { searchHits ->
-                MemoUiModel.fromDomain(
-                    searchHits,
-                    tags,
-                    resolveMemoImagePathUseCase::invoke
-                )
+                searchHits.map { memo ->
+                    MemoUiModel(
+                        id = memo.id,
+                        title = memo.title.value,
+                        body = memo.body.value,
+                        tags = memo.tagIds.mapNotNull { tagsById[it] },
+                        updatedAtMillis = memo.updatedAt.value,
+                        isFavorite = memo.isFavorite,
+                        thumbnailPath = memo.images.firstOrNull()?.let { image ->
+                            resolveMemoImagePathUseCase(image.fileName)
+                        }
+                    )
+                }
             }
 
             HomeUiState(
@@ -115,11 +126,19 @@ class HomeViewModel @Inject constructor(
                 allSelectedTagIds = allSelectedTagIds,
                 bulkTagDialog = controls.tagDialog,
                 tags = tagUiModels,
-                memos = MemoUiModel.fromDomain(
-                    filteredMemos,
-                    tags,
-                    resolveMemoImagePathUseCase::invoke
-                )
+                memos = filteredMemos.map { memo ->
+                    MemoUiModel(
+                        id = memo.id,
+                        title = memo.title.value,
+                        body = memo.body.value,
+                        tags = memo.tagIds.mapNotNull { tagsById[it] },
+                        updatedAtMillis = memo.updatedAt.value,
+                        isFavorite = memo.isFavorite,
+                        thumbnailPath = memo.images.firstOrNull()?.let { image ->
+                            resolveMemoImagePathUseCase(image.fileName)
+                        }
+                    )
+                }
             )
         }.catch {
             emit(

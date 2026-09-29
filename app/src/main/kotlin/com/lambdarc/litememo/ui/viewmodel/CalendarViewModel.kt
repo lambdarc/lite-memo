@@ -14,6 +14,7 @@ import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.ResolveMemoImagePathUseCase
 import com.lambdarc.litememo.domain.usecase.SearchMemosUseCase
 import com.lambdarc.litememo.ui.model.MemoUiModel
+import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.CalendarDayUiState
 import com.lambdarc.litememo.ui.state.CalendarUiState
 import com.lambdarc.litememo.ui.state.SearchUiState
@@ -95,16 +96,27 @@ class CalendarViewModel @Inject constructor(
             uiControls,
             searchResults
         ) { observed, month, date, controls, searchResult ->
+            val tagsById = observed.tags?.associate { tag ->
+                tag.id to TagUiModel(id = tag.id, name = tag.name.value, colorArgb = tag.color.argb)
+            }.orEmpty()
             val hasError = observed.monthSummary == null ||
                 observed.memos == null ||
                 observed.tags == null
             val search = controls.search.withResult(searchResult) { searchHits ->
                 if (observed.tags != null) {
-                    MemoUiModel.fromDomain(
-                        searchHits,
-                        observed.tags,
-                        resolveMemoImagePathUseCase::invoke
-                    )
+                    searchHits.map { memo ->
+                        MemoUiModel(
+                            id = memo.id,
+                            title = memo.title.value,
+                            body = memo.body.value,
+                            tags = memo.tagIds.mapNotNull { tagsById[it] },
+                            updatedAtMillis = memo.updatedAt.value,
+                            isFavorite = memo.isFavorite,
+                            thumbnailPath = memo.images.firstOrNull()?.let { image ->
+                                resolveMemoImagePathUseCase(image.fileName)
+                            }
+                        )
+                    }
                 } else {
                     emptyList()
                 }
@@ -119,11 +131,19 @@ class CalendarViewModel @Inject constructor(
                 search = search,
                 days = observed.monthSummary?.toDayUiStates(date) ?: emptyList(),
                 memos = if (observed.memos != null && observed.tags != null) {
-                    MemoUiModel.fromDomain(
-                        observed.memos,
-                        observed.tags,
-                        resolveMemoImagePathUseCase::invoke
-                    )
+                    observed.memos.map { memo ->
+                        MemoUiModel(
+                            id = memo.id,
+                            title = memo.title.value,
+                            body = memo.body.value,
+                            tags = memo.tagIds.mapNotNull { tagsById[it] },
+                            updatedAtMillis = memo.updatedAt.value,
+                            isFavorite = memo.isFavorite,
+                            thumbnailPath = memo.images.firstOrNull()?.let { image ->
+                                resolveMemoImagePathUseCase(image.fileName)
+                            }
+                        )
+                    }
                 } else {
                     emptyList()
                 }
