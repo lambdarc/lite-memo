@@ -118,7 +118,9 @@ class MemoEditViewModel @Inject constructor(
                 _uiState.update { state ->
                     val validTagIds = tags.map { it.id }.toSet()
                     state.copy(
-                        availableTags = tags.map { TagUiModel.fromDomain(it) },
+                        availableTags = tags.map {
+                            TagUiModel(id = it.id, name = it.name.value, colorArgb = it.color.argb)
+                        },
                         selectedTagIds = state.selectedTagIds.intersect(validTagIds),
                         hasTagError = false
                     )
@@ -171,9 +173,10 @@ class MemoEditViewModel @Inject constructor(
                     try {
                         withContext(NonCancellable) {
                             val image = attachMemoImageUseCase(ImageSourceReference(uri))
-                            attached += MemoImageUiModel.fromDomain(
-                                image = image,
-                                resolveImagePath = resolveMemoImagePathUseCase::invoke,
+                            attached += MemoImageUiModel(
+                                id = image.id.value,
+                                fileName = image.fileName.value,
+                                filePath = resolveMemoImagePathUseCase(image.fileName),
                                 isPersisted = false
                             )
                         }
@@ -474,9 +477,10 @@ class MemoEditViewModel @Inject constructor(
         isFavorite = isFavorite,
         selectedTagIds = tagIds.toSet(),
         images = images.map { image ->
-            MemoImageUiModel.fromDomain(
-                image = image,
-                resolveImagePath = resolveMemoImagePathUseCase::invoke,
+            MemoImageUiModel(
+                id = image.id.value,
+                fileName = image.fileName.value,
+                filePath = resolveMemoImagePathUseCase(image.fileName),
                 isPersisted = true
             )
         }

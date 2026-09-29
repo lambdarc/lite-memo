@@ -189,7 +189,9 @@ class TrashViewModel @Inject constructor(
                 title = memo.title.value,
                 body = memo.body.value,
                 tags = memo.tagIds.mapNotNull { id ->
-                    tagsById[id]?.let { TagUiModel.fromDomain(it) }
+                    tagsById[id]?.let {
+                        TagUiModel(id = it.id, name = it.name.value, colorArgb = it.color.argb)
+                    }
                 },
                 deletedAt = deletedAt
             )

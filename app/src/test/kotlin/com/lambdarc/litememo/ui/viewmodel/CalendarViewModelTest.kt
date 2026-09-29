@@ -22,6 +22,8 @@ import com.lambdarc.litememo.domain.usecase.ObserveMemosByCalendarDateUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.ResolveMemoImagePathUseCase
 import com.lambdarc.litememo.domain.usecase.SearchMemosUseCase
+import com.lambdarc.litememo.ui.model.MemoUiModel
+import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.SearchUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -301,27 +303,120 @@ class CalendarViewModelTest {
     }
 
     @Test
-    fun normalUiStateMapsThumbnailPathFromFirstImage() = runTest(dispatcher) {
+    fun normalUiStateMapsMemoFields() = runTest(dispatcher) {
         // Arrange
-        val viewModel = calendarViewModel(
-            memoRepository = FakeMemoRepository(
-                listOf(
-                    memoFixture(
-                        id = "memo-1",
-                        createdAt = epochMillis("2026-05-15T10:00:00Z"),
-                        images = listOf(memoImageFixture(fileName = "image-1.jpg"))
-                    )
-                )
+        val tags = listOf(
+            tagFixture(id = "tag-1", name = "First", color = 0xFF112233),
+            tagFixture(id = "tag-2", name = "Second", color = 0xFF445566)
+        )
+        val memo = memoFixture(
+            id = "mapped",
+            title = "Mapped title",
+            body = "Mapped body",
+            createdAt = today,
+            updatedAt = today + 1000L,
+            isFavorite = true,
+            tagIds = listOf(TagId("tag-2"), TagId("missing"), TagId("tag-1")),
+            images = listOf(
+                memoImageFixture(id = "first", fileName = "first.jpg"),
+                memoImageFixture(id = "second", fileName = "second.jpg")
             )
+        )
+        val memoWithoutImage = memoFixture(id = "empty", title = "Mapped empty", createdAt = today)
+        val viewModel = calendarViewModel(
+            memoRepository = FakeMemoRepository(listOf(memo, memoWithoutImage)),
+            tags = tags
         )
 
         // Act
-        // Normal: calendar memo cards resolve the first memo image into a thumbnail path.
+        // Normal: memo fields preserve tag order, skip missing tags, and use only the first image.
         advanceUntilIdle()
         val state = viewModel.uiState.first { !it.isLoading }
 
         // Assert
-        assertEquals("/images/image-1.jpg", state.memos.single().thumbnailPath)
+        assertAll(
+            {
+                assertEquals(
+                    MemoUiModel(
+                        id = memo.id,
+                        title = "Mapped title",
+                        body = "Mapped body",
+                        tags = listOf(
+                            TagUiModel(TagId("tag-2"), "Second", 0xFF445566),
+                            TagUiModel(TagId("tag-1"), "First", 0xFF112233)
+                        ),
+                        updatedAtMillis = today + 1000L,
+                        isFavorite = true,
+                        thumbnailPath = "/images/first.jpg"
+                    ),
+                    state.memos.first { it.id == memo.id }
+                )
+            },
+            { assertEquals(null, state.memos.first { it.id == memoWithoutImage.id }.thumbnailPath) }
+        )
+    }
+
+    @Test
+    fun normalSearchResultsMapMemoFields() = runTest(dispatcher) {
+        // Arrange
+        val tags = listOf(
+            tagFixture(id = "tag-1", name = "First", color = 0xFF112233),
+            tagFixture(id = "tag-2", name = "Second", color = 0xFF445566)
+        )
+        val memo = memoFixture(
+            id = "mapped",
+            title = "Mapped title",
+            body = "Mapped body",
+            createdAt = today,
+            updatedAt = today + 1000L,
+            isFavorite = true,
+            tagIds = listOf(TagId("tag-2"), TagId("missing"), TagId("tag-1")),
+            images = listOf(
+                memoImageFixture(id = "first", fileName = "first.jpg"),
+                memoImageFixture(id = "second", fileName = "second.jpg")
+            )
+        )
+        val memoWithoutImage = memoFixture(id = "empty", title = "Mapped empty", createdAt = today)
+        val viewModel = calendarViewModel(
+            memoRepository = FakeMemoRepository(listOf(memo, memoWithoutImage)),
+            tags = tags
+        )
+
+        // Act
+        // Normal: memo fields preserve tag order, skip missing tags, and use only the first image.
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("Mapped")
+        advanceUntilIdle()
+        val state = viewModel.uiState.first { it.search.results.size == 2 }
+
+        // Assert
+        assertAll(
+            {
+                assertEquals(
+                    MemoUiModel(
+                        id = memo.id,
+                        title = "Mapped title",
+                        body = "Mapped body",
+                        tags = listOf(
+                            TagUiModel(TagId("tag-2"), "Second", 0xFF445566),
+                            TagUiModel(TagId("tag-1"), "First", 0xFF112233)
+                        ),
+                        updatedAtMillis = today + 1000L,
+                        isFavorite = true,
+                        thumbnailPath = "/images/first.jpg"
+                    ),
+                    state.search.results.first { it.id == memo.id }
+                )
+            },
+            {
+                assertEquals(
+                    null,
+                    state.search.results.first {
+                        it.id == memoWithoutImage.id
+                    }.thumbnailPath
+                )
+            }
+        )
     }
 
     @Test

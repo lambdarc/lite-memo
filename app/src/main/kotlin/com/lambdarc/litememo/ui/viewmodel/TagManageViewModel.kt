@@ -56,7 +56,11 @@ class TagManageViewModel @Inject constructor(
             TagManageUiState(
                 isLoading = false,
                 hasError = tags == null,
-                tags = tags?.map { TagUiModel.fromDomain(it) } ?: emptyList(),
+                tags =
+                    tags?.map {
+                        TagUiModel(id = it.id, name = it.name.value, colorArgb = it.color.argb)
+                    }
+                        ?: emptyList(),
                 editingTag = editing,
                 showDeleteDialog = deleting
             )

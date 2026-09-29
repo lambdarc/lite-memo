@@ -72,6 +72,24 @@ class MemoEditViewModelTest {
     }
 
     @Test
+    fun normalUiStateLoadsPersistedImageMetadata() = runTest(dispatcher) {
+        // Arrange
+        val memo =
+            memoFixture(images = listOf(memoImageFixture(id = "loaded", fileName = "loaded.jpg")))
+        val viewModel = memoEditViewModel(memo = memo)
+
+        // Act
+        // Normal: loaded images retain their metadata and are already persisted.
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(
+            MemoImageUiModel("loaded", "loaded.jpg", "/images/loaded.jpg", true),
+            viewModel.uiState.value.images.single()
+        )
+    }
+
+    @Test
     fun normalUiStateRestoresSavedStateEdit() = runTest(dispatcher) {
         // Arrange
         val viewModel = memoEditViewModel(

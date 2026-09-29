@@ -26,6 +26,8 @@ import com.lambdarc.litememo.domain.usecase.ObserveMemosUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.ResolveMemoImagePathUseCase
 import com.lambdarc.litememo.domain.usecase.SearchMemosUseCase
+import com.lambdarc.litememo.ui.model.MemoUiModel
+import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.HomeFilterUiState
 import com.lambdarc.litememo.ui.state.SearchUiState
 import kotlinx.coroutines.Dispatchers
@@ -65,48 +67,66 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun uiStateReflectsObservedMemos() = runTest(dispatcher) {
-        // Arrange
-        val tagId = TagId("tag-1")
-        val viewModel = homeViewModel(
-            memos = listOf(
-                memoFixture(
-                    id = "memo-1",
-                    title = "買い物リスト",
-                    tagIds = listOf(tagId),
-                    updatedAt = today
-                )
-            ),
-            tags = listOf(tagFixture(id = tagId.value, name = "生活"))
-        )
-
-        // Act
-        advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
-
-        // Assert
-        assertEquals("買い物リスト", state.memos.single().title)
-    }
+    fun normalUiStateMapsMemoFields() = assertMappedMemoFields(isSearch = false)
 
     @Test
-    fun normalUiStateMapsThumbnailPathFromFirstImage() = runTest(dispatcher) {
+    fun normalSearchResultsMapMemoFields() = assertMappedMemoFields(isSearch = true)
+
+    private fun assertMappedMemoFields(isSearch: Boolean) = runTest(dispatcher) {
         // Arrange
-        val viewModel = homeViewModel(
-            memos = listOf(
-                memoFixture(
-                    id = "memo-1",
-                    images = listOf(memoImageFixture(fileName = "image-1.jpg"))
-                )
+        val tags = listOf(
+            tagFixture(id = "tag-1", name = "First", color = 0xFF112233),
+            tagFixture(id = "tag-2", name = "Second", color = 0xFF445566)
+        )
+        val memo = memoFixture(
+            id = "mapped",
+            title = "Mapped title",
+            body = "Mapped body",
+            createdAt = today,
+            updatedAt = today + 1000L,
+            isFavorite = true,
+            tagIds = listOf(TagId("tag-2"), TagId("missing"), TagId("tag-1")),
+            images = listOf(
+                memoImageFixture(id = "first", fileName = "first.jpg"),
+                memoImageFixture(id = "second", fileName = "second.jpg")
             )
         )
+        val memoWithoutImage = memoFixture(id = "empty", title = "Mapped empty", createdAt = today)
+        val viewModel = homeViewModel(memos = listOf(memo, memoWithoutImage), tags = tags)
 
         // Act
-        // Normal: home memo cards resolve the first memo image into a thumbnail path.
+        // Normal: memo fields preserve tag order, skip missing tags, and use only the first image.
+        if (isSearch) {
+            viewModel.toggleSearch()
+            viewModel.updateSearchQuery("Mapped")
+        }
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.uiState.first {
+            !it.isLoading && (!isSearch || it.search.results.size == 2)
+        }
+        val results = if (isSearch) state.search.results else state.memos
 
         // Assert
-        assertEquals("/images/image-1.jpg", state.memos.single().thumbnailPath)
+        assertAll(
+            {
+                assertEquals(
+                    MemoUiModel(
+                        id = memo.id,
+                        title = "Mapped title",
+                        body = "Mapped body",
+                        tags = listOf(
+                            TagUiModel(TagId("tag-2"), "Second", 0xFF445566),
+                            TagUiModel(TagId("tag-1"), "First", 0xFF112233)
+                        ),
+                        updatedAtMillis = today + 1000L,
+                        isFavorite = true,
+                        thumbnailPath = "/images/first.jpg"
+                    ),
+                    results.first { it.id == memo.id }
+                )
+            },
+            { assertEquals(null, results.first { it.id == memoWithoutImage.id }.thumbnailPath) }
+        )
     }
 
     @Test
@@ -199,54 +219,6 @@ class HomeViewModelTest {
 
         // Assert
         assertEquals(listOf("Shopping list"), state.search.results.map { it.title })
-    }
-
-    @Test
-    fun normalSearchResultMapsTags() = runTest(dispatcher) {
-        // Arrange
-        val tagId = TagId("tag-1")
-        val viewModel = homeViewModel(
-            memos = listOf(
-                memoFixture(id = "shopping", title = "Shopping list", tagIds = listOf(tagId))
-            ),
-            tags = listOf(tagFixture(id = tagId.value, name = "生活"))
-        )
-        advanceUntilIdle()
-
-        // Act
-        // Normal: the ViewModel keeps screen-specific tag mapping for raw search results.
-        viewModel.toggleSearch()
-        viewModel.updateSearchQuery("shopping")
-        advanceUntilIdle()
-        val state = viewModel.uiState.first { it.search.results.isNotEmpty() }
-
-        // Assert
-        assertEquals(listOf("生活"), state.search.results.single().tags.map { it.name })
-    }
-
-    @Test
-    fun normalSearchResultMapsThumbnailPath() = runTest(dispatcher) {
-        // Arrange
-        val viewModel = homeViewModel(
-            memos = listOf(
-                memoFixture(
-                    id = "shopping",
-                    title = "Shopping list",
-                    images = listOf(memoImageFixture(fileName = "search-image.jpg"))
-                )
-            )
-        )
-        advanceUntilIdle()
-
-        // Act
-        // Normal: the ViewModel keeps image path resolution for raw search results.
-        viewModel.toggleSearch()
-        viewModel.updateSearchQuery("shopping")
-        advanceUntilIdle()
-        val state = viewModel.uiState.first { it.search.results.isNotEmpty() }
-
-        // Assert
-        assertEquals("/images/search-image.jpg", state.search.results.single().thumbnailPath)
     }
 
     @Test
