@@ -2,12 +2,12 @@ package com.lambdarc.litememo.ui.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
-import app.cash.turbine.test
 import com.lambdarc.litememo.domain.FakeMemoImageStore
 import com.lambdarc.litememo.domain.FakeMemoRepository
 import com.lambdarc.litememo.domain.FakeTagRepository
 import com.lambdarc.litememo.domain.MutableTimeProvider
 import com.lambdarc.litememo.domain.QueueMemoIdProvider
+import com.lambdarc.litememo.domain.TrashMoveRecord
 import com.lambdarc.litememo.domain.memoFixture
 import com.lambdarc.litememo.domain.memoImageFixture
 import com.lambdarc.litememo.domain.model.Memo
@@ -33,6 +33,7 @@ import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.ResolveMemoImagePathUseCase
 import com.lambdarc.litememo.domain.usecase.SaveMemoUseCase
 import com.lambdarc.litememo.ui.model.MemoImageUiModel
+import com.lambdarc.litememo.ui.state.MemoEditUiResult
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -50,6 +52,8 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.time.Duration.Companion.milliseconds
@@ -156,17 +160,20 @@ class MemoEditViewModelTest {
         )
         runCurrent()
 
-        // Act & Assert
+        // Act
         // Flow/Interaction: back during loading leaves the existing memo untouched.
-        viewModel.navigationEvent.test {
-            viewModel.updateTitle("Ignored")
-            viewModel.attachImages(listOf("content://images/ignored"))
-            viewModel.finishEditing()
-            assertEquals(MemoEditNavigationUiEvent.NavigateBack, awaitItem())
-        }
+        viewModel.updateTitle("Ignored")
+        viewModel.attachImages(listOf("content://images/ignored"))
+        viewModel.finishEditing()
 
         // Assert
         assertAll(
+            {
+                assertEquals(
+                    listOf(MemoEditUiResult.NavigateBack::class),
+                    viewModel.resultTypes()
+                )
+            },
             { assertEquals(emptyList<Memo>(), repository.delegate.savedMemos) },
             {
                 assertEquals(
@@ -189,13 +196,20 @@ class MemoEditViewModelTest {
         advanceUntilIdle()
         assertEquals(true, viewModel.uiState.value.hasError)
 
-        // Act & Assert
+        // Act
         // Flow/Interaction: leaving a load error does not treat blank UI state as deletion.
-        viewModel.navigationEvent.test {
-            viewModel.finishEditing()
-            assertEquals(MemoEditNavigationUiEvent.NavigateBack, awaitItem())
-        }
-        assertEquals(emptyList<MemoId>(), repository.delegate.movedToTrash.map { it.memoId })
+        viewModel.finishEditing()
+
+        // Assert
+        assertAll(
+            {
+                assertEquals(
+                    listOf(MemoEditUiResult.NavigateBack::class),
+                    viewModel.resultTypes()
+                )
+            },
+            { assertEquals(emptyList<TrashMoveRecord>(), repository.delegate.movedToTrash) }
+        )
     }
 
     @Test
@@ -474,22 +488,22 @@ class MemoEditViewModelTest {
             viewModel.attachImages(listOf("content://images/1"))
             runCurrent()
 
-            // Act & Assert
+            // Act
             // StateTransition: an image-only memo is content and is saved before leaving.
-            viewModel.navigationEvent.test {
-                viewModel.finishEditing()
-                advanceUntilIdle()
-                val event = awaitItem()
-                assertAll(
-                    { assertEquals(MemoEditNavigationUiEvent.NavigateBack, event) },
-                    {
-                        assertEquals(
-                            listOf("image-1.jpg"),
-                            memoRepository.savedMemos.single().images.map { it.fileName.value }
-                        )
-                    }
-                )
-            }
+            viewModel.finishEditing()
+            advanceUntilIdle()
+
+            // Assert
+            val result = viewModel.uiResults.value.single()
+            assertAll(
+                { assertInstanceOf(MemoEditUiResult.NavigateBack::class.java, result) },
+                {
+                    assertEquals(
+                        listOf("image-1.jpg"),
+                        memoRepository.savedMemos.single().images.map { it.fileName.value }
+                    )
+                }
+            )
         }
 
     @Test
@@ -520,7 +534,7 @@ class MemoEditViewModelTest {
     }
 
     @Test
-    fun errorAttachImagesEmitsImageAttachFailedWhenStoreThrows() = runTest(dispatcher) {
+    fun errorAttachImagesRetainsImageAttachFailedWhenStoreThrows() = runTest(dispatcher) {
         // Arrange
         val imageStore = FakeMemoImageStore().apply {
             saveError = IllegalStateException("copy failed")
@@ -528,13 +542,16 @@ class MemoEditViewModelTest {
         val viewModel = memoEditViewModel(memoImageStore = imageStore)
         advanceUntilIdle()
 
-        // Act & Assert
-        // Error/Flow: image copy failures surface through the image attach event.
-        viewModel.operationErrorEvent.test {
-            viewModel.attachImages(listOf("content://images/1"))
-            advanceUntilIdle()
-            assertEquals(MemoEditOperationErrorUiEvent.ImageAttachFailed, awaitItem())
-        }
+        // Act
+        // Error/Flow: image copy failures surface in the pending result queue.
+        viewModel.attachImages(listOf("content://images/1"))
+        advanceUntilIdle()
+
+        // Assert
+        assertInstanceOf(
+            MemoEditUiResult.ImageAttachFailed::class.java,
+            viewModel.uiResults.value.single()
+        )
     }
 
     @Test
@@ -623,17 +640,16 @@ class MemoEditViewModelTest {
         val viewModel = memoEditViewModel(memoRepository = memoRepository)
         advanceUntilIdle()
 
-        // Act & Assert
+        // Act
         // Flow: empty new memo is discarded silently.
-        viewModel.navigationEvent.test {
-            viewModel.finishEditing()
-            advanceUntilIdle()
-            val event = awaitItem()
-            assertAll(
-                { assertEquals(MemoEditNavigationUiEvent.NavigateBack, event) },
-                { assertEquals(emptyList<MemoId>(), memoRepository.currentMemos().map { it.id }) }
-            )
-        }
+        viewModel.finishEditing()
+        advanceUntilIdle()
+        // Assert
+        val result = viewModel.uiResults.value.single()
+        assertAll(
+            { assertInstanceOf(MemoEditUiResult.NavigateBack::class.java, result) },
+            { assertEquals(emptyList<MemoId>(), memoRepository.currentMemos().map { it.id }) }
+        )
     }
 
     @Test
@@ -646,18 +662,17 @@ class MemoEditViewModelTest {
         advanceTimeBy(1_000L.milliseconds)
         advanceUntilIdle()
 
-        // Act & Assert
+        // Act
         // Flow: a new memo that becomes blank before leaving is removed from Room.
-        viewModel.navigationEvent.test {
-            viewModel.updateTitle("")
-            viewModel.finishEditing()
-            advanceUntilIdle()
-            val event = awaitItem()
-            assertAll(
-                { assertEquals(MemoEditNavigationUiEvent.NavigateBack, event) },
-                { assertEquals(emptyList<MemoId>(), memoRepository.currentMemos().map { it.id }) }
-            )
-        }
+        viewModel.updateTitle("")
+        viewModel.finishEditing()
+        advanceUntilIdle()
+        // Assert
+        val result = viewModel.uiResults.value.single()
+        assertAll(
+            { assertInstanceOf(MemoEditUiResult.NavigateBack::class.java, result) },
+            { assertEquals(emptyList<MemoId>(), memoRepository.currentMemos().map { it.id }) }
+        )
     }
 
     @Test
@@ -677,20 +692,19 @@ class MemoEditViewModelTest {
         )
         advanceUntilIdle()
 
-        // Act & Assert
+        // Act
         // Flow: restored sessions that started as new still discard instead of trashing.
-        viewModel.navigationEvent.test {
-            viewModel.finishEditing()
-            advanceUntilIdle()
-            val event = awaitItem()
-            assertAll(
-                { assertEquals(MemoEditNavigationUiEvent.NavigateBack, event) },
-                { assertEquals(emptyList<MemoId>(), memoRepository.currentMemos().map { it.id }) },
-                {
-                    assertEquals(emptyList<MemoId>(), memoRepository.movedToTrash.map { it.memoId })
-                }
-            )
-        }
+        viewModel.finishEditing()
+        advanceUntilIdle()
+        // Assert
+        val result = viewModel.uiResults.value.single()
+        assertAll(
+            { assertInstanceOf(MemoEditUiResult.NavigateBack::class.java, result) },
+            { assertEquals(emptyList<MemoId>(), memoRepository.currentMemos().map { it.id }) },
+            {
+                assertEquals(emptyList<MemoId>(), memoRepository.movedToTrash.map { it.memoId })
+            }
+        )
     }
 
     @Test
@@ -701,15 +715,21 @@ class MemoEditViewModelTest {
         val viewModel = memoEditViewModel(memo = memo, memoRepository = memoRepository)
         advanceUntilIdle()
 
-        // Act & Assert
+        // Act
         // Flow: blanking an existing memo is treated as deletion with undo support.
-        viewModel.navigationEvent.test {
-            viewModel.updateTitle("")
-            viewModel.updateBody("")
-            viewModel.finishEditing()
-            advanceUntilIdle()
-            assertEquals(MemoEditNavigationUiEvent.MemoDeleted(memo.id), awaitItem())
-        }
+        viewModel.updateTitle("")
+        viewModel.updateBody("")
+        viewModel.finishEditing()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(
+            memo.id,
+            assertInstanceOf(
+                MemoEditUiResult.MemoDeleted::class.java,
+                viewModel.uiResults.value.single()
+            ).memoId
+        )
     }
 
     @Test
@@ -719,18 +739,17 @@ class MemoEditViewModelTest {
         val viewModel = memoEditViewModel(memoRepository = memoRepository)
         advanceUntilIdle()
 
-        // Act & Assert
+        // Act
         // Flow: explicit back persists pending edits without waiting for debounce.
-        viewModel.navigationEvent.test {
-            viewModel.updateTitle("Pending")
-            viewModel.finishEditing()
-            advanceUntilIdle()
-            val event = awaitItem()
-            assertAll(
-                { assertEquals(MemoEditNavigationUiEvent.NavigateBack, event) },
-                { assertEquals("Pending", memoRepository.savedMemos.single().title.value) }
-            )
-        }
+        viewModel.updateTitle("Pending")
+        viewModel.finishEditing()
+        advanceUntilIdle()
+        // Assert
+        val result = viewModel.uiResults.value.single()
+        assertAll(
+            { assertInstanceOf(MemoEditUiResult.NavigateBack::class.java, result) },
+            { assertEquals("Pending", memoRepository.savedMemos.single().title.value) }
+        )
     }
 
     @Test
@@ -768,17 +787,22 @@ class MemoEditViewModelTest {
         )
         advanceUntilIdle()
 
-        // Act & Assert
+        // Act
         // Flow/Error: finish-time save failure keeps the draft and does not navigate away.
-        viewModel.navigationEvent.test {
-            viewModel.updateTitle("Unsaved")
-            viewModel.finishEditing()
-            advanceUntilIdle()
-            expectNoEvents()
-        }
+        viewModel.updateTitle("Unsaved")
+        viewModel.finishEditing()
+        advanceUntilIdle()
 
         // Assert
-        assertEquals("Unsaved", savedStateHandle.get<String>("editTitle"))
+        assertAll(
+            { assertEquals("Unsaved", savedStateHandle.get<String>("editTitle")) },
+            {
+                assertEquals(
+                    listOf(MemoEditUiResult.SaveFailed::class),
+                    viewModel.resultTypes()
+                )
+            }
+        )
     }
 
     @Test
@@ -819,19 +843,22 @@ class MemoEditViewModelTest {
     }
 
     @Test
-    fun flowAutosaveFailureEmitsSaveFailed() = runTest(dispatcher) {
+    fun flowAutosaveFailureRetainsSaveFailed() = runTest(dispatcher) {
         // Arrange
         val viewModel = memoEditViewModel(memoRepository = SaveFailingMemoRepository())
         advanceUntilIdle()
 
-        // Act & Assert
-        // Flow/Error: autosave failure is surfaced as the existing save error event.
-        viewModel.operationErrorEvent.test {
-            viewModel.updateTitle("Title")
-            advanceTimeBy(1_000L.milliseconds)
-            advanceUntilIdle()
-            assertEquals(MemoEditOperationErrorUiEvent.SaveFailed, awaitItem())
-        }
+        // Act
+        // Flow/Error: autosave failure is surfaced in the pending result queue.
+        viewModel.updateTitle("Title")
+        advanceTimeBy(1_000L.milliseconds)
+        advanceUntilIdle()
+
+        // Assert
+        assertInstanceOf(
+            MemoEditUiResult.SaveFailed::class.java,
+            viewModel.uiResults.value.single()
+        )
     }
 
     @Test
@@ -840,36 +867,44 @@ class MemoEditViewModelTest {
         val viewModel = memoEditViewModel()
         advanceUntilIdle()
 
-        // Act & Assert
-        // Flow: finishing guard prevents duplicate navigation events.
-        viewModel.navigationEvent.test {
-            viewModel.updateTitle("Title")
-            viewModel.finishEditing()
-            viewModel.finishEditing()
-            advanceUntilIdle()
-            assertEquals(MemoEditNavigationUiEvent.NavigateBack, awaitItem())
-            expectNoEvents()
-        }
+        // Act
+        // Flow: finishing guard prevents duplicate terminal results.
+        viewModel.updateTitle("Title")
+        viewModel.finishEditing()
+        viewModel.finishEditing()
+        advanceUntilIdle()
+
+        // Assert
+        assertInstanceOf(
+            MemoEditUiResult.NavigateBack::class.java,
+            viewModel.uiResults.value.single()
+        )
     }
 
     @Test
-    fun flowDeleteEmitsMemoDeletedEventWithDeletedMemo() = runTest(dispatcher) {
+    fun flowDeleteRetainsMemoDeletedResultWithDeletedMemo() = runTest(dispatcher) {
         // Arrange
         val memo = memoFixture(id = "memo-1")
         val viewModel = memoEditViewModel(memo = memo)
         advanceUntilIdle()
 
-        // Act & Assert
-        // Flow: toolbar delete keeps the existing delete event contract.
-        viewModel.navigationEvent.test {
-            viewModel.delete()
-            advanceUntilIdle()
-            assertEquals(MemoEditNavigationUiEvent.MemoDeleted(memo.id), awaitItem())
-        }
+        // Act
+        // Flow: toolbar delete retains the deleted memo ID in UI state.
+        viewModel.delete()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(
+            memo.id,
+            assertInstanceOf(
+                MemoEditUiResult.MemoDeleted::class.java,
+                viewModel.uiResults.value.single()
+            ).memoId
+        )
     }
 
     @Test
-    fun flowDeleteFailureEmitsOperationError() = runTest(dispatcher) {
+    fun flowDeleteFailureRetainsOperationError() = runTest(dispatcher) {
         // Arrange
         val memo = memoFixture(id = "memo-1")
         val viewModel = memoEditViewModel(
@@ -878,13 +913,225 @@ class MemoEditViewModelTest {
         )
         advanceUntilIdle()
 
-        // Act & Assert
-        // Flow/Error: delete failure emits the existing delete error event.
-        viewModel.operationErrorEvent.test {
-            viewModel.delete()
-            advanceUntilIdle()
-            assertEquals(MemoEditOperationErrorUiEvent.DeleteFailed, awaitItem())
-        }
+        // Act
+        // Flow/Error: delete failure retains a delete failure result.
+        viewModel.delete()
+        advanceUntilIdle()
+
+        // Assert
+        assertInstanceOf(
+            MemoEditUiResult.DeleteFailed::class.java,
+            viewModel.uiResults.value.single()
+        )
+    }
+
+    @Test
+    fun boundaryRepeatedAutosaveFailureIsQueuedOnceUntilConsumed() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = memoEditViewModel(memoRepository = SaveFailingMemoRepository())
+        advanceUntilIdle()
+        viewModel.updateTitle("First")
+        advanceUntilIdle()
+
+        // Act
+        // Boundary: an unconsumed failure of the same kind is not queued again.
+        viewModel.updateTitle("Second")
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(listOf(MemoEditUiResult.SaveFailed::class), viewModel.resultTypes())
+    }
+
+    @Test
+    fun stateTransitionSameFailureIsQueuedAgainAfterConsumption() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = memoEditViewModel(memoRepository = SaveFailingMemoRepository())
+        advanceUntilIdle()
+        viewModel.updateTitle("First")
+        advanceUntilIdle()
+        val first = viewModel.uiResults.value.single()
+        viewModel.onUiResultConsumed(first.id)
+
+        // Act
+        // StateTransition: a failure after consumption is queued as a new result.
+        viewModel.updateTitle("Second")
+        advanceUntilIdle()
+
+        // Assert
+        val second = viewModel.uiResults.value.single()
+        assertAll(
+            { assertInstanceOf(MemoEditUiResult.SaveFailed::class.java, second) },
+            { assertNotEquals(first.id, second.id) }
+        )
+    }
+
+    @Test
+    fun stateTransitionConsumingHeadKeepsNextResultInOrder() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = memoEditViewModelWithImageAndSaveFailures()
+        val head = viewModel.uiResults.value.first()
+
+        // Act
+        // StateTransition: consuming the head keeps the next result in order.
+        viewModel.onUiResultConsumed(head.id)
+
+        // Assert
+        assertAll(
+            { assertInstanceOf(MemoEditUiResult.ImageAttachFailed::class.java, head) },
+            { assertEquals(listOf(MemoEditUiResult.SaveFailed::class), viewModel.resultTypes()) }
+        )
+    }
+
+    @Test
+    fun boundaryUnknownAndOutOfOrderConsumptionKeepQueue() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = memoEditViewModelWithImageAndSaveFailures()
+        val results = viewModel.uiResults.value
+
+        // Act
+        // Boundary: an unknown ID and a later result ID cannot skip the current head.
+        viewModel.onUiResultConsumed(-1L)
+        viewModel.onUiResultConsumed(results.last().id)
+
+        // Assert
+        assertEquals(results, viewModel.uiResults.value)
+    }
+
+    @Test
+    fun boundaryDuplicateConsumptionKeepsNextResult() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = memoEditViewModelWithImageAndSaveFailures()
+        val head = viewModel.uiResults.value.first()
+        viewModel.onUiResultConsumed(head.id)
+
+        // Act
+        // Boundary: consuming the previous head again leaves the next result intact.
+        viewModel.onUiResultConsumed(head.id)
+
+        // Assert
+        assertEquals(listOf(MemoEditUiResult.SaveFailed::class), viewModel.resultTypes())
+    }
+
+    @Test
+    fun coroutineDeleteAfterFinishIsIgnored() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1")
+        val memoRepository = FakeMemoRepository(listOf(memo))
+        val viewModel = memoEditViewModel(memo = memo, memoRepository = memoRepository)
+        advanceUntilIdle()
+
+        // Act
+        // Coroutine: the first finish request owns the terminal operation.
+        viewModel.finishEditing()
+        viewModel.delete()
+        viewModel.finishEditing()
+        advanceUntilIdle()
+
+        // Assert
+        assertAll(
+            { assertEquals(listOf(MemoEditUiResult.NavigateBack::class), viewModel.resultTypes()) },
+            { assertEquals(1, memoRepository.savedMemos.size) },
+            { assertEquals(0, memoRepository.movedToTrash.size) }
+        )
+    }
+
+    @Test
+    fun coroutineFinishAfterDeleteIsIgnored() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1")
+        val memoRepository = FakeMemoRepository(listOf(memo))
+        val viewModel = memoEditViewModel(memo = memo, memoRepository = memoRepository)
+        advanceUntilIdle()
+
+        // Act
+        // Coroutine: the first delete request owns the terminal operation.
+        viewModel.delete()
+        viewModel.finishEditing()
+        viewModel.delete()
+        advanceUntilIdle()
+
+        // Assert
+        assertAll(
+            { assertEquals(listOf(MemoEditUiResult.MemoDeleted::class), viewModel.resultTypes()) },
+            { assertEquals(0, memoRepository.savedMemos.size) },
+            { assertEquals(1, memoRepository.movedToTrash.size) }
+        )
+    }
+
+    @Test
+    fun errorSaveFailureIsKeptBeforeNavigationAfterSuccessfulRetry() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = RetryableMemoRepository().apply { failSave = true }
+        val savedStateHandle = SavedStateHandle()
+        val viewModel = memoEditViewModel(
+            savedStateHandle = savedStateHandle,
+            memoRepository = memoRepository
+        )
+        advanceUntilIdle()
+        viewModel.updateTitle("Draft")
+        viewModel.finishEditing()
+        advanceUntilIdle()
+        memoRepository.failSave = false
+
+        // Act
+        // Error/StateTransition: a successful retry queues navigation after the unconsumed failure.
+        viewModel.finishEditing()
+        advanceUntilIdle()
+
+        // Assert
+        assertAll(
+            {
+                assertEquals(
+                    listOf(
+                        MemoEditUiResult.SaveFailed::class,
+                        MemoEditUiResult.NavigateBack::class
+                    ),
+                    viewModel.resultTypes()
+                )
+            },
+            { assertEquals(false, savedStateHandle.contains("editTitle")) }
+        )
+    }
+
+    @Test
+    fun errorDeleteFailureIsKeptBeforeDeletionAfterSuccessfulRetry() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1")
+        val memoRepository = RetryableMemoRepository(listOf(memo)).apply { failDelete = true }
+        val viewModel = memoEditViewModel(memo = memo, memoRepository = memoRepository)
+        advanceUntilIdle()
+        viewModel.delete()
+        advanceUntilIdle()
+        memoRepository.failDelete = false
+
+        // Act
+        // Error/StateTransition: a successful delete retry is queued after the unconsumed failure.
+        viewModel.delete()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(
+            listOf(MemoEditUiResult.DeleteFailed::class, MemoEditUiResult.MemoDeleted::class),
+            viewModel.resultTypes()
+        )
+    }
+
+    private fun MemoEditViewModel.resultTypes() = uiResults.value.map { it::class }
+
+    private fun TestScope.memoEditViewModelWithImageAndSaveFailures(): MemoEditViewModel {
+        val viewModel = memoEditViewModel(
+            memoRepository = SaveFailingMemoRepository(),
+            memoImageStore = FakeMemoImageStore().apply {
+                saveError = IllegalStateException("Failed to copy image.")
+            }
+        )
+        advanceUntilIdle()
+        viewModel.attachImages(listOf("content://images/1"))
+        advanceUntilIdle()
+        viewModel.updateTitle("Draft")
+        viewModel.finishEditing()
+        advanceUntilIdle()
+        return viewModel
     }
 
     private fun memoEditViewModel(
@@ -1014,6 +1261,24 @@ class MemoEditViewModelTest {
             saveStarted.complete(Unit)
             releaseSave.await()
             delegate.saveMemo(memo)
+        }
+    }
+
+    private class RetryableMemoRepository(
+        initialMemos: List<Memo> = emptyList(),
+        private val delegate: FakeMemoRepository = FakeMemoRepository(initialMemos)
+    ) : MemoRepository by delegate {
+        var failSave = false
+        var failDelete = false
+
+        override suspend fun saveMemo(memo: Memo) {
+            if (failSave) error("Failed to save memo.")
+            delegate.saveMemo(memo)
+        }
+
+        override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) {
+            if (failDelete) error("Failed to move memo to trash.")
+            delegate.moveMemoToTrash(id, deletedAt)
         }
     }
 }
