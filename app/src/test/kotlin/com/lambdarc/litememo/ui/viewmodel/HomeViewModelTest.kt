@@ -287,6 +287,67 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun errorSearchFailureMarksSearchErrorWithoutHomeError() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = homeViewModel(
+            memoRepository = FakeMemoRepository(
+                searchResults = { flow { throw IllegalStateException("Search failed.") } }
+            )
+        )
+        advanceUntilIdle()
+
+        // Act
+        // Error: search failure is exposed independently of the Home list error.
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("shopping")
+        advanceUntilIdle()
+        val state = viewModel.uiState.first { it.search.hasError }
+
+        // Assert
+        assertAll(
+            {
+                assertEquals(
+                    SearchUiState(isActive = true, query = "shopping", hasError = true),
+                    state.search
+                )
+            },
+            { assertEquals(false, state.hasError) }
+        )
+    }
+
+    @Test
+    fun stateTransitionRetryRecollectsFailedSearchWithSameQuery() = runTest(dispatcher) {
+        // Arrange
+        var attempts = 0
+        val viewModel = homeViewModel(
+            memoRepository = FakeMemoRepository(
+                searchResults = {
+                    flow {
+                        attempts++
+                        if (attempts == 1) error("Search failed.")
+                        emit(listOf(memoFixture(id = "recovered")))
+                    }
+                }
+            )
+        )
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("shopping")
+        viewModel.uiState.first { it.search.hasError }
+
+        // Act
+        // StateTransition: retry searches the same query again and replaces the search error.
+        viewModel.retry()
+        val state = viewModel.uiState.first { it.search.results.isNotEmpty() }
+
+        // Assert
+        assertAll(
+            { assertEquals(2, attempts) },
+            { assertEquals(false, state.search.hasError) },
+            { assertEquals(listOf(MemoId("recovered")), state.search.results.map { it.id }) }
+        )
+    }
+
+    @Test
     fun stateTransitionSetSelectedMemosFavoriteMarksMemoAsFavorite() = runTest(dispatcher) {
         // Arrange
         val viewModel = homeViewModel(

@@ -22,7 +22,6 @@ import com.lambdarc.litememo.ui.state.HomeFilterUiState
 import com.lambdarc.litememo.ui.state.HomeUiState
 import com.lambdarc.litememo.ui.state.MemoSelectionUiState
 import com.lambdarc.litememo.ui.state.SearchUiState
-import com.lambdarc.litememo.ui.state.searchMemoResults
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -101,7 +100,7 @@ class HomeViewModel @Inject constructor(
                 ?.map { memo -> memo.tagIds.toSet() }
                 ?.reduce { commonTagIds, tagIds -> commonTagIds intersect tagIds }
                 ?: emptySet()
-            val search = controls.search.withResult(searchResult) { searchHits ->
+            val search = controls.search.applySearchResult(searchResult) { searchHits ->
                 searchHits.map { memo ->
                     MemoUiModel(
                         id = memo.id,
@@ -167,7 +166,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun updateSearchQuery(query: String) {
-        searchControls.update { search -> search.withQuery(query) }
+        searchControls.update { search -> search.updateQuery(query) }
     }
 
     fun closeSearch() {
