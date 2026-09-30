@@ -13,13 +13,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.lambdarc.litememo.domain.model.value.MemoId
 import com.lambdarc.litememo.ui.screen.MemoEditScreen
+import com.lambdarc.litememo.ui.state.MemoEditUiResult
 import com.lambdarc.litememo.ui.util.launchShareMemo
-import com.lambdarc.litememo.ui.viewmodel.MemoEditNavigationUiEvent
-import com.lambdarc.litememo.ui.viewmodel.MemoEditOperationErrorUiEvent
 import com.lambdarc.litememo.ui.viewmodel.MemoEditViewModel
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 
 @Composable
 fun MemoEditRoute(
@@ -34,35 +39,25 @@ fun MemoEditRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val currentOnNavigateBack by rememberUpdatedState(onNavigateBack)
-    val currentOnMemoDelete by rememberUpdatedState(onMemoDelete)
-    val currentOnSaveError by rememberUpdatedState(onSaveError)
-    val currentOnDeleteError by rememberUpdatedState(onDeleteError)
-    val currentOnImageAttachError by rememberUpdatedState(onImageAttachError)
     val pickImagesLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia()
     ) { uris ->
         viewModel.attachImages(uris.map { it.toString() })
     }
 
-    LaunchedEffect(viewModel) {
-        viewModel.navigationEvent.collect { event ->
-            when (event) {
-                MemoEditNavigationUiEvent.NavigateBack -> currentOnNavigateBack()
-                is MemoEditNavigationUiEvent.MemoDeleted -> currentOnMemoDelete(event.memoId)
+    MemoEditUiResultEffect(
+        results = viewModel.uiResults,
+        onResult = { result ->
+            when (result) {
+                is MemoEditUiResult.NavigateBack -> onNavigateBack()
+                is MemoEditUiResult.MemoDeleted -> onMemoDelete(result.memoId)
+                is MemoEditUiResult.SaveFailed -> onSaveError()
+                is MemoEditUiResult.DeleteFailed -> onDeleteError()
+                is MemoEditUiResult.ImageAttachFailed -> onImageAttachError()
             }
-        }
-    }
-
-    LaunchedEffect(viewModel) {
-        viewModel.operationErrorEvent.collect { event ->
-            when (event) {
-                MemoEditOperationErrorUiEvent.SaveFailed -> currentOnSaveError()
-                MemoEditOperationErrorUiEvent.DeleteFailed -> currentOnDeleteError()
-                MemoEditOperationErrorUiEvent.ImageAttachFailed -> currentOnImageAttachError()
-            }
-        }
-    }
+        },
+        onConsumeResult = viewModel::onUiResultConsumed
+    )
 
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         viewModel.flushEdits()
@@ -97,4 +92,28 @@ fun MemoEditRoute(
         },
         modifier = modifier
     )
+}
+
+@Composable
+internal fun MemoEditUiResultEffect(
+    results: StateFlow<List<MemoEditUiResult>>,
+    onResult: (MemoEditUiResult) -> Unit,
+    onConsumeResult: (Long) -> Unit
+) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentOnResult by rememberUpdatedState(onResult)
+    val currentOnConsumeResult by rememberUpdatedState(onConsumeResult)
+
+    LaunchedEffect(results, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            results
+                .map { it.firstOrNull() }
+                .distinctUntilChangedBy { it?.id }
+                .filterNotNull()
+                .collect { result ->
+                    currentOnResult(result)
+                    currentOnConsumeResult(result.id)
+                }
+        }
+    }
 }

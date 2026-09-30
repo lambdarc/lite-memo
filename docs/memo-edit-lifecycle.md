@@ -99,14 +99,29 @@ UI state の `isPersisted` は、その画像参照が Room へ保存済みか�
 未保存画像の cleanup は ViewModel、保存済み画像の差分 cleanup は Repository が担当します。
 この境界を Repository 側だけへ寄せると、Room に一度も保存されなかった画像を回収できません。
 
-## イベントと失敗
+## 操作結果と失敗
 
-Navigation と操作エラーは `Channel.BUFFERED` で通知し、collector の一時的な停止で結果を失いにくくします。
+画面遷移と操作エラーは、編集内容の `uiState` とは別の `uiResults` に発生順で保持します。
+結果の増減で編集画面全体を再コンポーズしないよう、`MemoEditUiState` には含めません。
+各 `MemoEditUiResult` は ViewModel 内で単調増加する識別子を持ちます。
+同じ種類の結果が未消費のまま残っている間は、新しい結果を追加しません。
+autosave の失敗が続いても、同じ Snackbar が件数分つながって表示されないようにするためです。
 
 - 保存失敗は `SaveFailed`、削除失敗は `DeleteFailed`、画像追加の一部または全部の失敗は `ImageAttachFailed` として通知する
 - 保存または削除に失敗した場合は `SavedStateHandle` を消去せず、再試行できる状態を保つ
-- Navigation event は保存、破棄、ごみ箱移動が成功してから送る
+- `NavigateBack` / `MemoDeleted` は終了時の保存、破棄、ごみ箱移動、または読み込み中・読み込み失敗時の編集状態の消去が完了してから追加する
 - 画像ファイルの best-effort cleanup 失敗は、Room の状態や画面遷移を巻き戻さない
+
+`MemoEditRoute` は lifecycle が `RESUMED` の間、先頭結果を既存の Navigation / エラー表示 callback へ渡します。
+`RESUMED` を待つのはこの Route だけで、Navigation 側の戻る処理は `RESUMED` でない呼び出しを待たずに無視します。
+共有シートが重なっているなど `RESUMED` でない間に起きたエラーは、画面へ戻ってから表示します。
+callback が戻った直後に、中断可能な処理を挟まず `onUiResultConsumed(resultId)` を呼びます。
+ViewModel は一致する先頭結果だけを削除し、重複、古い識別子、順序の異なる消費通知は無視します。
+エラー表示の消費は callback への引き渡し完了を意味し、Snackbar の表示終了や削除取り消しを待ちません。
+
+未消費結果は同じ ViewModel が生きている間保持されるため、Route の再生成や lifecycle による購読停止で消えません。
+結果は `SavedStateHandle` へ保存せず、プロセス終了後の再配送は保証しません。
+画面遷移の実行と、画像 picker・共有など UI 内で完結する処理は引き続き Route の callback が担当します。
 
 ## 変更時に守ること
 
@@ -114,4 +129,4 @@ Navigation と操作エラーは `Channel.BUFFERED` で通知し、collector の
 - Room に保存されたかどうかだけで、新規セッションと既存セッションを再分類しない
 - 終了処理の開始後に `updateEditState` から autosave を再予約しない
 - 一時画像と保存済み画像の cleanup 担当を混同しない
-- 保存成功前に Navigation event を送らない
+- 保存成功前に画面遷移の結果を追加しない
