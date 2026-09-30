@@ -55,7 +55,6 @@ import org.junit.jupiter.api.Test
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
-@Suppress("LargeClass")
 class MemoEditViewModelTest {
 
     private lateinit var dispatcher: TestDispatcher

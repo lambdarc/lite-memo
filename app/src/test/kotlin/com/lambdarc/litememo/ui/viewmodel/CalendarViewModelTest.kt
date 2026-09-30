@@ -15,6 +15,7 @@ import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.model.value.TimestampRange
 import com.lambdarc.litememo.domain.repository.FakeDisplaySettingsRepository
 import com.lambdarc.litememo.domain.repository.MemoRepository
+import com.lambdarc.litememo.domain.repository.TagRepository
 import com.lambdarc.litememo.domain.tagFixture
 import com.lambdarc.litememo.domain.usecase.GetCurrentCalendarDateUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveCalendarMonthSummaryUseCase
@@ -28,10 +29,13 @@ import com.lambdarc.litememo.ui.state.SearchUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -250,6 +254,36 @@ class CalendarViewModelTest {
 
         // Assert
         assertEquals(selectedDate, state.selectedDate)
+    }
+
+    @Test
+    fun boundarySearchHidesResultsWhenTagsFailToLoad() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = FakeMemoRepository(
+            listOf(memoFixture(id = "shopping", title = "Shopping list"))
+        )
+        val viewModel = calendarViewModel(
+            memoRepository = memoRepository,
+            tagRepository = FailingTagRepository()
+        )
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        // Act
+        // Boundary: search hits are not shown without tags to map them.
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("shopping")
+        advanceUntilIdle()
+        val state = viewModel.uiState.value
+
+        // Assert
+        assertAll(
+            { assertEquals(listOf(SearchQuery("shopping")), memoRepository.searchedQueries) },
+            { assertEquals(SearchUiState(isActive = true, query = "shopping"), state.search) },
+            { assertTrue(state.hasError) }
+        )
     }
 
     @Test
@@ -523,9 +557,9 @@ class CalendarViewModelTest {
     private fun calendarViewModel(
         memoRepository: MemoRepository = FakeMemoRepository(),
         tags: List<Tag> = emptyList(),
+        tagRepository: TagRepository = FakeTagRepository(tags),
         zone: ZoneId = zoneId
     ): CalendarViewModel {
-        val tagRepository = FakeTagRepository(tags)
         val displaySettingsRepository = FakeDisplaySettingsRepository()
         return CalendarViewModel(
             observeCalendarMonthSummaryUseCase = ObserveCalendarMonthSummaryUseCase(
@@ -549,6 +583,13 @@ class CalendarViewModelTest {
             ),
             zoneId = zone
         )
+    }
+
+    private class FailingTagRepository : TagRepository by FakeTagRepository() {
+
+        override fun observeTags(): Flow<List<Tag>> = flow {
+            throw IllegalStateException("Tag load failed.")
+        }
     }
 
     private class RetryableSearchMemoRepository(private val delegate: FakeMemoRepository) :

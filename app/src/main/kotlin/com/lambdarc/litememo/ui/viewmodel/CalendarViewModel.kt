@@ -18,7 +18,6 @@ import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.CalendarDayUiState
 import com.lambdarc.litememo.ui.state.CalendarUiState
 import com.lambdarc.litememo.ui.state.SearchUiState
-import com.lambdarc.litememo.ui.state.searchMemoResults
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -102,7 +101,7 @@ class CalendarViewModel @Inject constructor(
             val hasError = observed.monthSummary == null ||
                 observed.memos == null ||
                 observed.tags == null
-            val search = controls.search.withResult(searchResult) { searchHits ->
+            val search = controls.search.applySearchResult(searchResult) { searchHits ->
                 if (observed.tags != null) {
                     searchHits.map { memo ->
                         MemoUiModel(
@@ -188,7 +187,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun updateSearchQuery(query: String) {
-        searchControls.update { search -> search.withQuery(query) }
+        searchControls.update { search -> search.updateQuery(query) }
     }
 
     fun closeSearch() {
