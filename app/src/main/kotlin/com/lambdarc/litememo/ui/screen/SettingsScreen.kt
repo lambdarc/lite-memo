@@ -31,6 +31,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -55,10 +59,6 @@ fun SettingsScreen(
     onThemeModeSelect: (ThemeMode) -> Unit,
     onMemoSortOrderSelect: (MemoSortOrder) -> Unit,
     onAppLockEnabledChange: (Boolean) -> Unit,
-    onExpandThemeDropdown: () -> Unit,
-    onCollapseThemeDropdown: () -> Unit,
-    onExpandSortOrder: () -> Unit,
-    onCollapseSortOrder: () -> Unit,
     onTagManageClick: () -> Unit,
     onTrashClick: () -> Unit,
     onExportClick: () -> Unit,
@@ -91,9 +91,6 @@ fun SettingsScreen(
             item {
                 ThemeRow(
                     currentMode = uiState.themeMode,
-                    expanded = uiState.themeDropdownExpanded,
-                    onExpand = onExpandThemeDropdown,
-                    onCollapse = onCollapseThemeDropdown,
                     onSelect = onThemeModeSelect
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -102,9 +99,6 @@ fun SettingsScreen(
             item {
                 SortOrderRow(
                     currentOrder = uiState.memoSortOrder,
-                    expanded = uiState.sortOrderExpanded,
-                    onExpand = onExpandSortOrder,
-                    onCollapse = onCollapseSortOrder,
                     onSelect = onMemoSortOrderSelect
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -168,7 +162,7 @@ fun SettingsScreen(
                     label = stringResource(R.string.settings_export),
                     onClick = onExportClick,
                     enabled = !uiState.isExporting && !uiState.isImporting,
-                    testTag = "settingsExportAction",
+                    testTag = SettingsTestTags.EXPORT_ACTION,
                     trailingIcon = {
                         if (uiState.isExporting) {
                             CircularProgressIndicator(
@@ -193,13 +187,13 @@ fun SettingsScreen(
                     label = stringResource(R.string.settings_import),
                     onClick = onImportClick,
                     enabled = !uiState.isExporting && !uiState.isImporting,
-                    testTag = "settingsImportAction",
+                    testTag = SettingsTestTags.IMPORT_ACTION,
                     trailingIcon = {
                         if (uiState.isImporting) {
                             CircularProgressIndicator(
                                 modifier = Modifier
                                     .size(18.dp)
-                                    .testTag("settingsImportLoadingIndicator"),
+                                    .testTag(SettingsTestTags.IMPORT_LOADING_INDICATOR),
                                 strokeWidth = 2.dp
                             )
                         } else {
@@ -282,17 +276,14 @@ private fun SectionHeader(text: String) {
 }
 
 @Composable
-private fun ThemeRow(
-    currentMode: ThemeMode,
-    expanded: Boolean,
-    onExpand: () -> Unit,
-    onCollapse: () -> Unit,
-    onSelect: (ThemeMode) -> Unit
-) {
+private fun ThemeRow(currentMode: ThemeMode, onSelect: (ThemeMode) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = if (expanded) onCollapse else onExpand)
+            .testTag(SettingsTestTags.THEME_ROW)
+            .clickable(role = Role.Button) { expanded = true }
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -317,14 +308,16 @@ private fun ThemeRow(
             }
             DropdownMenu(
                 expanded = expanded,
-                onDismissRequest = onCollapse
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.testTag(SettingsTestTags.THEME_MENU)
             ) {
                 ThemeMode.entries.forEach { mode ->
                     DropdownMenuItem(
                         text = { Text(text = mode.toDisplayString()) },
+                        modifier = Modifier.testTag(SettingsTestTags.themeOption(mode)),
                         onClick = {
                             onSelect(mode)
-                            onCollapse()
+                            expanded = false
                         }
                     )
                 }
@@ -334,17 +327,14 @@ private fun ThemeRow(
 }
 
 @Composable
-private fun SortOrderRow(
-    currentOrder: MemoSortOrder,
-    expanded: Boolean,
-    onExpand: () -> Unit,
-    onCollapse: () -> Unit,
-    onSelect: (MemoSortOrder) -> Unit
-) {
+private fun SortOrderRow(currentOrder: MemoSortOrder, onSelect: (MemoSortOrder) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = if (expanded) onCollapse else onExpand)
+            .testTag(SettingsTestTags.SORT_ORDER_ROW)
+            .clickable(role = Role.Button) { expanded = true }
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -369,14 +359,16 @@ private fun SortOrderRow(
             }
             DropdownMenu(
                 expanded = expanded,
-                onDismissRequest = onCollapse
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.testTag(SettingsTestTags.SORT_ORDER_MENU)
             ) {
                 MemoSortOrder.entries.forEach { order ->
                     DropdownMenuItem(
                         text = { Text(text = order.toDisplayString()) },
+                        modifier = Modifier.testTag(SettingsTestTags.sortOrderOption(order)),
                         onClick = {
                             onSelect(order)
-                            onCollapse()
+                            expanded = false
                         }
                     )
                 }
@@ -498,7 +490,7 @@ private fun ImportErrorDialog(state: SettingsImportErrorDialogUiState, onDismiss
                 modifier = Modifier
                     .heightIn(max = IMPORT_ERROR_DIALOG_MAX_TEXT_HEIGHT)
                     .verticalScroll(rememberScrollState())
-                    .testTag("settingsImportErrorDialogText")
+                    .testTag(SettingsTestTags.IMPORT_ERROR_DIALOG_TEXT)
             ) {
                 Text(text = state.toMessage())
                 if (state is SettingsImportErrorDialogUiState.TagNameConflict) {
@@ -512,7 +504,7 @@ private fun ImportErrorDialog(state: SettingsImportErrorDialogUiState, onDismiss
         confirmButton = {
             TextButton(
                 onClick = onDismiss,
-                modifier = Modifier.testTag("settingsImportErrorDialogClose")
+                modifier = Modifier.testTag(SettingsTestTags.IMPORT_ERROR_DIALOG_CLOSE)
             ) {
                 Text(text = stringResource(R.string.settings_import_error_close))
             }
@@ -559,10 +551,6 @@ private fun SettingsScreenPreview() {
             onThemeModeSelect = {},
             onMemoSortOrderSelect = {},
             onAppLockEnabledChange = {},
-            onExpandThemeDropdown = {},
-            onCollapseThemeDropdown = {},
-            onExpandSortOrder = {},
-            onCollapseSortOrder = {},
             onTagManageClick = {},
             onTrashClick = {},
             onExportClick = {},
@@ -584,16 +572,10 @@ private fun SettingsRowsPreview() {
             SectionHeader(text = stringResource(R.string.settings_section_display))
             ThemeRow(
                 currentMode = ThemeMode.SYSTEM,
-                expanded = false,
-                onExpand = {},
-                onCollapse = {},
                 onSelect = {}
             )
             SortOrderRow(
                 currentOrder = MemoSortOrder.UPDATED_NEWEST,
-                expanded = false,
-                onExpand = {},
-                onCollapse = {},
                 onSelect = {}
             )
             VersionRow(version = "1.0.0")

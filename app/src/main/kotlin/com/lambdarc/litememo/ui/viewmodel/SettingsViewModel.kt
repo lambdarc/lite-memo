@@ -56,8 +56,6 @@ class SettingsViewModel @Inject constructor(
     @param:AppVersion private val appVersion: String
 ) : ViewModel() {
 
-    private val themeDropdownExpanded = MutableStateFlow(false)
-    private val sortOrderExpanded = MutableStateFlow(false)
     private val isExporting = MutableStateFlow(false)
     private val exportPickerRequestId = MutableStateFlow<Long?>(null)
     private val isImporting = MutableStateFlow(false)
@@ -76,15 +74,12 @@ class SettingsViewModel @Inject constructor(
         observeMemoSortOrderUseCase(),
         observeAppLockEnabledUseCase(),
         combine(
-            themeDropdownExpanded,
-            sortOrderExpanded,
             isExporting,
             isImporting,
-            showImportConfirmDialog
-        ) { themeExpanded, expanded, exporting, importing, importDialog ->
-            SettingsUiFlags(themeExpanded, expanded, exporting, importing, importDialog)
-        }.combine(exportPickerRequestId) { flags, requestId ->
-            flags.copy(exportPickerRequestId = requestId)
+            showImportConfirmDialog,
+            exportPickerRequestId
+        ) { exporting, importing, importDialog, requestId ->
+            SettingsUiFlags(exporting, importing, importDialog, requestId)
         },
         importErrorDialog
     ) { themeMode, sortOrder, appLockEnabled, flags, importError ->
@@ -93,8 +88,6 @@ class SettingsViewModel @Inject constructor(
             memoSortOrder = sortOrder,
             appLockEnabled = appLockEnabled,
             appVersion = appVersion,
-            themeDropdownExpanded = flags.themeDropdownExpanded,
-            sortOrderExpanded = flags.sortOrderExpanded,
             isExporting = flags.isExporting,
             exportPickerRequestId = flags.exportPickerRequestId,
             isImporting = flags.isImporting,
@@ -147,24 +140,6 @@ class SettingsViewModel @Inject constructor(
                 _snackbarEvent.trySend(SettingsSnackbarUiEvent.AppLockAuthenticationCanceled)
             }
         }
-    }
-
-    fun expandThemeDropdown() {
-        sortOrderExpanded.value = false
-        themeDropdownExpanded.value = true
-    }
-
-    fun collapseThemeDropdown() {
-        themeDropdownExpanded.value = false
-    }
-
-    fun expandSortOrder() {
-        themeDropdownExpanded.value = false
-        sortOrderExpanded.value = true
-    }
-
-    fun collapseSortOrder() {
-        sortOrderExpanded.value = false
     }
 
     fun prepareExport() {
@@ -324,10 +299,8 @@ private fun MemoImportFailureReason.toImportErrorDialogUiState(): SettingsImport
     }
 
 private data class SettingsUiFlags(
-    val themeDropdownExpanded: Boolean,
-    val sortOrderExpanded: Boolean,
     val isExporting: Boolean,
     val isImporting: Boolean,
     val showImportConfirmDialog: Boolean,
-    val exportPickerRequestId: Long? = null
+    val exportPickerRequestId: Long?
 )

@@ -603,42 +603,6 @@ class SettingsViewModelTest {
         )
     }
 
-    @Test
-    fun stateTransitionExpandThemeCollapsesSortOrder() = runTest(dispatcher) {
-        // Arrange
-        val viewModel = viewModel(FakeMemoExportArchiveRepository())
-        viewModel.expandSortOrder()
-
-        // Act
-        // StateTransition: only one display dropdown remains expanded.
-        viewModel.expandThemeDropdown()
-        val state = viewModel.uiState.first { it.themeDropdownExpanded }
-
-        // Assert
-        assertAll(
-            { assertEquals(true, state.themeDropdownExpanded) },
-            { assertEquals(false, state.sortOrderExpanded) }
-        )
-    }
-
-    @Test
-    fun stateTransitionExpandSortOrderCollapsesTheme() = runTest(dispatcher) {
-        // Arrange
-        val viewModel = viewModel(FakeMemoExportArchiveRepository())
-        viewModel.expandThemeDropdown()
-
-        // Act
-        // StateTransition: only one display dropdown remains expanded.
-        viewModel.expandSortOrder()
-        val state = viewModel.uiState.first { it.sortOrderExpanded }
-
-        // Assert
-        assertAll(
-            { assertEquals(false, state.themeDropdownExpanded) },
-            { assertEquals(true, state.sortOrderExpanded) }
-        )
-    }
-
     private fun importFailingViewModel(reason: MemoImportFailureReason): SettingsViewModel =
         importFailingViewModel(MemoImportException(reason, "failed"))
 
