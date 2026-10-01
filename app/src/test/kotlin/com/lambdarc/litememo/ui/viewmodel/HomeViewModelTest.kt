@@ -18,6 +18,7 @@ import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.model.value.TimestampRange
 import com.lambdarc.litememo.domain.repository.FakeDisplaySettingsRepository
 import com.lambdarc.litememo.domain.repository.MemoRepository
+import com.lambdarc.litememo.domain.repository.TagRepository
 import com.lambdarc.litememo.domain.tagFixture
 import com.lambdarc.litememo.domain.usecase.ApplyMemoBulkActionUseCase
 import com.lambdarc.litememo.domain.usecase.FilterMemosUseCase
@@ -28,17 +29,23 @@ import com.lambdarc.litememo.domain.usecase.ResolveMemoImagePathUseCase
 import com.lambdarc.litememo.domain.usecase.SearchMemosUseCase
 import com.lambdarc.litememo.ui.model.MemoUiModel
 import com.lambdarc.litememo.ui.model.TagUiModel
+import com.lambdarc.litememo.ui.state.HomeBulkTagDialogUiState
 import com.lambdarc.litememo.ui.state.HomeFilterUiState
 import com.lambdarc.litememo.ui.state.SearchUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
@@ -882,12 +889,117 @@ class HomeViewModelTest {
         assertTrue(state.hasError)
     }
 
+    @Test
+    fun errorMemoObservationFailureHidesBulkTagDialogAndKeepsSelection() = runTest(dispatcher) {
+        // Arrange
+        val memoId = MemoId("memo-1")
+        val memoRepository = FailableMemoRepository(listOf(memoFixture(id = memoId.value)))
+        val viewModel = homeViewModel(memoRepository = memoRepository)
+        openBulkTagDialog(viewModel, memoId)
+
+        // Act
+        // Error: a whole-screen failure does not carry the bulk tag dialog into the error state.
+        memoRepository.fail()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertTrue(state.hasError) },
+            { assertEquals(HomeBulkTagDialogUiState(), state.bulkTagDialog) },
+            { assertEquals(setOf(memoId), state.selection.selectedMemoIds) }
+        )
+    }
+
+    @Test
+    fun errorTagObservationFailureHidesBulkTagDialog() = runTest(dispatcher) {
+        // Arrange
+        val memoId = MemoId("memo-1")
+        val tagRepository = FailableTagRepository(listOf(tagFixture(id = "tag-1")))
+        val viewModel = homeViewModel(
+            memos = listOf(memoFixture(id = memoId.value)),
+            tagRepository = tagRepository
+        )
+        openBulkTagDialog(viewModel, memoId)
+
+        // Act
+        // Error: a tag observation failure also hides the bulk tag dialog.
+        tagRepository.fail()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertTrue(state.hasError) },
+            { assertEquals(HomeBulkTagDialogUiState(), state.bulkTagDialog) }
+        )
+    }
+
+    @Test
+    fun stateTransitionRetryAfterErrorStartsWithBulkTagDialogClosed() = runTest(dispatcher) {
+        // Arrange
+        val memoId = MemoId("memo-1")
+        val memoRepository = FailableMemoRepository(listOf(memoFixture(id = memoId.value)))
+        val viewModel = homeViewModel(memoRepository = memoRepository)
+        openBulkTagDialog(viewModel, memoId)
+        memoRepository.fail()
+        runCurrent()
+        memoRepository.recover()
+
+        // Act
+        // StateTransition: retry recovers the content without reopening the dialog.
+        viewModel.retry()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertEquals(false, state.hasError) },
+            { assertEquals(HomeBulkTagDialogUiState(), state.bulkTagDialog) },
+            { assertEquals(setOf(memoId), state.selection.selectedMemoIds) }
+        )
+    }
+
+    @Test
+    fun errorSearchFailureKeepsBulkTagDialogOpen() = runTest(dispatcher) {
+        // Arrange
+        val memoId = MemoId("memo-1")
+        val memoRepository = FakeMemoRepository(
+            listOf(memoFixture(id = memoId.value)),
+            searchResults = { flow { throw IllegalStateException("Search failed.") } }
+        )
+        val viewModel = homeViewModel(memoRepository = memoRepository)
+        openBulkTagDialog(viewModel, memoId)
+
+        // Act
+        // Error: a search-only failure keeps the content and its dialog.
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("query")
+        advanceUntilIdle()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertEquals(false, state.hasError) },
+            { assertTrue(state.search.hasError) },
+            { assertTrue(state.bulkTagDialog.isVisible) }
+        )
+    }
+
+    private fun TestScope.openBulkTagDialog(viewModel: HomeViewModel, memoId: MemoId) {
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+        viewModel.startSelection(memoId)
+        viewModel.requestToggleTagForSelectedMemos()
+        runCurrent()
+    }
+
     private fun homeViewModel(
         memos: List<Memo> = emptyList(),
         tags: List<Tag> = emptyList(),
-        memoRepository: MemoRepository = FakeMemoRepository(memos)
+        memoRepository: MemoRepository = FakeMemoRepository(memos),
+        tagRepository: TagRepository = FakeTagRepository(tags)
     ): HomeViewModel {
-        val tagRepository = FakeTagRepository(tags)
         val displaySettingsRepository = FakeDisplaySettingsRepository()
         return HomeViewModel(
             observeMemosUseCase = ObserveMemosUseCase(memoRepository, displaySettingsRepository),
@@ -902,6 +1014,44 @@ class HomeViewModelTest {
             formatMemoTextUseCase = FormatMemoTextUseCase(),
             resolveMemoImagePathUseCase = ResolveMemoImagePathUseCase(FakeMemoImageStore())
         )
+    }
+
+    private class FailableMemoRepository(
+        memos: List<Memo>,
+        private val delegate: FakeMemoRepository = FakeMemoRepository(memos)
+    ) : MemoRepository by delegate {
+        private val failure = MutableStateFlow<Throwable?>(null)
+
+        fun fail() {
+            failure.value = IllegalStateException("Failed to observe memos.")
+        }
+
+        fun recover() {
+            failure.value = null
+        }
+
+        override fun observeActiveMemos(): Flow<List<Memo>> =
+            combine(delegate.observeActiveMemos(), failure) { memos, error ->
+                if (error != null) throw error
+                memos
+            }
+    }
+
+    private class FailableTagRepository(
+        tags: List<Tag>,
+        private val delegate: FakeTagRepository = FakeTagRepository(tags)
+    ) : TagRepository by delegate {
+        private val failure = MutableStateFlow<Throwable?>(null)
+
+        fun fail() {
+            failure.value = IllegalStateException("Failed to observe tags.")
+        }
+
+        override fun observeTags(): Flow<List<Tag>> =
+            combine(delegate.observeTags(), failure) { tags, error ->
+                if (error != null) throw error
+                tags
+            }
     }
 
     private class FailingMemoRepository(private val throwable: Throwable) :

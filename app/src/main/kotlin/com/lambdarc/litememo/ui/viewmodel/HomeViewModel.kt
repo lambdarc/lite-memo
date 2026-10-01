@@ -146,8 +146,7 @@ class HomeViewModel @Inject constructor(
                     hasError = true,
                     selectedFilter = selectedFilter.value,
                     search = searchControls.value,
-                    selection = selection.value,
-                    bulkTagDialog = bulkTagDialog.value
+                    selection = selection.value
                 )
             )
         }
@@ -227,6 +226,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun retry() {
+        bulkTagDialog.value = HomeBulkTagDialogUiState()
         retryTrigger.update { !it }
     }
 
