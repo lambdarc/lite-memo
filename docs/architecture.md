@@ -69,6 +69,7 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 - 画面固有の状態とドメインモデルを混ぜすぎない
 - 新規実装または event delivery を実質的に変更する場合、保存結果など失ってはいけない処理結果は UI state に保持し、UI から確認済み callback を受けて消費済みにする
 - UI 操作だけで完結する画面遷移は UI callback として Navigation へ渡し、ViewModel の Channel を必須経路にしない
+- ダイアログなど画面本体に重なる UI は、loading / error / content を切り替える分岐の content 側でだけ描画する。画面全体のエラーではオーバーレイを表示せず、再試行は閉じた状態から始める。選択・フィルタ・検索など画面本体の状態はエラーをまたいで保持する
 
 ## UseCase
 

@@ -108,29 +108,30 @@ fun HomeScreen(
 
             uiState.hasError -> ErrorContent(onRetry = onRetry)
 
-            else -> HomeContent(
-                uiState = uiState,
-                onFilterSelect = onFilterSelect,
-                onSearchToggle = onSearchToggle,
-                onSearchQueryChange = onSearchQueryChange,
-                onMemoLongClick = onMemoLongClick,
-                onMemoSelectionToggle = onMemoSelectionToggle,
-                onClearSelection = onClearSelection,
-                onMoveSelectedMemosToTrash = onMoveSelectedMemosToTrash,
-                onSetSelectedMemosFavorite = onSetSelectedMemosFavorite,
-                onRequestToggleTagForSelectedMemos = onRequestToggleTagForSelectedMemos,
-                onShareSelectedMemo = onShareSelectedMemo,
-                onMemoClick = onMemoClick,
-                modifier = Modifier.padding(innerPadding)
-            )
+            else -> {
+                HomeContent(
+                    uiState = uiState,
+                    onFilterSelect = onFilterSelect,
+                    onSearchToggle = onSearchToggle,
+                    onSearchQueryChange = onSearchQueryChange,
+                    onMemoLongClick = onMemoLongClick,
+                    onMemoSelectionToggle = onMemoSelectionToggle,
+                    onClearSelection = onClearSelection,
+                    onMoveSelectedMemosToTrash = onMoveSelectedMemosToTrash,
+                    onSetSelectedMemosFavorite = onSetSelectedMemosFavorite,
+                    onRequestToggleTagForSelectedMemos = onRequestToggleTagForSelectedMemos,
+                    onShareSelectedMemo = onShareSelectedMemo,
+                    onMemoClick = onMemoClick,
+                    modifier = Modifier.padding(innerPadding)
+                )
+                HomeBulkTagDialog(
+                    uiState = uiState,
+                    onToggleSelectedMemosTag = onToggleSelectedMemosTag,
+                    onDismiss = onDismissBulkTagDialog
+                )
+            }
         }
     }
-
-    HomeBulkTagDialog(
-        uiState = uiState,
-        onToggleSelectedMemosTag = onToggleSelectedMemosTag,
-        onDismiss = onDismissBulkTagDialog
-    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
