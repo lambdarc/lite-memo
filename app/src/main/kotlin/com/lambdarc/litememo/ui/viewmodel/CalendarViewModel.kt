@@ -17,6 +17,7 @@ import com.lambdarc.litememo.ui.model.MemoUiModel
 import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.CalendarDayUiState
 import com.lambdarc.litememo.ui.state.CalendarUiState
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.SearchUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -121,15 +122,20 @@ class CalendarViewModel @Inject constructor(
                 }
             }
             CalendarUiState(
-                isLoading = false,
-                hasError = hasError,
+                status = ScreenUiStatus.loaded(hasError),
                 selectedMonth = month.value,
                 selectedDate = date.value,
                 isCalendarExpanded = controls.expanded,
                 isDatePickerVisible = controls.datePickerVisible,
                 search = search,
-                days = observed.monthSummary?.toDayUiStates(date) ?: emptyList(),
-                memos = if (observed.memos != null && observed.tags != null) {
+                days = if (hasError) {
+                    emptyList()
+                } else {
+                    observed.monthSummary.toDayUiStates(date)
+                },
+                memos = if (hasError) {
+                    emptyList()
+                } else {
                     observed.memos.map { memo ->
                         MemoUiModel(
                             id = memo.id,
@@ -143,8 +149,6 @@ class CalendarViewModel @Inject constructor(
                             }
                         )
                     }
-                } else {
-                    emptyList()
                 }
             )
         }

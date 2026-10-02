@@ -34,6 +34,7 @@ import com.lambdarc.litememo.domain.usecase.ResolveMemoImagePathUseCase
 import com.lambdarc.litememo.domain.usecase.SaveMemoUseCase
 import com.lambdarc.litememo.ui.model.MemoImageUiModel
 import com.lambdarc.litememo.ui.state.MemoEditUiResult
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -75,6 +76,81 @@ class MemoEditViewModelTest {
     }
 
     @Test
+    fun normalNewMemoStartsWithContentStatus() = runTest(dispatcher) {
+        // Act
+        // Normal: a new memo is immediately editable without a database load.
+        val viewModel = memoEditViewModel()
+
+        // Assert
+        assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status)
+        advanceUntilIdle()
+        assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun stateTransitionExistingMemoLoadsFromLoadingToContent() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1")
+        val repository = BlockingGetMemoRepository(memo)
+        val viewModel = memoEditViewModel(memo = memo, memoRepository = repository)
+        runCurrent()
+        assertEquals(ScreenUiStatus.LOADING, viewModel.uiState.value.status)
+
+        // Act
+        // StateTransition: completing the initial load exposes the editor.
+        repository.releaseGet.complete(Unit)
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun errorMissingExistingMemoShowsErrorStatus() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = memoEditViewModel(
+            savedStateHandle = SavedStateHandle(mapOf("memoId" to "missing"))
+        )
+
+        // Act
+        // Error: a missing memo is a screen load failure.
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun stateTransitionFailedMemoLoadRetriesThroughLoadingToContent() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", title = "Recovered")
+        var failGet = true
+        val delegate = FakeMemoRepository(listOf(memo))
+        val repository = object : MemoRepository by delegate {
+            override suspend fun getActiveMemo(id: MemoId): Memo? {
+                if (failGet) error("Failed to load memo.")
+                return delegate.getActiveMemo(id)
+            }
+        }
+        val viewModel = memoEditViewModel(memo = memo, memoRepository = repository)
+        advanceUntilIdle()
+        assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status)
+
+        // Act
+        // StateTransition: retry enters loading and restores the recovered memo content.
+        failGet = false
+        viewModel.reload()
+        assertEquals(ScreenUiStatus.LOADING, viewModel.uiState.value.status)
+        advanceUntilIdle()
+
+        // Assert
+        assertAll(
+            { assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status) },
+            { assertEquals("Recovered", viewModel.uiState.value.title) }
+        )
+    }
+
+    @Test
     fun normalUiStateLoadsPersistedImageMetadata() = runTest(dispatcher) {
         // Arrange
         val memo =
@@ -113,6 +189,7 @@ class MemoEditViewModelTest {
 
         // Assert
         assertAll(
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
             { assertEquals("Saved title", state.title) },
             { assertEquals("Saved body", state.body) },
             { assertEquals(setOf(TagId("tag-1")), state.selectedTagIds) },
@@ -139,7 +216,7 @@ class MemoEditViewModelTest {
 
         // Assert
         assertAll(
-            { assertEquals(false, state.isLoading) },
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
             { assertEquals("Existing title", state.title) },
             { assertEquals("Existing body", state.body) },
             { assertEquals(setOf(TagId("tag-1")), state.selectedTagIds) },
@@ -194,7 +271,7 @@ class MemoEditViewModelTest {
             memoRepository = repository
         )
         advanceUntilIdle()
-        assertEquals(true, viewModel.uiState.value.hasError)
+        assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status)
 
         // Act
         // Flow/Interaction: leaving a load error does not treat blank UI state as deletion.

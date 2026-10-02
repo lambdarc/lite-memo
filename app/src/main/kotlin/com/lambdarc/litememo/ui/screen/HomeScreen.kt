@@ -66,6 +66,7 @@ import com.lambdarc.litememo.ui.model.MemoUiModel
 import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.HomeFilterUiState
 import com.lambdarc.litememo.ui.state.HomeUiState
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.theme.LiteMemoTheme
 
 @Composable
@@ -103,12 +104,12 @@ fun HomeScreen(
             }
         }
     ) { innerPadding ->
-        when {
-            uiState.isLoading -> LoadingContent()
+        when (uiState.status) {
+            ScreenUiStatus.LOADING -> LoadingContent()
 
-            uiState.hasError -> ErrorContent(onRetry = onRetry)
+            ScreenUiStatus.ERROR -> ErrorContent(onRetry = onRetry)
 
-            else -> {
+            ScreenUiStatus.CONTENT -> {
                 HomeContent(
                     uiState = uiState,
                     onFilterSelect = onFilterSelect,
@@ -501,7 +502,7 @@ private fun EmptyHomeContent() {
 @Composable
 private fun HomeScreenPreview() {
     val uiState = HomeUiState(
-        isLoading = false,
+        status = ScreenUiStatus.CONTENT,
         tags = listOf(
             TagUiModel(TagId("tag-life"), "生活", 0xFF6750A4),
             TagUiModel(TagId("tag-work"), "仕事", 0xFFB3261E)

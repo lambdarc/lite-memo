@@ -69,6 +69,7 @@ import com.lambdarc.litememo.ui.model.MemoUiModel
 import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.CalendarDayUiState
 import com.lambdarc.litememo.ui.state.CalendarUiState
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.theme.LiteMemoTheme
 import java.time.LocalDate
 import java.time.YearMonth
@@ -104,12 +105,12 @@ fun CalendarScreen(
         modifier = modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        when {
-            uiState.isLoading -> LoadingContent()
+        when (uiState.status) {
+            ScreenUiStatus.LOADING -> LoadingContent()
 
-            uiState.hasError -> ErrorContent(onRetry = onRetry)
+            ScreenUiStatus.ERROR -> ErrorContent(onRetry = onRetry)
 
-            else -> Box(modifier = Modifier.fillMaxSize()) {
+            ScreenUiStatus.CONTENT -> Box(modifier = Modifier.fillMaxSize()) {
                 CalendarContent(
                     uiState = uiState,
                     onPreviousMonth = onPreviousMonth,
@@ -432,7 +433,7 @@ private fun CalendarScreenPreview() {
     val month = YearMonth.of(2026, 5)
     val selectedDate = LocalDate.of(2026, 5, 15)
     val uiState = CalendarUiState(
-        isLoading = false,
+        status = ScreenUiStatus.CONTENT,
         selectedMonth = month,
         selectedDate = selectedDate,
         days = (1..month.lengthOfMonth()).map { dayOfMonth ->

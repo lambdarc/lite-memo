@@ -5,8 +5,7 @@ import com.lambdarc.litememo.ui.model.MemoImageUiModel
 import com.lambdarc.litememo.ui.model.TagUiModel
 
 data class MemoEditUiState(
-    val isLoading: Boolean = false,
-    val hasError: Boolean = false,
+    val status: ScreenUiStatus = ScreenUiStatus.CONTENT,
     val hasTagError: Boolean = false,
     val memoId: String? = null,
     val title: String = "",

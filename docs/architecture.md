@@ -61,6 +61,8 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 ## MVVM
 
 - ViewModel は画面全体の状態とビジネス処理に由来する state を `StateFlow` で公開する
+- 読み込みと失敗がある画面の本体は `ScreenUiStatus` の `LOADING` / `ERROR` / `CONTENT` だけで排他的に表す。空の一覧や新規の空メモは `CONTENT` に含める。検索エラー、タグ読込エラー、選択、変更有無、削除中など独立した状態軸は統合しない。`CONTENT` 以外では一覧など `CONTENT` 専用の値を空にする
+- データ取得の失敗は例外のまま流さず state の値へ変換し、エラー中も選択・フィルタ・検索などの操作状態を更新し続ける。表示用の変換が失敗しても、操作状態の観測は終了させない
 - Android の Route は `StateFlow` を `collectAsStateWithLifecycle()` で収集し、state と callback を Screen に渡す
 - プロセス再生成後に復元する最小限の状態は、ViewModel 側では `SavedStateHandle`、UI 側では `rememberSaveable` を使う
 - メニューの開閉、focus など再生成後の復元が不要な UI element state は、必要な Composable の近くで `remember` により保持する
