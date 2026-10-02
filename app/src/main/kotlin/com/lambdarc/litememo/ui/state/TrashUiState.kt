@@ -2,21 +2,16 @@ package com.lambdarc.litememo.ui.state
 
 import com.lambdarc.litememo.ui.model.TrashedMemoUiModel
 
-data class TrashUiState(
-    val status: ScreenUiStatus = ScreenUiStatus.LOADING,
-    val memos: List<TrashedMemoUiModel> = emptyList(),
-    val selection: MemoSelectionUiState = MemoSelectionUiState(),
-    val showEmptyTrashDialog: Boolean = false
-) {
+sealed class TrashUiState {
 
-    init {
-        val isContent = status == ScreenUiStatus.CONTENT
-        require(isContent || memos.isEmpty()) {
-            "TrashUiState memos must be empty unless status is CONTENT."
-        }
-        require(isContent || !showEmptyTrashDialog) {
-            "TrashUiState showEmptyTrashDialog must be false unless status is CONTENT."
-        }
-    }
+    data object Loading : TrashUiState()
+
+    data object Error : TrashUiState()
+
+    data class Content(
+        val memos: List<TrashedMemoUiModel> = emptyList(),
+        val selection: MemoSelectionUiState = MemoSelectionUiState(),
+        val showEmptyTrashDialog: Boolean = false
+    ) : TrashUiState()
 
 }

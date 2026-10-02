@@ -13,7 +13,7 @@ import com.lambdarc.litememo.domain.tagFixture
 import com.lambdarc.litememo.domain.usecase.DeleteTagUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.SaveTagUseCase
-import com.lambdarc.litememo.ui.state.ScreenUiStatus
+import com.lambdarc.litememo.ui.state.TagManageUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -35,6 +36,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -58,7 +60,7 @@ class TagManageViewModelTest {
     fun stateTransitionUiStateStartsLoadingAndShowsEmptyContent() = runTest(dispatcher) {
         // Arrange
         val viewModel = tagManageViewModel()
-        assertEquals(ScreenUiStatus.LOADING, viewModel.uiState.value.status)
+        assertEquals(TagManageUiState.Loading, viewModel.uiState.value)
         backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
 
         // Act
@@ -66,10 +68,7 @@ class TagManageViewModelTest {
         runCurrent()
 
         // Assert
-        assertAll(
-            { assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status) },
-            { assertEquals(emptyList<Tag>(), viewModel.uiState.value.tags) }
-        )
+        assertEquals(emptyList<Tag>(), viewModel.uiState.value.asContent().tags)
     }
 
     @Test
@@ -87,7 +86,7 @@ class TagManageViewModelTest {
         val viewModel = tagManageViewModel(repository)
         backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
         runCurrent()
-        assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status)
+        assertEquals(TagManageUiState.Error, viewModel.uiState.value)
 
         // Act
         // StateTransition: retry observes recovered tags after a screen load failure.
@@ -95,9 +94,9 @@ class TagManageViewModelTest {
         runCurrent()
 
         // Assert
+        val state = viewModel.uiState.value.asContent()
         assertAll(
-            { assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status) },
-            { assertEquals(listOf("Recovered"), viewModel.uiState.value.tags.map { it.name }) },
+            { assertEquals(listOf("Recovered"), state.tags.map { it.name }) },
             { assertEquals(2, attempts) }
         )
     }
@@ -110,7 +109,7 @@ class TagManageViewModelTest {
         backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
         runCurrent()
         viewModel.startCreate()
-        viewModel.requestDelete(viewModel.uiState.value.tags.single())
+        viewModel.requestDelete(viewModel.firstContent().tags.single())
         runCurrent()
 
         // Act
@@ -119,12 +118,7 @@ class TagManageViewModelTest {
         runCurrent()
 
         // Assert
-        val state = viewModel.uiState.value
-        assertAll(
-            { assertEquals(ScreenUiStatus.ERROR, state.status) },
-            { assertEquals(null, state.editingTag) },
-            { assertEquals(null, state.showDeleteDialog) }
-        )
+        assertEquals(TagManageUiState.Error, viewModel.uiState.value)
     }
 
     @Test
@@ -135,7 +129,7 @@ class TagManageViewModelTest {
         backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
         runCurrent()
         viewModel.startCreate()
-        viewModel.requestDelete(viewModel.uiState.value.tags.single())
+        viewModel.requestDelete(viewModel.firstContent().tags.single())
         runCurrent()
 
         // Act
@@ -144,9 +138,8 @@ class TagManageViewModelTest {
         runCurrent()
 
         // Assert
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.value.asContent()
         assertAll(
-            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
             { assertEquals(null, state.editingTag) },
             { assertEquals(null, state.showDeleteDialog) }
         )
@@ -160,7 +153,7 @@ class TagManageViewModelTest {
             tagRepository = tagRepository,
             tagIdProvider = QueueTagIdProvider(listOf(TagId("tag-1"), TagId("tag-2")))
         )
-        viewModel.uiState.first { it.status == ScreenUiStatus.CONTENT }
+        viewModel.firstContent()
         viewModel.startCreate()
         viewModel.updateEditName("New tag")
 
@@ -180,14 +173,14 @@ class TagManageViewModelTest {
         val viewModel = tagManageViewModel(
             tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1", name = "Work")))
         )
-        viewModel.uiState.first { it.status == ScreenUiStatus.CONTENT }
+        viewModel.firstContent()
 
         // Act
         viewModel.startCreate()
         viewModel.updateEditName("Work")
         viewModel.saveEdit()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.editingTag?.duplicateNameError == true }
+        val state = viewModel.firstContent { it.editingTag?.duplicateNameError == true }
 
         // Assert
         assertEquals(true, state.editingTag?.duplicateNameError)
@@ -198,13 +191,13 @@ class TagManageViewModelTest {
         // Arrange
         val tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1", name = "Work")))
         val viewModel = tagManageViewModel(tagRepository = tagRepository)
-        viewModel.uiState.first { it.tags.isNotEmpty() }
+        viewModel.firstContent { it.tags.isNotEmpty() }
 
         // Act
         viewModel.startEdit(TagId("tag-1"))
         viewModel.saveEdit()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.editingTag == null }
+        val state = viewModel.firstContent { it.editingTag == null }
 
         // Assert
         assertAll(
@@ -223,7 +216,7 @@ class TagManageViewModelTest {
         viewModel.updateEditName("   ")
         viewModel.saveEdit()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.editingTag?.nameError == true }
+        val state = viewModel.firstContent { it.editingTag?.nameError == true }
 
         // Assert
         assertAll(
@@ -243,7 +236,7 @@ class TagManageViewModelTest {
         viewModel.updateEditName("Work")
         viewModel.saveEdit()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.editingTag == null && it.tags.isNotEmpty() }
+        val state = viewModel.firstContent { it.editingTag == null && it.tags.isNotEmpty() }
 
         // Assert
         assertAll(
@@ -262,14 +255,14 @@ class TagManageViewModelTest {
                 )
             )
         )
-        viewModel.uiState.first { it.status == ScreenUiStatus.CONTENT }
+        viewModel.firstContent()
 
         // Act
         viewModel.startCreate()
         viewModel.updateEditName("Work")
         viewModel.saveEdit()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.editingTag?.duplicateNameError == true }
+        val state = viewModel.firstContent { it.editingTag?.duplicateNameError == true }
 
         // Assert
         assertAll(
@@ -285,7 +278,7 @@ class TagManageViewModelTest {
         val viewModel = tagManageViewModel(
             tagRepository = DeleteFailingTagRepository(listOf(tag))
         )
-        val tagUiModel = viewModel.uiState.first { it.tags.isNotEmpty() }.tags.single()
+        val tagUiModel = viewModel.firstContent { it.tags.isNotEmpty() }.tags.single()
 
         // Act & Assert
         viewModel.deleteErrorEvent.test {
@@ -293,9 +286,17 @@ class TagManageViewModelTest {
             viewModel.confirmDelete()
             advanceUntilIdle()
             assertEquals(Unit, awaitItem())
-            assertEquals(null, viewModel.uiState.value.showDeleteDialog)
+            assertEquals(null, viewModel.uiState.value.asContent().showDeleteDialog)
         }
     }
+
+    private suspend fun TagManageViewModel.firstContent(
+        predicate: (TagManageUiState.Content) -> Boolean = { true }
+    ): TagManageUiState.Content =
+        uiState.filterIsInstance<TagManageUiState.Content>().first(predicate)
+
+    private fun TagManageUiState.asContent(): TagManageUiState.Content =
+        assertInstanceOf(TagManageUiState.Content::class.java, this)
 
     private fun tagManageViewModel(
         tagRepository: TagRepository = FakeTagRepository(),

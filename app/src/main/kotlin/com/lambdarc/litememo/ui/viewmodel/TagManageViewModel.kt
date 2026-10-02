@@ -12,7 +12,6 @@ import com.lambdarc.litememo.domain.usecase.DeleteTagUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.SaveTagUseCase
 import com.lambdarc.litememo.ui.model.TagUiModel
-import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.TagEditUiState
 import com.lambdarc.litememo.ui.state.TagManageUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -55,10 +54,9 @@ class TagManageViewModel @Inject constructor(
             deleteDialog
         ) { tags, editing, deleting ->
             if (tags == null) {
-                return@combine TagManageUiState(status = ScreenUiStatus.ERROR)
+                return@combine TagManageUiState.Error
             }
-            TagManageUiState(
-                status = ScreenUiStatus.CONTENT,
+            TagManageUiState.Content(
                 tags = tags.map {
                     TagUiModel(id = it.id, name = it.name.value, colorArgb = it.color.argb)
                 },
@@ -69,7 +67,7 @@ class TagManageViewModel @Inject constructor(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-        initialValue = TagManageUiState()
+        initialValue = TagManageUiState.Loading
     )
 
     fun startCreate() {
@@ -77,7 +75,7 @@ class TagManageViewModel @Inject constructor(
     }
 
     fun startEdit(tagId: TagId) {
-        val tag = uiState.value.tags.find { it.id == tagId } ?: return
+        val tag = contentTags().find { it.id == tagId } ?: return
         editingTag.value = TagEditUiState(
             id = tag.id,
             name = tag.name,
@@ -168,7 +166,10 @@ class TagManageViewModel @Inject constructor(
     }
 
     private fun isDuplicateName(name: String, excludeId: TagId?): Boolean =
-        uiState.value.tags.any { it.name == name && it.id != excludeId }
+        contentTags().any { it.name == name && it.id != excludeId }
+
+    private fun contentTags(): List<TagUiModel> =
+        (uiState.value as? TagManageUiState.Content)?.tags.orEmpty()
 
     private companion object {
         const val STOP_TIMEOUT_MILLIS = 5_000L

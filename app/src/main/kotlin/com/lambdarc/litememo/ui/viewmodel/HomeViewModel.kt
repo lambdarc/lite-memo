@@ -22,7 +22,6 @@ import com.lambdarc.litememo.ui.state.HomeBulkTagDialogUiState
 import com.lambdarc.litememo.ui.state.HomeFilterUiState
 import com.lambdarc.litememo.ui.state.HomeUiState
 import com.lambdarc.litememo.ui.state.MemoSelectionUiState
-import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.SearchUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -99,7 +98,7 @@ class HomeViewModel @Inject constructor(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-        initialValue = HomeUiState()
+        initialValue = HomeUiState.Loading
     )
 
     fun selectFilter(filter: HomeFilterUiState) {
@@ -154,7 +153,10 @@ class HomeViewModel @Inject constructor(
 
     fun toggleSelectedMemosTag(tagId: TagId) {
         if (!bulkTagDialog.value.isVisible) return
-        val action = if (tagId in uiState.value.allSelectedTagIds) {
+        val allSelectedTagIds = (uiState.value as? HomeUiState.Content)
+            ?.allSelectedTagIds
+            .orEmpty()
+        val action = if (tagId in allSelectedTagIds) {
             MemoBulkAction.removeTag(tagId)
         } else {
             MemoBulkAction.addTag(tagId)
@@ -166,7 +168,7 @@ class HomeViewModel @Inject constructor(
     fun formatMemoText(title: String, body: String): String? = formatMemoTextUseCase(title, body)
 
     fun getSelectedMemoForShare(): MemoUiModel? {
-        val state = uiState.value
+        val state = uiState.value as? HomeUiState.Content ?: return null
         val selectedId = state.selection.selectedMemoIds.singleOrNull() ?: return null
         return (state.memos + state.search.results).find { it.id == selectedId }
     }
@@ -230,8 +232,7 @@ class HomeViewModel @Inject constructor(
             searchHits.map { memo -> memo.toUiModel(tagsById) }
         }
 
-        HomeUiState(
-            status = ScreenUiStatus.CONTENT,
+        HomeUiState.Content(
             selectedFilter = effectiveFilter,
             search = search,
             selection = controls.selection,
@@ -286,8 +287,7 @@ private data class HomeUiControls(
     val tagDialog: HomeBulkTagDialogUiState
 )
 
-private fun HomeUiControls.errorState() = HomeUiState(
-    status = ScreenUiStatus.ERROR,
+private fun HomeUiControls.errorState() = HomeUiState.Error(
     selectedFilter = filter,
     search = search,
     selection = selection

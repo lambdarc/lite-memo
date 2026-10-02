@@ -14,7 +14,6 @@ import com.lambdarc.litememo.R
 import com.lambdarc.litememo.domain.model.value.MemoId
 import com.lambdarc.litememo.ui.component.MemoCardTestTags
 import com.lambdarc.litememo.ui.state.CalendarUiState
-import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.SearchUiState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -48,8 +47,7 @@ class CalendarScreenComposeTest {
         composeRule.setContent {
             TestScreenContent {
                 CalendarScreen(
-                    uiState = CalendarUiState(
-                        status = ScreenUiStatus.CONTENT,
+                    uiState = CalendarUiState.Content(
                         selectedMonth = YearMonth.from(selectedDate),
                         selectedDate = selectedDate
                     ),
@@ -85,7 +83,7 @@ class CalendarScreenComposeTest {
         composeRule.setContent {
             TestScreenContent {
                 CalendarScreen(
-                    uiState = CalendarUiState(status = ScreenUiStatus.ERROR),
+                    uiState = CalendarUiState.Error(),
                     onPreviousMonth = {},
                     onNextMonth = {},
                     onDateSelect = {},
@@ -126,8 +124,7 @@ class CalendarScreenComposeTest {
         composeRule.setContent {
             TestScreenContent {
                 CalendarScreen(
-                    uiState = CalendarUiState(
-                        status = ScreenUiStatus.CONTENT,
+                    uiState = CalendarUiState.Content(
                         selectedMonth = YearMonth.from(selectedDate),
                         selectedDate = selectedDate,
                         memos = listOf(memo)
@@ -169,8 +166,7 @@ class CalendarScreenComposeTest {
         composeRule.setContent {
             TestScreenContent {
                 CalendarScreen(
-                    uiState = CalendarUiState(
-                        status = ScreenUiStatus.CONTENT,
+                    uiState = CalendarUiState.Content(
                         search = SearchUiState(
                             isActive = true,
                             query = "failed query",
@@ -205,8 +201,8 @@ class CalendarScreenComposeTest {
     @Test
     fun normalInitialStatusShowsLoading() {
         // Act
-        // Normal: the initial calendar state displays loading progress.
-        setCalendarScreen(CalendarUiState())
+        // Normal: the loading calendar state displays progress.
+        setCalendarScreen(CalendarUiState.Loading)
 
         // Assert
         composeRule.onNode(

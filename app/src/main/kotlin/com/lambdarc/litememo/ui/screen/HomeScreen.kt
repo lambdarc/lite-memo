@@ -66,7 +66,6 @@ import com.lambdarc.litememo.ui.model.MemoUiModel
 import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.HomeFilterUiState
 import com.lambdarc.litememo.ui.state.HomeUiState
-import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.theme.LiteMemoTheme
 
 @Composable
@@ -94,7 +93,7 @@ fun HomeScreen(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
-            if (!uiState.selection.isActive) {
+            if (!uiState.isSelectionActive()) {
                 FloatingActionButton(onClick = onCreateMemoClick) {
                     Icon(
                         imageVector = Icons.Default.Add,
@@ -104,12 +103,12 @@ fun HomeScreen(
             }
         }
     ) { innerPadding ->
-        when (uiState.status) {
-            ScreenUiStatus.LOADING -> LoadingContent()
+        when (uiState) {
+            HomeUiState.Loading -> LoadingContent()
 
-            ScreenUiStatus.ERROR -> ErrorContent(onRetry = onRetry)
+            is HomeUiState.Error -> ErrorContent(onRetry = onRetry)
 
-            ScreenUiStatus.CONTENT -> {
+            is HomeUiState.Content -> {
                 HomeContent(
                     uiState = uiState,
                     onFilterSelect = onFilterSelect,
@@ -135,10 +134,16 @@ fun HomeScreen(
     }
 }
 
+private fun HomeUiState.isSelectionActive(): Boolean = when (this) {
+    HomeUiState.Loading -> false
+    is HomeUiState.Error -> selection.isActive
+    is HomeUiState.Content -> selection.isActive
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HomeContent(
-    uiState: HomeUiState,
+    uiState: HomeUiState.Content,
     onFilterSelect: (HomeFilterUiState) -> Unit,
     onSearchToggle: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
@@ -341,7 +346,7 @@ private fun HomeSelectionToolbar(
 
 @Composable
 private fun HomeBulkTagDialog(
-    uiState: HomeUiState,
+    uiState: HomeUiState.Content,
     onToggleSelectedMemosTag: (TagId) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -501,8 +506,7 @@ private fun EmptyHomeContent() {
 )
 @Composable
 private fun HomeScreenPreview() {
-    val uiState = HomeUiState(
-        status = ScreenUiStatus.CONTENT,
+    val uiState = HomeUiState.Content(
         tags = listOf(
             TagUiModel(TagId("tag-life"), "生活", 0xFF6750A4),
             TagUiModel(TagId("tag-work"), "仕事", 0xFFB3261E)

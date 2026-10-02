@@ -33,7 +33,7 @@ import com.lambdarc.litememo.ui.model.MemoUiModel
 import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.HomeBulkTagDialogUiState
 import com.lambdarc.litememo.ui.state.HomeFilterUiState
-import com.lambdarc.litememo.ui.state.ScreenUiStatus
+import com.lambdarc.litememo.ui.state.HomeUiState
 import com.lambdarc.litememo.ui.state.SearchUiState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +41,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
@@ -55,6 +56,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -112,9 +114,7 @@ class HomeViewModelTest {
             viewModel.updateSearchQuery("Mapped")
         }
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
-            it.status != ScreenUiStatus.LOADING && (!isSearch || it.search.results.size == 2)
-        }
+        val state = viewModel.firstContent { !isSearch || it.search.results.size == 2 }
         val results = if (isSearch) state.search.results else state.memos
 
         // Assert
@@ -152,7 +152,7 @@ class HomeViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.status != ScreenUiStatus.LOADING }
+        val state = viewModel.firstContent()
 
         // Assert
         assertEquals(listOf("仕事", "生活"), state.tags.map { it.name })
@@ -172,7 +172,7 @@ class HomeViewModelTest {
         // Act
         viewModel.selectFilter(HomeFilterUiState.Favorite)
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.selectedFilter == HomeFilterUiState.Favorite }
+        val state = viewModel.firstContent { it.selectedFilter == HomeFilterUiState.Favorite }
 
         // Assert
         assertEquals(listOf("Favorite"), state.memos.map { it.title })
@@ -198,7 +198,7 @@ class HomeViewModelTest {
         // Act
         viewModel.selectFilter(HomeFilterUiState.ByTag(workTagId))
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             it.selectedFilter == HomeFilterUiState.ByTag(workTagId)
         }
 
@@ -222,7 +222,7 @@ class HomeViewModelTest {
         viewModel.toggleSearch()
         viewModel.updateSearchQuery("shopping")
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             it.search.isActive &&
                 it.search.query == "shopping" &&
                 it.search.results.isNotEmpty()
@@ -247,7 +247,7 @@ class HomeViewModelTest {
         viewModel.toggleSearch()
         viewModel.updateSearchQuery("shopping")
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.search.results.isNotEmpty() }
+        val state = viewModel.firstContent { it.search.results.isNotEmpty() }
 
         // Assert
         assertEquals(setOf(memoId), state.selection.selectedMemoIds)
@@ -261,7 +261,7 @@ class HomeViewModelTest {
         viewModel.toggleSearch()
         viewModel.updateSearchQuery("shopping")
         advanceUntilIdle()
-        viewModel.uiState.first {
+        viewModel.firstContent {
             it.search.isActive && it.search.query == "shopping"
         }
 
@@ -269,7 +269,7 @@ class HomeViewModelTest {
         // StateTransition: toggling an active search resets the complete search snapshot.
         viewModel.toggleSearch()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.search.isActive }
+        val state = viewModel.firstContent { !it.search.isActive }
 
         // Assert
         assertEquals(SearchUiState(), state.search)
@@ -283,7 +283,7 @@ class HomeViewModelTest {
         viewModel.toggleSearch()
         viewModel.updateSearchQuery("shopping")
         advanceUntilIdle()
-        viewModel.uiState.first {
+        viewModel.firstContent {
             it.search.isActive && it.search.query == "shopping"
         }
 
@@ -291,7 +291,7 @@ class HomeViewModelTest {
         // StateTransition: closing search resets active, query, error, and results together.
         viewModel.closeSearch()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.search.isActive }
+        val state = viewModel.firstContent { !it.search.isActive }
 
         // Assert
         assertEquals(SearchUiState(), state.search)
@@ -312,17 +312,14 @@ class HomeViewModelTest {
         viewModel.toggleSearch()
         viewModel.updateSearchQuery("shopping")
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.search.hasError }
+        val state = viewModel.uiState.first {
+            it is HomeUiState.Error || (it is HomeUiState.Content && it.search.hasError)
+        }
 
         // Assert
-        assertAll(
-            {
-                assertEquals(
-                    SearchUiState(isActive = true, query = "shopping", hasError = true),
-                    state.search
-                )
-            },
-            { assertEquals(ScreenUiStatus.CONTENT, state.status) }
+        assertEquals(
+            SearchUiState(isActive = true, query = "shopping", hasError = true),
+            state.asContent().search
         )
     }
 
@@ -343,12 +340,12 @@ class HomeViewModelTest {
         )
         viewModel.toggleSearch()
         viewModel.updateSearchQuery("shopping")
-        viewModel.uiState.first { it.search.hasError }
+        viewModel.firstContent { it.search.hasError }
 
         // Act
         // StateTransition: retry searches the same query again and replaces the search error.
         viewModel.retry()
-        val state = viewModel.uiState.first { it.search.results.isNotEmpty() }
+        val state = viewModel.firstContent { it.search.results.isNotEmpty() }
 
         // Assert
         assertAll(
@@ -371,7 +368,7 @@ class HomeViewModelTest {
         // StateTransition: a bulk favorite action is reflected in the memo list state
         viewModel.setSelectedMemosFavorite(true)
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.memos.singleOrNull()?.isFavorite == true }
+        val state = viewModel.firstContent { it.memos.singleOrNull()?.isFavorite == true }
 
         // Assert
         assertTrue(state.memos.single().isFavorite)
@@ -386,7 +383,7 @@ class HomeViewModelTest {
         // Act
         viewModel.startSelection(MemoId("memo-1"))
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             it.selection.selectedMemoIds == setOf(MemoId("memo-1"))
         }
 
@@ -403,13 +400,13 @@ class HomeViewModelTest {
         advanceUntilIdle()
         viewModel.startSelection(MemoId("memo-1"))
         viewModel.requestToggleTagForSelectedMemos()
-        viewModel.uiState.first { it.bulkTagDialog.isVisible }
+        viewModel.firstContent { it.bulkTagDialog.isVisible }
 
         // Act
         // StateTransition: starting a new selection closes the bulk tag dialog.
         viewModel.startSelection(MemoId("memo-2"))
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             it.selection.selectedMemoIds == setOf(MemoId("memo-2"))
         }
 
@@ -425,13 +422,13 @@ class HomeViewModelTest {
             advanceUntilIdle()
             viewModel.startSelection(MemoId("memo-1"))
             viewModel.requestToggleTagForSelectedMemos()
-            viewModel.uiState.first { it.bulkTagDialog.isVisible }
+            viewModel.firstContent { it.bulkTagDialog.isVisible }
 
             // Act
             // StateTransition: deselecting the last memo closes the bulk tag dialog.
             viewModel.toggleMemoSelection(MemoId("memo-1"))
             advanceUntilIdle()
-            val state = viewModel.uiState.first { !it.selection.isActive }
+            val state = viewModel.firstContent { !it.selection.isActive }
 
             // Assert
             assertEquals(false, state.bulkTagDialog.isVisible)
@@ -443,12 +440,12 @@ class HomeViewModelTest {
         val viewModel = homeViewModel(memos = listOf(memoFixture(id = "memo-1")))
         advanceUntilIdle()
         viewModel.startSelection(MemoId("memo-1"))
-        viewModel.uiState.first { it.selection.isActive }
+        viewModel.firstContent { it.selection.isActive }
 
         // Act
         viewModel.toggleMemoSelection(MemoId("memo-1"))
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.selection.isActive }
+        val state = viewModel.firstContent { !it.selection.isActive }
 
         // Assert
         assertEquals(emptySet<MemoId>(), state.selection.selectedMemoIds)
@@ -460,12 +457,12 @@ class HomeViewModelTest {
         val viewModel = homeViewModel(memos = listOf(memoFixture(id = "memo-1")))
         advanceUntilIdle()
         viewModel.startSelection(MemoId("memo-1"))
-        viewModel.uiState.first { it.selection.isActive }
+        viewModel.firstContent { it.selection.isActive }
 
         // Act
         viewModel.moveSelectedMemosToTrash()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.selection.isActive && it.memos.isEmpty() }
+        val state = viewModel.firstContent { !it.selection.isActive && it.memos.isEmpty() }
 
         // Assert
         assertEquals(false, state.selection.isActive)
@@ -477,7 +474,7 @@ class HomeViewModelTest {
         val viewModel = homeViewModel(memos = listOf(memoFixture(id = "memo-1")))
         advanceUntilIdle()
         viewModel.startSelection(MemoId("memo-1"))
-        viewModel.uiState.first { it.selection.isActive }
+        viewModel.firstContent { it.selection.isActive }
 
         // Act & Assert
         // Coroutine/Boundary: the in-flight guard blocks the second rapid bulk action so the
@@ -500,14 +497,14 @@ class HomeViewModelTest {
             )
             advanceUntilIdle()
             viewModel.startSelection(MemoId("memo-1"))
-            viewModel.uiState.first { it.selection.isActive }
+            viewModel.firstContent { it.selection.isActive }
 
             // Act & Assert
             // Flow/Error/StateTransition: bulk failure emits an error and keeps selection.
             viewModel.actionErrorEvent.test {
                 viewModel.setSelectedMemosFavorite(true)
                 advanceUntilIdle()
-                val state = viewModel.uiState.first {
+                val state = viewModel.firstContent {
                     it.selection.selectedMemoIds == setOf(MemoId("memo-1"))
                 }
                 awaitItem()
@@ -530,7 +527,7 @@ class HomeViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             it.selection.selectedMemoIds == setOf(MemoId("memo-1"), MemoId("memo-2"))
         }
 
@@ -553,7 +550,7 @@ class HomeViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             it.selection.selectedMemoIds == setOf(MemoId("memo-1"), MemoId("memo-2"))
         }
 
@@ -577,7 +574,7 @@ class HomeViewModelTest {
         // Act
         viewModel.selectFilter(HomeFilterUiState.Favorite)
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             it.selectedFilter == HomeFilterUiState.Favorite &&
                 it.selection.selectedMemoIds == setOf(MemoId("favorite"), MemoId("normal"))
         }
@@ -595,7 +592,7 @@ class HomeViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.status != ScreenUiStatus.LOADING }
+        val state = viewModel.firstContent()
 
         // Assert
         assertEquals(false, state.allSelectedFavorite)
@@ -607,12 +604,12 @@ class HomeViewModelTest {
         val viewModel = homeViewModel(memos = listOf(memoFixture(id = "memo-1")))
         advanceUntilIdle()
         viewModel.startSelection(MemoId("memo-1"))
-        viewModel.uiState.first { it.selection.isActive }
+        viewModel.firstContent { it.selection.isActive }
 
         // Act
         viewModel.requestToggleTagForSelectedMemos()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.bulkTagDialog.isVisible }
+        val state = viewModel.firstContent { it.bulkTagDialog.isVisible }
 
         // Assert
         assertEquals(true, state.bulkTagDialog.isVisible)
@@ -624,14 +621,14 @@ class HomeViewModelTest {
             // Arrange
             val viewModel = homeViewModel(memos = listOf(memoFixture(id = "memo-1")))
             advanceUntilIdle()
-            viewModel.uiState.first { it.status != ScreenUiStatus.LOADING }
+            viewModel.uiState.first { it !is HomeUiState.Loading }
 
             // Act
             viewModel.requestToggleTagForSelectedMemos()
             advanceUntilIdle()
 
             // Assert
-            assertEquals(false, viewModel.uiState.value.bulkTagDialog.isVisible)
+            assertEquals(false, viewModel.uiState.value.asContent().bulkTagDialog.isVisible)
         }
 
     @Test
@@ -641,12 +638,12 @@ class HomeViewModelTest {
         advanceUntilIdle()
         viewModel.startSelection(MemoId("memo-1"))
         viewModel.requestToggleTagForSelectedMemos()
-        viewModel.uiState.first { it.bulkTagDialog.isVisible }
+        viewModel.firstContent { it.bulkTagDialog.isVisible }
 
         // Act
         viewModel.dismissBulkTagDialog()
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             it.selection.isActive && !it.bulkTagDialog.isVisible
         }
 
@@ -665,11 +662,11 @@ class HomeViewModelTest {
         advanceUntilIdle()
         viewModel.startSelection(MemoId("memo-1"))
         viewModel.requestToggleTagForSelectedMemos()
-        viewModel.uiState.first { it.bulkTagDialog.isVisible }
+        viewModel.firstContent { it.bulkTagDialog.isVisible }
 
         // Act
         viewModel.toggleSelectedMemosTag(tagId)
-        val state = viewModel.uiState.first { !it.bulkTagDialog.isVisible }
+        val state = viewModel.firstContent { !it.bulkTagDialog.isVisible }
 
         // Assert
         assertEquals(false, state.bulkTagDialog.isVisible)
@@ -692,7 +689,7 @@ class HomeViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             it.selection.selectedMemoIds == setOf(MemoId("memo-1"), MemoId("memo-2"))
         }
 
@@ -714,7 +711,7 @@ class HomeViewModelTest {
         advanceUntilIdle()
         viewModel.startSelection(MemoId("memo-1"))
         viewModel.toggleMemoSelection(MemoId("memo-2"))
-        viewModel.uiState.first {
+        viewModel.firstContent {
             it.selection.selectedMemoIds == setOf(MemoId("memo-1"), MemoId("memo-2"))
         }
         viewModel.requestToggleTagForSelectedMemos()
@@ -722,7 +719,7 @@ class HomeViewModelTest {
         // Act
         viewModel.toggleSelectedMemosTag(tagId)
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             !it.selection.isActive &&
                 it.memos.all { memo -> memo.tags.any { tag -> tag.id == tagId } }
         }
@@ -745,13 +742,13 @@ class HomeViewModelTest {
         advanceUntilIdle()
         viewModel.startSelection(MemoId("memo-1"))
         viewModel.toggleMemoSelection(MemoId("memo-2"))
-        viewModel.uiState.first { it.allSelectedTagIds == setOf(tagId) }
+        viewModel.firstContent { it.allSelectedTagIds == setOf(tagId) }
         viewModel.requestToggleTagForSelectedMemos()
 
         // Act
         viewModel.toggleSelectedMemosTag(tagId)
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             !it.selection.isActive && it.memos.all { memo -> memo.tags.isEmpty() }
         }
 
@@ -815,7 +812,7 @@ class HomeViewModelTest {
         )
         advanceUntilIdle()
         viewModel.startSelection(MemoId("memo-1"))
-        viewModel.uiState.first { it.selection.selectedMemoIds == setOf(MemoId("memo-1")) }
+        viewModel.firstContent { it.selection.selectedMemoIds == setOf(MemoId("memo-1")) }
 
         // Act
         val selected = viewModel.getSelectedMemoForShare()
@@ -839,7 +836,7 @@ class HomeViewModelTest {
         advanceUntilIdle()
         viewModel.startSelection(MemoId("memo-1"))
         viewModel.toggleMemoSelection(MemoId("memo-2"))
-        viewModel.uiState.first {
+        viewModel.firstContent {
             it.selection.selectedMemoIds == setOf(MemoId("memo-1"), MemoId("memo-2"))
         }
 
@@ -857,7 +854,7 @@ class HomeViewModelTest {
             memos = listOf(memoFixture(id = "memo-1"))
         )
         advanceUntilIdle()
-        viewModel.uiState.first { it.status != ScreenUiStatus.LOADING }
+        viewModel.uiState.first { it !is HomeUiState.Loading }
 
         // Act
         val selected = viewModel.getSelectedMemoForShare()
@@ -873,13 +870,10 @@ class HomeViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.status != ScreenUiStatus.LOADING }
+        val state = viewModel.uiState.first { it !is HomeUiState.Loading }
 
         // Assert
-        assertAll(
-            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
-            { assertEquals(emptyList<MemoId>(), state.memos.map { it.id }) }
-        )
+        assertEquals(emptyList<MemoId>(), state.asContent().memos.map { it.id })
     }
 
     @Test
@@ -890,10 +884,10 @@ class HomeViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.status == ScreenUiStatus.ERROR }
+        val state = viewModel.uiState.first { it is HomeUiState.Error }
 
         // Assert
-        assertEquals(ScreenUiStatus.ERROR, state.status)
+        assertInstanceOf(HomeUiState.Error::class.java, state)
     }
 
     @Test
@@ -910,12 +904,8 @@ class HomeViewModelTest {
         runCurrent()
 
         // Assert
-        val state = viewModel.uiState.value
-        assertAll(
-            { assertEquals(ScreenUiStatus.ERROR, state.status) },
-            { assertEquals(HomeBulkTagDialogUiState(), state.bulkTagDialog) },
-            { assertEquals(setOf(memoId), state.selection.selectedMemoIds) }
-        )
+        val state = viewModel.uiState.value.asError()
+        assertEquals(setOf(memoId), state.selection.selectedMemoIds)
     }
 
     @Test
@@ -935,11 +925,7 @@ class HomeViewModelTest {
         runCurrent()
 
         // Assert
-        val state = viewModel.uiState.value
-        assertAll(
-            { assertEquals(ScreenUiStatus.ERROR, state.status) },
-            { assertEquals(HomeBulkTagDialogUiState(), state.bulkTagDialog) }
-        )
+        assertInstanceOf(HomeUiState.Error::class.java, viewModel.uiState.value)
     }
 
     @Test
@@ -959,9 +945,8 @@ class HomeViewModelTest {
         runCurrent()
 
         // Assert
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.value.asContent()
         assertAll(
-            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
             { assertEquals(HomeBulkTagDialogUiState(), state.bulkTagDialog) },
             { assertEquals(setOf(memoId), state.selection.selectedMemoIds) }
         )
@@ -985,9 +970,8 @@ class HomeViewModelTest {
         advanceUntilIdle()
 
         // Assert
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.value.asContent()
         assertAll(
-            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
             { assertTrue(state.search.hasError) },
             { assertTrue(state.bulkTagDialog.isVisible) }
         )
@@ -1009,7 +993,7 @@ class HomeViewModelTest {
         runCurrent()
 
         // Assert
-        assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status)
+        assertInstanceOf(HomeUiState.Error::class.java, viewModel.uiState.value)
     }
 
     @Test
@@ -1033,11 +1017,8 @@ class HomeViewModelTest {
         runCurrent()
 
         // Assert
-        val state = viewModel.uiState.value
-        assertAll(
-            { assertEquals(ScreenUiStatus.ERROR, state.status) },
-            { assertEquals("updated", state.search.query) }
-        )
+        val state = viewModel.uiState.value.asError()
+        assertEquals("updated", state.search.query)
     }
 
     @Test
@@ -1050,7 +1031,7 @@ class HomeViewModelTest {
         val state = viewModel.uiState.value
 
         // Assert
-        assertEquals(ScreenUiStatus.LOADING, state.status)
+        assertEquals(HomeUiState.Loading, state)
     }
 
     @Test
@@ -1074,9 +1055,8 @@ class HomeViewModelTest {
         runCurrent()
 
         // Assert
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.value.asContent()
         assertAll(
-            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
             { assertEquals(HomeFilterUiState.Favorite, state.selectedFilter) },
             { assertEquals(emptySet<MemoId>(), state.selection.selectedMemoIds) },
             { assertEquals(listOf(memoId), state.memos.map { it.id }) },
@@ -1102,16 +1082,12 @@ class HomeViewModelTest {
         runCurrent()
 
         // Assert
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.value.asError()
         assertAll(
-            { assertEquals(ScreenUiStatus.ERROR, state.status) },
             { assertEquals(HomeFilterUiState.Favorite, state.selectedFilter) },
             { assertEquals("changed during error", state.search.query) },
             { assertTrue(state.search.isActive) },
-            { assertEquals(setOf(memoId), state.selection.selectedMemoIds) },
-            { assertTrue(state.memos.isEmpty()) },
-            { assertTrue(state.tags.isEmpty()) },
-            { assertEquals(HomeBulkTagDialogUiState(), state.bulkTagDialog) }
+            { assertEquals(setOf(memoId), state.selection.selectedMemoIds) }
         )
     }
 
@@ -1134,9 +1110,8 @@ class HomeViewModelTest {
         runCurrent()
 
         // Assert
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.value.asError()
         assertAll(
-            { assertEquals(ScreenUiStatus.ERROR, state.status) },
             { assertEquals(SearchUiState(), state.search) },
             { assertEquals(emptySet<MemoId>(), state.selection.selectedMemoIds) }
         )
@@ -1158,10 +1133,8 @@ class HomeViewModelTest {
         runCurrent()
 
         // Assert
-        assertAll(
-            { assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status) },
-            { assertEquals(emptySet<MemoId>(), viewModel.uiState.value.selection.selectedMemoIds) }
-        )
+        val state = viewModel.uiState.value.asError()
+        assertEquals(emptySet<MemoId>(), state.selection.selectedMemoIds)
     }
 
     @Test
@@ -1185,11 +1158,8 @@ class HomeViewModelTest {
         runCurrent()
 
         // Assert
-        val state = viewModel.uiState.value
-        assertAll(
-            { assertEquals(ScreenUiStatus.ERROR, state.status) },
-            { assertEquals("updated", state.search.query) }
-        )
+        val state = viewModel.uiState.value.asError()
+        assertEquals("updated", state.search.query)
     }
 
     @Test
@@ -1218,12 +1188,19 @@ class HomeViewModelTest {
         runCurrent()
 
         // Assert
-        val state = viewModel.uiState.value
-        assertAll(
-            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
-            { assertEquals(SearchUiState(), state.search) }
-        )
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(SearchUiState(), state.search)
     }
+
+    private suspend fun HomeViewModel.firstContent(
+        predicate: (HomeUiState.Content) -> Boolean = { true }
+    ): HomeUiState.Content = uiState.filterIsInstance<HomeUiState.Content>().first(predicate)
+
+    private fun HomeUiState.asContent(): HomeUiState.Content =
+        assertInstanceOf(HomeUiState.Content::class.java, this)
+
+    private fun HomeUiState.asError(): HomeUiState.Error =
+        assertInstanceOf(HomeUiState.Error::class.java, this)
 
     private fun TestScope.openBulkTagDialog(viewModel: HomeViewModel, memoId: MemoId) {
         backgroundScope.launch { viewModel.uiState.collect {} }

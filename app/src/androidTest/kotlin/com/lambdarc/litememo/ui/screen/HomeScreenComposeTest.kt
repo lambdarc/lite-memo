@@ -28,7 +28,6 @@ import com.lambdarc.litememo.ui.component.MemoCardTestTags
 import com.lambdarc.litememo.ui.state.HomeBulkTagDialogUiState
 import com.lambdarc.litememo.ui.state.HomeUiState
 import com.lambdarc.litememo.ui.state.MemoSelectionUiState
-import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.SearchUiState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -45,7 +44,7 @@ class HomeScreenComposeTest {
     @Test
     fun boundaryEmptyMemosShowsEmptyState() {
         // Arrange
-        val uiState = HomeUiState(status = ScreenUiStatus.CONTENT)
+        val uiState = HomeUiState.Content()
 
         // Act
         setHomeScreen(uiState = { uiState })
@@ -62,8 +61,7 @@ class HomeScreenComposeTest {
         val milkMemo = testMemoUiModel(id = "memo-milk", title = "Milk list")
         val tripMemo = testMemoUiModel(id = "memo-trip", title = "Trip plan")
         var uiState by mutableStateOf(
-            HomeUiState(
-                status = ScreenUiStatus.CONTENT,
+            HomeUiState.Content(
                 memos = listOf(milkMemo, tripMemo)
             )
         )
@@ -110,7 +108,7 @@ class HomeScreenComposeTest {
 
         // Act
         setHomeScreen(uiState = {
-            HomeUiState(status = ScreenUiStatus.CONTENT, memos = listOf(memo))
+            HomeUiState.Content(memos = listOf(memo))
         })
 
         // Assert
@@ -127,7 +125,7 @@ class HomeScreenComposeTest {
 
         // Act
         setHomeScreen(uiState = {
-            HomeUiState(status = ScreenUiStatus.CONTENT, memos = listOf(memo))
+            HomeUiState.Content(memos = listOf(memo))
         })
 
         // Assert
@@ -142,8 +140,7 @@ class HomeScreenComposeTest {
         val tag = testTagUiModel(id = "tag-work", name = "Work")
         val memo = testMemoUiModel(id = "memo-1", title = "Selected memo", tags = listOf(tag))
         var uiState by mutableStateOf(
-            HomeUiState(
-                status = ScreenUiStatus.CONTENT,
+            HomeUiState.Content(
                 memos = listOf(memo),
                 tags = listOf(tag),
                 selection = MemoSelectionUiState(setOf(memo.id))
@@ -173,17 +170,14 @@ class HomeScreenComposeTest {
     @Test
     fun stateTransitionErrorHidesVisibleBulkTagDialog() {
         // Arrange
-        var uiState by mutableStateOf(
-            HomeUiState(
-                status = ScreenUiStatus.CONTENT,
-                bulkTagDialog = HomeBulkTagDialogUiState(isVisible = true)
-            )
+        var uiState by mutableStateOf<HomeUiState>(
+            HomeUiState.Content(bulkTagDialog = HomeBulkTagDialogUiState(isVisible = true))
         )
         setHomeScreen(uiState = { uiState })
 
         // Act
         // StateTransition: a whole-screen error replaces the content and its dialog.
-        composeRule.runOnIdle { uiState = HomeUiState(status = ScreenUiStatus.ERROR) }
+        composeRule.runOnIdle { uiState = HomeUiState.Error() }
 
         // Assert
         composeRule.onAllNodes(isDialog()).assertCountEquals(0)
@@ -196,8 +190,7 @@ class HomeScreenComposeTest {
         val tag = testTagUiModel(id = "tag-work", name = "Work")
         val memo = testMemoUiModel(id = "memo-1")
         var selectedTagId: TagId? = null
-        val uiState = HomeUiState(
-            status = ScreenUiStatus.CONTENT,
+        val uiState = HomeUiState.Content(
             memos = listOf(memo),
             tags = listOf(tag),
             selection = MemoSelectionUiState(setOf(memo.id)),
@@ -221,8 +214,7 @@ class HomeScreenComposeTest {
         // Arrange
         var dismissRequested = false
         var uiState by mutableStateOf(
-            HomeUiState(
-                status = ScreenUiStatus.CONTENT,
+            HomeUiState.Content(
                 bulkTagDialog = HomeBulkTagDialogUiState(isVisible = true)
             )
         )
@@ -249,8 +241,7 @@ class HomeScreenComposeTest {
     fun normalSearchErrorKeepsBulkTagDialogVisible() {
         // Arrange
         val memo = testMemoUiModel(id = "memo-1")
-        val uiState = HomeUiState(
-            status = ScreenUiStatus.CONTENT,
+        val uiState = HomeUiState.Content(
             memos = listOf(memo),
             search = SearchUiState(isActive = true, query = "missing", hasError = true),
             selection = MemoSelectionUiState(setOf(memo.id)),
@@ -268,8 +259,8 @@ class HomeScreenComposeTest {
     @Test
     fun normalInitialStatusShowsLoading() {
         // Act
-        // Normal: the default screen state shows progress before any content is loaded.
-        setHomeScreen(uiState = { HomeUiState() })
+        // Normal: the loading state shows progress before any content is loaded.
+        setHomeScreen(uiState = { HomeUiState.Loading })
 
         // Assert
         composeRule.onNode(
@@ -284,7 +275,7 @@ class HomeScreenComposeTest {
         // Arrange
         var retryCount = 0
         setHomeScreen(
-            uiState = { HomeUiState(status = ScreenUiStatus.ERROR) },
+            uiState = { HomeUiState.Error() },
             onRetry = { retryCount++ }
         )
 
@@ -299,8 +290,7 @@ class HomeScreenComposeTest {
     @Test
     fun errorSearchFailureShowsSearchMessageWithinContent() {
         // Arrange
-        val state = HomeUiState(
-            status = ScreenUiStatus.CONTENT,
+        val state = HomeUiState.Content(
             search = SearchUiState(isActive = true, query = "query", hasError = true)
         )
 
