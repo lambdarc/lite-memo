@@ -52,6 +52,7 @@ import com.lambdarc.litememo.ui.component.ErrorContent
 import com.lambdarc.litememo.ui.component.LoadingContent
 import com.lambdarc.litememo.ui.component.MessageContent
 import com.lambdarc.litememo.ui.model.TrashedMemoUiModel
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.TrashUiState
 import java.time.Instant
 import java.time.ZoneId
@@ -74,17 +75,13 @@ fun TrashScreen(uiState: TrashUiState, actions: TrashScreenActions, modifier: Mo
             modifier = Modifier.padding(innerPadding)
         )
     }
-
-    if (uiState.showEmptyTrashDialog) {
-        EmptyTrashConfirmDialog(actions = actions)
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrashTopAppBar(uiState: TrashUiState, actions: TrashScreenActions) {
     var isMenuExpanded by remember { mutableStateOf(false) }
-    val canShowMenu = !uiState.hasError &&
+    val canShowMenu = uiState.status != ScreenUiStatus.ERROR &&
         (uiState.selection.isActive || uiState.memos.isNotEmpty())
 
     LaunchedEffect(canShowMenu) {
@@ -198,25 +195,28 @@ private fun TrashScreenContent(
     actions: TrashScreenActions,
     modifier: Modifier = Modifier
 ) {
-    when {
-        uiState.isLoading -> LoadingContent(modifier = modifier)
+    when (uiState.status) {
+        ScreenUiStatus.LOADING -> LoadingContent(modifier = modifier)
 
-        uiState.hasError -> ErrorContent(
+        ScreenUiStatus.ERROR -> ErrorContent(
             onRetry = actions::onRetry,
             modifier = modifier
         )
 
-        uiState.memos.isEmpty() -> MessageContent(
-            title = stringResource(R.string.trash_empty_title),
-            body = stringResource(R.string.trash_empty_body),
-            modifier = modifier
-        )
-
-        else -> TrashedMemoList(
-            uiState = uiState,
-            actions = actions,
-            modifier = modifier
-        )
+        ScreenUiStatus.CONTENT -> {
+            if (uiState.memos.isEmpty()) {
+                MessageContent(
+                    title = stringResource(R.string.trash_empty_title),
+                    body = stringResource(R.string.trash_empty_body),
+                    modifier = modifier
+                )
+            } else {
+                TrashedMemoList(uiState = uiState, actions = actions, modifier = modifier)
+            }
+            if (uiState.showEmptyTrashDialog) {
+                EmptyTrashConfirmDialog(actions = actions)
+            }
+        }
     }
 }
 

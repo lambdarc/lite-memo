@@ -12,11 +12,13 @@ import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.MemoSummary
 import com.lambdarc.litememo.domain.model.Tag
 import com.lambdarc.litememo.domain.model.value.MemoId
+import com.lambdarc.litememo.domain.model.value.MemoImageFileName
 import com.lambdarc.litememo.domain.model.value.SearchQuery
 import com.lambdarc.litememo.domain.model.value.TagId
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.model.value.TimestampRange
 import com.lambdarc.litememo.domain.repository.FakeDisplaySettingsRepository
+import com.lambdarc.litememo.domain.repository.MemoImageStore
 import com.lambdarc.litememo.domain.repository.MemoRepository
 import com.lambdarc.litememo.domain.repository.TagRepository
 import com.lambdarc.litememo.domain.tagFixture
@@ -31,7 +33,9 @@ import com.lambdarc.litememo.ui.model.MemoUiModel
 import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.HomeBulkTagDialogUiState
 import com.lambdarc.litememo.ui.state.HomeFilterUiState
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.SearchUiState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -109,7 +113,7 @@ class HomeViewModelTest {
         }
         advanceUntilIdle()
         val state = viewModel.uiState.first {
-            !it.isLoading && (!isSearch || it.search.results.size == 2)
+            it.status != ScreenUiStatus.LOADING && (!isSearch || it.search.results.size == 2)
         }
         val results = if (isSearch) state.search.results else state.memos
 
@@ -148,7 +152,7 @@ class HomeViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.uiState.first { it.status != ScreenUiStatus.LOADING }
 
         // Assert
         assertEquals(listOf("仕事", "生活"), state.tags.map { it.name })
@@ -318,7 +322,7 @@ class HomeViewModelTest {
                     state.search
                 )
             },
-            { assertEquals(false, state.hasError) }
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) }
         )
     }
 
@@ -591,7 +595,7 @@ class HomeViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.uiState.first { it.status != ScreenUiStatus.LOADING }
 
         // Assert
         assertEquals(false, state.allSelectedFavorite)
@@ -620,7 +624,7 @@ class HomeViewModelTest {
             // Arrange
             val viewModel = homeViewModel(memos = listOf(memoFixture(id = "memo-1")))
             advanceUntilIdle()
-            viewModel.uiState.first { !it.isLoading }
+            viewModel.uiState.first { it.status != ScreenUiStatus.LOADING }
 
             // Act
             viewModel.requestToggleTagForSelectedMemos()
@@ -853,7 +857,7 @@ class HomeViewModelTest {
             memos = listOf(memoFixture(id = "memo-1"))
         )
         advanceUntilIdle()
-        viewModel.uiState.first { !it.isLoading }
+        viewModel.uiState.first { it.status != ScreenUiStatus.LOADING }
 
         // Act
         val selected = viewModel.getSelectedMemoForShare()
@@ -869,10 +873,13 @@ class HomeViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.uiState.first { it.status != ScreenUiStatus.LOADING }
 
         // Assert
-        assertEquals(emptyList<MemoId>(), state.memos.map { it.id })
+        assertAll(
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
+            { assertEquals(emptyList<MemoId>(), state.memos.map { it.id }) }
+        )
     }
 
     @Test
@@ -883,10 +890,10 @@ class HomeViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.hasError }
+        val state = viewModel.uiState.first { it.status == ScreenUiStatus.ERROR }
 
         // Assert
-        assertTrue(state.hasError)
+        assertEquals(ScreenUiStatus.ERROR, state.status)
     }
 
     @Test
@@ -905,7 +912,7 @@ class HomeViewModelTest {
         // Assert
         val state = viewModel.uiState.value
         assertAll(
-            { assertTrue(state.hasError) },
+            { assertEquals(ScreenUiStatus.ERROR, state.status) },
             { assertEquals(HomeBulkTagDialogUiState(), state.bulkTagDialog) },
             { assertEquals(setOf(memoId), state.selection.selectedMemoIds) }
         )
@@ -930,7 +937,7 @@ class HomeViewModelTest {
         // Assert
         val state = viewModel.uiState.value
         assertAll(
-            { assertTrue(state.hasError) },
+            { assertEquals(ScreenUiStatus.ERROR, state.status) },
             { assertEquals(HomeBulkTagDialogUiState(), state.bulkTagDialog) }
         )
     }
@@ -954,7 +961,7 @@ class HomeViewModelTest {
         // Assert
         val state = viewModel.uiState.value
         assertAll(
-            { assertEquals(false, state.hasError) },
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
             { assertEquals(HomeBulkTagDialogUiState(), state.bulkTagDialog) },
             { assertEquals(setOf(memoId), state.selection.selectedMemoIds) }
         )
@@ -980,9 +987,241 @@ class HomeViewModelTest {
         // Assert
         val state = viewModel.uiState.value
         assertAll(
-            { assertEquals(false, state.hasError) },
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
             { assertTrue(state.search.hasError) },
             { assertTrue(state.bulkTagDialog.isVisible) }
+        )
+    }
+
+    @Test
+    fun errorUpstreamCancellationBecomesScreenError() = runTest(dispatcher) {
+        // Arrange
+        val repository = object : MemoRepository by FakeMemoRepository() {
+            override fun observeActiveMemos(): Flow<List<Memo>> = flow {
+                throw CancellationException("Upstream cancelled")
+            }
+        }
+        val viewModel = homeViewModel(memoRepository = repository)
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        // Act
+        // Error: a cancellation raised by upstream while collection is active is a screen error.
+        runCurrent()
+
+        // Assert
+        assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun errorImageMappingCancellationBecomesScreenErrorWithLiveControls() = runTest(dispatcher) {
+        // Arrange
+        val imageStore = object : MemoImageStore by FakeMemoImageStore() {
+            override fun resolveImagePath(fileName: MemoImageFileName): String =
+                throw CancellationException("Image mapping cancelled")
+        }
+        val viewModel = homeViewModel(
+            memos = listOf(memoFixture(images = listOf(memoImageFixture()))),
+            imageStore = imageStore
+        )
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+
+        // Act
+        // Error: a mapping cancellation is a screen error and controls keep publishing.
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("updated")
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertEquals(ScreenUiStatus.ERROR, state.status) },
+            { assertEquals("updated", state.search.query) }
+        )
+    }
+
+    @Test
+    fun normalInitialStatusIsLoadingBeforeCollection() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = homeViewModel()
+
+        // Act
+        // Normal: screen state starts loading until observed data has been collected.
+        val state = viewModel.uiState.value
+
+        // Assert
+        assertEquals(ScreenUiStatus.LOADING, state.status)
+    }
+
+    @Test
+    fun stateTransitionRetryRecoversLatestControlsChangedDuringError() = runTest(dispatcher) {
+        // Arrange
+        val memoId = MemoId("memo-1")
+        val repository =
+            FailableMemoRepository(listOf(memoFixture(id = memoId.value, isFavorite = true)))
+        val viewModel = homeViewModel(memoRepository = repository)
+        openBulkTagDialog(viewModel, memoId)
+        repository.fail()
+        runCurrent()
+        viewModel.selectFilter(HomeFilterUiState.Favorite)
+        viewModel.clearSelection()
+        runCurrent()
+        repository.recover()
+
+        // Act
+        // StateTransition: retry uses the current controls and restores content without its dialog.
+        viewModel.retry()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
+            { assertEquals(HomeFilterUiState.Favorite, state.selectedFilter) },
+            { assertEquals(emptySet<MemoId>(), state.selection.selectedMemoIds) },
+            { assertEquals(listOf(memoId), state.memos.map { it.id }) },
+            { assertEquals(HomeBulkTagDialogUiState(), state.bulkTagDialog) }
+        )
+    }
+
+    @Test
+    fun stateTransitionErrorKeepsFilterQueryAndSelectionControlsLive() = runTest(dispatcher) {
+        // Arrange
+        val memoId = MemoId("memo-1")
+        val repository = FailableMemoRepository(listOf(memoFixture(id = memoId.value)))
+        val viewModel = homeViewModel(memoRepository = repository)
+        openBulkTagDialog(viewModel, memoId)
+        repository.fail()
+        runCurrent()
+
+        // Act
+        // StateTransition: controls continue publishing while observation remains failed.
+        viewModel.selectFilter(HomeFilterUiState.Favorite)
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("changed during error")
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertEquals(ScreenUiStatus.ERROR, state.status) },
+            { assertEquals(HomeFilterUiState.Favorite, state.selectedFilter) },
+            { assertEquals("changed during error", state.search.query) },
+            { assertTrue(state.search.isActive) },
+            { assertEquals(setOf(memoId), state.selection.selectedMemoIds) },
+            { assertTrue(state.memos.isEmpty()) },
+            { assertTrue(state.tags.isEmpty()) },
+            { assertEquals(HomeBulkTagDialogUiState(), state.bulkTagDialog) }
+        )
+    }
+
+    @Test
+    fun stateTransitionErrorCloseSearchAndClearSelectionPublishImmediately() = runTest(dispatcher) {
+        // Arrange
+        val memoId = MemoId("memo-1")
+        val repository = FailableMemoRepository(listOf(memoFixture(id = memoId.value)))
+        val viewModel = homeViewModel(memoRepository = repository)
+        openBulkTagDialog(viewModel, memoId)
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("query")
+        repository.fail()
+        runCurrent()
+
+        // Act
+        // StateTransition: closing search and clearing selection update the failed screen.
+        viewModel.closeSearch()
+        viewModel.clearSelection()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertEquals(ScreenUiStatus.ERROR, state.status) },
+            { assertEquals(SearchUiState(), state.search) },
+            { assertEquals(emptySet<MemoId>(), state.selection.selectedMemoIds) }
+        )
+    }
+
+    @Test
+    fun stateTransitionErrorToggleSelectionPublishesWhileObservationFailed() = runTest(dispatcher) {
+        // Arrange
+        val memoId = MemoId("memo-1")
+        val repository = FailableMemoRepository(listOf(memoFixture(id = memoId.value)))
+        val viewModel = homeViewModel(memoRepository = repository)
+        openBulkTagDialog(viewModel, memoId)
+        repository.fail()
+        runCurrent()
+
+        // Act
+        // StateTransition: deselecting the last memo updates selection during a screen error.
+        viewModel.toggleMemoSelection(memoId)
+        runCurrent()
+
+        // Assert
+        assertAll(
+            { assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status) },
+            { assertEquals(emptySet<MemoId>(), viewModel.uiState.value.selection.selectedMemoIds) }
+        )
+    }
+
+    @Test
+    fun errorMappingFailureKeepsControlsLive() = runTest(dispatcher) {
+        // Arrange
+        val imageStore = object : MemoImageStore by FakeMemoImageStore() {
+            override fun resolveImagePath(fileName: MemoImageFileName): String =
+                error("Cannot resolve image")
+        }
+        val viewModel = homeViewModel(
+            memos = listOf(memoFixture(images = listOf(memoImageFixture()))),
+            imageStore = imageStore
+        )
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+
+        // Act
+        // Error: a failed mapping does not terminate control observation.
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("updated")
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertEquals(ScreenUiStatus.ERROR, state.status) },
+            { assertEquals("updated", state.search.query) }
+        )
+    }
+
+    @Test
+    fun stateTransitionMappingRecoversOnNextEmission() = runTest(dispatcher) {
+        // Arrange
+        var failMapping = true
+        val imageStore = object : MemoImageStore by FakeMemoImageStore() {
+            override fun resolveImagePath(fileName: MemoImageFileName): String {
+                if (failMapping) error("Cannot resolve image")
+                return "/images/${fileName.value}"
+            }
+        }
+        val viewModel = homeViewModel(
+            memos = listOf(memoFixture(images = listOf(memoImageFixture()))),
+            imageStore = imageStore
+        )
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        runCurrent()
+        viewModel.toggleSearch()
+        runCurrent()
+        failMapping = false
+
+        // Act
+        // StateTransition: the next emission after mapping recovers restores content.
+        viewModel.closeSearch()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
+            { assertEquals(SearchUiState(), state.search) }
         )
     }
 
@@ -998,7 +1237,8 @@ class HomeViewModelTest {
         memos: List<Memo> = emptyList(),
         tags: List<Tag> = emptyList(),
         memoRepository: MemoRepository = FakeMemoRepository(memos),
-        tagRepository: TagRepository = FakeTagRepository(tags)
+        tagRepository: TagRepository = FakeTagRepository(tags),
+        imageStore: MemoImageStore = FakeMemoImageStore()
     ): HomeViewModel {
         val displaySettingsRepository = FakeDisplaySettingsRepository()
         return HomeViewModel(
@@ -1012,7 +1252,7 @@ class HomeViewModelTest {
                 currentTimeProvider = MutableTimeProvider(TimestampMillis(today + 1))
             ),
             formatMemoTextUseCase = FormatMemoTextUseCase(),
-            resolveMemoImagePathUseCase = ResolveMemoImagePathUseCase(FakeMemoImageStore())
+            resolveMemoImagePathUseCase = ResolveMemoImagePathUseCase(imageStore)
         )
     }
 

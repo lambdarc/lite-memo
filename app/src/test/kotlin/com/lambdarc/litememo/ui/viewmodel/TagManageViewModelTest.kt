@@ -13,16 +13,23 @@ import com.lambdarc.litememo.domain.tagFixture
 import com.lambdarc.litememo.domain.usecase.DeleteTagUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.SaveTagUseCase
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
@@ -48,22 +55,100 @@ class TagManageViewModelTest {
     }
 
     @Test
-    fun uiStateKeepsEditingTagWhenObserveTagsFails() = runTest(dispatcher) {
+    fun stateTransitionUiStateStartsLoadingAndShowsEmptyContent() = runTest(dispatcher) {
         // Arrange
-        val viewModel = tagManageViewModel(
-            tagRepository = ObserveFailingTagRepository(listOf(tagFixture(id = "tag-1")))
-        )
-        viewModel.uiState.first { it.hasError }
+        val viewModel = tagManageViewModel()
+        assertEquals(ScreenUiStatus.LOADING, viewModel.uiState.value.status)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
 
         // Act
-        viewModel.startCreate()
-        advanceUntilIdle()
-        val state = viewModel.uiState.first { it.hasError && it.editingTag != null }
+        // StateTransition/Boundary: collecting an empty tag list replaces loading with content.
+        runCurrent()
 
         // Assert
         assertAll(
-            { assertEquals(true, state.hasError) },
-            { assertEquals("", state.editingTag?.name) }
+            { assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status) },
+            { assertEquals(emptyList<Tag>(), viewModel.uiState.value.tags) }
+        )
+    }
+
+    @Test
+    fun stateTransitionRetryRestoresContentAfterObservationFailure() = runTest(dispatcher) {
+        // Arrange
+        val delegate = FakeTagRepository(listOf(tagFixture(name = "Recovered")))
+        var attempts = 0
+        val repository = object : TagRepository by delegate {
+            override fun observeTags(): Flow<List<Tag>> = flow {
+                attempts += 1
+                if (attempts == 1) error("Failed to observe tags.")
+                emitAll(delegate.observeTags())
+            }
+        }
+        val viewModel = tagManageViewModel(repository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status)
+
+        // Act
+        // StateTransition: retry observes recovered tags after a screen load failure.
+        viewModel.retry()
+        runCurrent()
+
+        // Assert
+        assertAll(
+            { assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status) },
+            { assertEquals(listOf("Recovered"), viewModel.uiState.value.tags.map { it.name }) },
+            { assertEquals(2, attempts) }
+        )
+    }
+
+    @Test
+    fun errorObservationFailureHidesEditingAndDeleteDialog() = runTest(dispatcher) {
+        // Arrange
+        val repository = FailableTagRepository(listOf(tagFixture(id = "tag-1", name = "Work")))
+        val viewModel = tagManageViewModel(tagRepository = repository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startCreate()
+        viewModel.requestDelete(viewModel.uiState.value.tags.single())
+        runCurrent()
+
+        // Act
+        // Error: a whole-screen failure does not carry overlays into the error state.
+        repository.fail()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertEquals(ScreenUiStatus.ERROR, state.status) },
+            { assertEquals(null, state.editingTag) },
+            { assertEquals(null, state.showDeleteDialog) }
+        )
+    }
+
+    @Test
+    fun stateTransitionRetryClosesEditingAndDeleteDialog() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeTagRepository(listOf(tagFixture(id = "tag-1", name = "Work")))
+        val viewModel = tagManageViewModel(tagRepository = repository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startCreate()
+        viewModel.requestDelete(viewModel.uiState.value.tags.single())
+        runCurrent()
+
+        // Act
+        // StateTransition: retry starts with the edit and delete dialogs closed.
+        viewModel.retry()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
+            { assertEquals(null, state.editingTag) },
+            { assertEquals(null, state.showDeleteDialog) }
         )
     }
 
@@ -75,7 +160,7 @@ class TagManageViewModelTest {
             tagRepository = tagRepository,
             tagIdProvider = QueueTagIdProvider(listOf(TagId("tag-1"), TagId("tag-2")))
         )
-        viewModel.uiState.first { !it.isLoading }
+        viewModel.uiState.first { it.status == ScreenUiStatus.CONTENT }
         viewModel.startCreate()
         viewModel.updateEditName("New tag")
 
@@ -95,7 +180,7 @@ class TagManageViewModelTest {
         val viewModel = tagManageViewModel(
             tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1", name = "Work")))
         )
-        viewModel.uiState.first { !it.isLoading }
+        viewModel.uiState.first { it.status == ScreenUiStatus.CONTENT }
 
         // Act
         viewModel.startCreate()
@@ -177,7 +262,7 @@ class TagManageViewModelTest {
                 )
             )
         )
-        viewModel.uiState.first { !it.isLoading }
+        viewModel.uiState.first { it.status == ScreenUiStatus.CONTENT }
 
         // Act
         viewModel.startCreate()
@@ -225,27 +310,21 @@ class TagManageViewModelTest {
         deleteTagUseCase = DeleteTagUseCase(tagRepository)
     )
 
-    private class ObserveFailingTagRepository(initialTags: List<Tag>) : TagRepository {
+    private class FailableTagRepository(
+        tags: List<Tag>,
+        private val delegate: FakeTagRepository = FakeTagRepository(tags)
+    ) : TagRepository by delegate {
+        private val failure = MutableStateFlow<Throwable?>(null)
 
-        private val repository = FakeTagRepository(initialTags)
-
-        override fun observeTags(): Flow<List<Tag>> = flow {
-            emit(repository.currentTags())
-            error("Failed to observe tags.")
+        fun fail() {
+            failure.value = IllegalStateException("Failed to observe tags.")
         }
 
-        override suspend fun getTag(id: TagId): Tag? = repository.getTag(id)
-
-        override suspend fun findTagByName(name: TagName): Tag? = repository.findTagByName(name)
-
-        override suspend fun getTagsByIds(ids: List<TagId>): List<Tag> =
-            repository.getTagsByIds(ids)
-
-        override suspend fun saveTag(tag: Tag) = repository.saveTag(tag)
-
-        override suspend fun deleteTag(id: TagId) = repository.deleteTag(id)
-
-        override suspend fun getAllTags(): List<Tag> = repository.getAllTags()
+        override fun observeTags(): Flow<List<Tag>> =
+            combine(delegate.observeTags(), failure) { tags, error ->
+                if (error != null) throw error
+                tags
+            }
     }
 
     private class DeleteFailingTagRepository(initialTags: List<Tag>) : TagRepository {

@@ -12,6 +12,7 @@ import com.lambdarc.litememo.domain.usecase.DeleteTagUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.SaveTagUseCase
 import com.lambdarc.litememo.ui.model.TagUiModel
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.TagEditUiState
 import com.lambdarc.litememo.ui.state.TagManageUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -53,14 +54,14 @@ class TagManageViewModel @Inject constructor(
             editingTag,
             deleteDialog
         ) { tags, editing, deleting ->
+            if (tags == null) {
+                return@combine TagManageUiState(status = ScreenUiStatus.ERROR)
+            }
             TagManageUiState(
-                isLoading = false,
-                hasError = tags == null,
-                tags =
-                    tags?.map {
-                        TagUiModel(id = it.id, name = it.name.value, colorArgb = it.color.argb)
-                    }
-                        ?: emptyList(),
+                status = ScreenUiStatus.CONTENT,
+                tags = tags.map {
+                    TagUiModel(id = it.id, name = it.name.value, colorArgb = it.color.argb)
+                },
                 editingTag = editing,
                 showDeleteDialog = deleting
             )
@@ -161,6 +162,8 @@ class TagManageViewModel @Inject constructor(
     }
 
     fun retry() {
+        editingTag.value = null
+        deleteDialog.value = null
         retryTrigger.update { !it }
     }
 

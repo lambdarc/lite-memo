@@ -34,6 +34,7 @@ import com.lambdarc.litememo.domain.usecase.ResolveMemoImagePathUseCase
 import com.lambdarc.litememo.domain.usecase.SaveMemoUseCase
 import com.lambdarc.litememo.ui.model.MemoImageUiModel
 import com.lambdarc.litememo.ui.state.MemoEditUiResult
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -75,6 +76,185 @@ class MemoEditViewModelTest {
     }
 
     @Test
+    fun normalNewMemoStartsWithContentStatus() = runTest(dispatcher) {
+        // Act
+        // Normal: a new memo is immediately editable without a database load.
+        val viewModel = memoEditViewModel()
+
+        // Assert
+        assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status)
+        advanceUntilIdle()
+        assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun stateTransitionExistingMemoLoadsFromLoadingToContent() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1")
+        val repository = BlockingGetMemoRepository(memo)
+        val viewModel = memoEditViewModel(memo = memo, memoRepository = repository)
+        runCurrent()
+        assertEquals(ScreenUiStatus.LOADING, viewModel.uiState.value.status)
+
+        // Act
+        // StateTransition: completing the initial load exposes the editor.
+        repository.releaseGet.complete(Unit)
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun errorMissingExistingMemoShowsErrorStatus() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = memoEditViewModel(
+            savedStateHandle = SavedStateHandle(mapOf("memoId" to "missing"))
+        )
+
+        // Act
+        // Error: a missing memo is a screen load failure.
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status)
+    }
+
+    @Test
+    fun stateTransitionFailedMemoLoadRetriesThroughLoadingToContent() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", title = "Recovered")
+        var failGet = true
+        val delegate = FakeMemoRepository(listOf(memo))
+        val repository = object : MemoRepository by delegate {
+            override suspend fun getActiveMemo(id: MemoId): Memo? {
+                if (failGet) error("Failed to load memo.")
+                return delegate.getActiveMemo(id)
+            }
+        }
+        val viewModel = memoEditViewModel(memo = memo, memoRepository = repository)
+        advanceUntilIdle()
+        assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status)
+
+        // Act
+        // StateTransition: retry enters loading and restores the recovered memo content.
+        failGet = false
+        viewModel.reload()
+        assertEquals(ScreenUiStatus.LOADING, viewModel.uiState.value.status)
+        advanceUntilIdle()
+
+        // Assert
+        assertAll(
+            { assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status) },
+            { assertEquals("Recovered", viewModel.uiState.value.title) }
+        )
+    }
+
+    @Test
+    fun stateTransitionReloadRestoresDraftAndRetainsUnsavedImageOwnership() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", isFavorite = true, tagIds = listOf(TagId("tag-1")))
+        val repository = FakeMemoRepository(listOf(memo))
+        val imageStore = FakeMemoImageStore()
+        val savedStateHandle = SavedStateHandle(mapOf("memoId" to memo.id.value))
+        val viewModel = memoEditViewModel(
+            memo = memo,
+            savedStateHandle = savedStateHandle,
+            memoRepository = repository,
+            memoImageStore = imageStore
+        )
+        runCurrent()
+        viewModel.updateTitle("Draft title")
+        viewModel.updateBody("Draft body")
+        viewModel.attachImages(listOf("content://images/1"))
+        runCurrent()
+        val draft = viewModel.uiState.value
+
+        // Act
+        // StateTransition: reload retains the whole draft and its temporary image cleanup ownership.
+        viewModel.reload()
+        val loading = viewModel.uiState.value
+        runCurrent()
+        val restored = viewModel.uiState.value
+        val savedImageFlags = savedStateHandle.get<ArrayList<Boolean>>("editImagePersistedFlags")
+        viewModel.removeImage("image-1")
+        runCurrent()
+
+        // Assert
+        assertAll(
+            { assertEquals(draft.copy(status = ScreenUiStatus.LOADING), loading) },
+            { assertEquals(draft, restored) },
+            { assertEquals("Draft title", restored.title) },
+            { assertEquals("Draft body", restored.body) },
+            { assertEquals(true, restored.isFavorite) },
+            { assertEquals(setOf(TagId("tag-1")), restored.selectedTagIds) },
+            {
+                assertEquals(
+                    listOf(
+                        MemoImageUiModel("image-1", "image-1.jpg", "/images/image-1.jpg", false)
+                    ),
+                    restored.images
+                )
+            },
+            { assertEquals(arrayListOf(false), savedImageFlags) },
+            { assertEquals(emptyList<Memo>(), repository.savedMemos) },
+            { assertEquals(listOf(MemoImageFileName("image-1.jpg")), imageStore.deletedFileNames) },
+            { assertEquals(emptyList<MemoImageUiModel>(), viewModel.uiState.value.images) }
+        )
+    }
+
+    @Test
+    fun stateTransitionFailedReloadRetainsLoadedContentAndRecovers() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(
+            id = "memo-1",
+            title = "Existing title",
+            body = "Existing body",
+            isFavorite = true,
+            tagIds = listOf(TagId("tag-1")),
+            images = listOf(memoImageFixture(id = "loaded", fileName = "loaded.jpg"))
+        )
+        var failGet = false
+        val delegate = FakeMemoRepository(listOf(memo))
+        val repository = object : MemoRepository by delegate {
+            override suspend fun getActiveMemo(id: MemoId): Memo? {
+                if (failGet) error("Failed to reload memo.")
+                return delegate.getActiveMemo(id)
+            }
+        }
+        val imageStore = FakeMemoImageStore()
+        val viewModel = memoEditViewModel(
+            memo = memo,
+            memoRepository = repository,
+            memoImageStore = imageStore
+        )
+        runCurrent()
+        val loaded = viewModel.uiState.value
+        failGet = true
+
+        // Act
+        // StateTransition: repository reload failure retains loaded content until retry recovers.
+        viewModel.reload()
+        val loading = viewModel.uiState.value
+        runCurrent()
+        val failed = viewModel.uiState.value
+        failGet = false
+        viewModel.reload()
+        val retrying = viewModel.uiState.value
+        runCurrent()
+
+        // Assert
+        assertAll(
+            { assertEquals(loaded.copy(status = ScreenUiStatus.LOADING), loading) },
+            { assertEquals(loaded.copy(status = ScreenUiStatus.ERROR), failed) },
+            { assertEquals(loaded.copy(status = ScreenUiStatus.LOADING), retrying) },
+            { assertEquals(loaded, viewModel.uiState.value) },
+            { assertEquals(emptyList<Memo>(), delegate.savedMemos) },
+            { assertEquals(emptyList<MemoImageFileName>(), imageStore.deletedFileNames) }
+        )
+    }
+
+    @Test
     fun normalUiStateLoadsPersistedImageMetadata() = runTest(dispatcher) {
         // Arrange
         val memo =
@@ -113,6 +293,7 @@ class MemoEditViewModelTest {
 
         // Assert
         assertAll(
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
             { assertEquals("Saved title", state.title) },
             { assertEquals("Saved body", state.body) },
             { assertEquals(setOf(TagId("tag-1")), state.selectedTagIds) },
@@ -139,7 +320,7 @@ class MemoEditViewModelTest {
 
         // Assert
         assertAll(
-            { assertEquals(false, state.isLoading) },
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
             { assertEquals("Existing title", state.title) },
             { assertEquals("Existing body", state.body) },
             { assertEquals(setOf(TagId("tag-1")), state.selectedTagIds) },
@@ -194,7 +375,7 @@ class MemoEditViewModelTest {
             memoRepository = repository
         )
         advanceUntilIdle()
-        assertEquals(true, viewModel.uiState.value.hasError)
+        assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status)
 
         // Act
         // Flow/Interaction: leaving a load error does not treat blank UI state as deletion.

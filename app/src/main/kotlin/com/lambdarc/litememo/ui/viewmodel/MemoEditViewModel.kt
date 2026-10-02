@@ -28,6 +28,7 @@ import com.lambdarc.litememo.ui.model.MemoImageUiModel
 import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.MemoEditUiResult
 import com.lambdarc.litememo.ui.state.MemoEditUiState
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -84,7 +85,10 @@ class MemoEditViewModel @Inject constructor(
     }
 
     private val _uiState = MutableStateFlow(
-        MemoEditUiState(isLoading = initialMemoId != null, memoId = initialMemoId)
+        MemoEditUiState(
+            status = if (initialMemoId != null) ScreenUiStatus.LOADING else ScreenUiStatus.CONTENT,
+            memoId = initialMemoId
+        )
     )
     val uiState: StateFlow<MemoEditUiState> = _uiState.asStateFlow()
 
@@ -144,7 +148,7 @@ class MemoEditViewModel @Inject constructor(
     }
 
     fun reload() {
-        _uiState.update { it.copy(isLoading = true, hasError = false) }
+        _uiState.update { it.copy(status = ScreenUiStatus.LOADING) }
         loadInitialState()
     }
 
@@ -237,7 +241,16 @@ class MemoEditViewModel @Inject constructor(
         if (_uiState.value.isDeletePending || isFinishing) return
         isFinishing = true
         autosaveJob?.cancel()
-        _uiState.update { state -> state.copy(isDeletePending = true, hasError = false) }
+        _uiState.update { state ->
+            state.copy(
+                isDeletePending = true,
+                status = if (state.status == ScreenUiStatus.ERROR) {
+                    ScreenUiStatus.CONTENT
+                } else {
+                    state.status
+                }
+            )
+        }
         viewModelScope.launch {
             persistMutex.withLock {
                 try {
@@ -261,7 +274,7 @@ class MemoEditViewModel @Inject constructor(
         isFinishing = true
         autosaveJob?.cancel()
         val initialState = _uiState.value
-        if (initialMemoId != null && (initialState.isLoading || initialState.hasError)) {
+        if (initialMemoId != null && initialState.status != ScreenUiStatus.CONTENT) {
             clearSavedState()
             enqueueUiResult { MemoEditUiResult.NavigateBack(it) }
             return
@@ -303,13 +316,13 @@ class MemoEditViewModel @Inject constructor(
             }
 
             val currentMemoId = initialMemoId ?: run {
-                _uiState.update { it.copy(isLoading = false, hasError = false) }
+                _uiState.update { it.copy(status = ScreenUiStatus.CONTENT) }
                 return@launch
             }
             try {
                 val memo = getMemoUseCase(MemoId(currentMemoId))
                 if (memo == null) {
-                    _uiState.update { it.copy(isLoading = false, hasError = true) }
+                    _uiState.update { it.copy(status = ScreenUiStatus.ERROR) }
                     return@launch
                 }
                 _uiState.update { current ->
@@ -321,7 +334,7 @@ class MemoEditViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Throwable) {
-                _uiState.update { it.copy(isLoading = false, hasError = true) }
+                _uiState.update { it.copy(status = ScreenUiStatus.ERROR) }
             }
         }
     }
@@ -405,8 +418,7 @@ class MemoEditViewModel @Inject constructor(
         _uiState.update { state ->
             val nextState = state.copy(
                 memoId = memo.id.value,
-                isLoading = false,
-                hasError = false,
+                status = ScreenUiStatus.CONTENT,
                 images = state.images.map { image ->
                     if (image.id in savedImageIds) image.copy(isPersisted = true) else image
                 }
@@ -441,7 +453,7 @@ class MemoEditViewModel @Inject constructor(
         }
 
         return MemoEditUiState(
-            isLoading = false,
+            status = ScreenUiStatus.CONTENT,
             memoId = initialMemoId,
             title = title,
             body = body,
@@ -480,7 +492,7 @@ class MemoEditViewModel @Inject constructor(
     }
 
     private fun Memo.toUiState() = MemoEditUiState(
-        isLoading = false,
+        status = ScreenUiStatus.CONTENT,
         memoId = id.value,
         title = title.value,
         body = body.value,
@@ -510,7 +522,7 @@ class MemoEditViewModel @Inject constructor(
         title.isBlank() && body.isBlank() && images.isEmpty()
 
     private fun canEdit(state: MemoEditUiState): Boolean =
-        !isFinishing && !state.isDeletePending && !state.isLoading && !state.hasError
+        !isFinishing && !state.isDeletePending && state.status == ScreenUiStatus.CONTENT
 
     private companion object {
         const val AUTOSAVE_DEBOUNCE_MILLIS = 1_000L

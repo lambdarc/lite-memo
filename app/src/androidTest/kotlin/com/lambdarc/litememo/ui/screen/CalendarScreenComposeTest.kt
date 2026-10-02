@@ -1,5 +1,7 @@
 package com.lambdarc.litememo.ui.screen
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -12,6 +14,7 @@ import com.lambdarc.litememo.R
 import com.lambdarc.litememo.domain.model.value.MemoId
 import com.lambdarc.litememo.ui.component.MemoCardTestTags
 import com.lambdarc.litememo.ui.state.CalendarUiState
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.SearchUiState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -46,7 +49,7 @@ class CalendarScreenComposeTest {
             TestScreenContent {
                 CalendarScreen(
                     uiState = CalendarUiState(
-                        isLoading = false,
+                        status = ScreenUiStatus.CONTENT,
                         selectedMonth = YearMonth.from(selectedDate),
                         selectedDate = selectedDate
                     ),
@@ -82,7 +85,7 @@ class CalendarScreenComposeTest {
         composeRule.setContent {
             TestScreenContent {
                 CalendarScreen(
-                    uiState = CalendarUiState(isLoading = false, hasError = true),
+                    uiState = CalendarUiState(status = ScreenUiStatus.ERROR),
                     onPreviousMonth = {},
                     onNextMonth = {},
                     onDateSelect = {},
@@ -124,7 +127,7 @@ class CalendarScreenComposeTest {
             TestScreenContent {
                 CalendarScreen(
                     uiState = CalendarUiState(
-                        isLoading = false,
+                        status = ScreenUiStatus.CONTENT,
                         selectedMonth = YearMonth.from(selectedDate),
                         selectedDate = selectedDate,
                         memos = listOf(memo)
@@ -167,7 +170,7 @@ class CalendarScreenComposeTest {
             TestScreenContent {
                 CalendarScreen(
                     uiState = CalendarUiState(
-                        isLoading = false,
+                        status = ScreenUiStatus.CONTENT,
                         search = SearchUiState(
                             isActive = true,
                             query = "failed query",
@@ -198,4 +201,39 @@ class CalendarScreenComposeTest {
             .onNodeWithText(context.getString(R.string.search_error_body))
             .assertIsDisplayed()
     }
+
+    @Test
+    fun normalInitialStatusShowsLoading() {
+        // Act
+        // Normal: the initial calendar state displays loading progress.
+        setCalendarScreen(CalendarUiState())
+
+        // Assert
+        composeRule.onNode(
+            SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo)
+        ).assertIsDisplayed()
+    }
+
+    private fun setCalendarScreen(uiState: CalendarUiState) {
+        composeRule.setContent {
+            TestScreenContent {
+                CalendarScreen(
+                    uiState = uiState,
+                    onPreviousMonth = {},
+                    onNextMonth = {},
+                    onDateSelect = {},
+                    onCalendarExpandedToggle = {},
+                    onDatePickerRequest = {},
+                    onDatePickerDismiss = {},
+                    onDatePick = {},
+                    onSearchToggle = {},
+                    onSearchQueryChange = {},
+                    onRetry = {},
+                    onMemoClick = {},
+                    onCreateMemoClick = {}
+                )
+            }
+        }
+    }
+
 }

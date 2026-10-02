@@ -15,15 +15,21 @@ import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTrashedMemosUseCase
 import com.lambdarc.litememo.domain.usecase.PurgeExpiredTrashedMemosUseCase
 import com.lambdarc.litememo.domain.usecase.RestoreMemosFromTrashUseCase
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
@@ -49,6 +55,24 @@ class TrashViewModelTest {
     }
 
     @Test
+    fun stateTransitionUiStateStartsLoadingAndShowsEmptyContent() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = trashViewModel()
+        assertEquals(ScreenUiStatus.LOADING, viewModel.uiState.value.status)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+
+        // Act
+        // StateTransition/Boundary: an empty trash is content after loading finishes.
+        runCurrent()
+
+        // Assert
+        assertAll(
+            { assertEquals(ScreenUiStatus.CONTENT, viewModel.uiState.value.status) },
+            { assertEquals(emptyList<MemoId>(), viewModel.uiState.value.memos.map { it.id }) }
+        )
+    }
+
+    @Test
     fun uiStateShowsTrashedMemos() = runTest(dispatcher) {
         // Arrange
         val memo = memoFixture(id = "memo-1", title = "Trash", deletedAt = 2_000L)
@@ -56,7 +80,7 @@ class TrashViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.uiState.first { it.status == ScreenUiStatus.CONTENT }
 
         // Assert
         assertEquals(listOf("Trash"), state.memos.map { it.title })
@@ -203,7 +227,7 @@ class TrashViewModelTest {
         // Arrange
         val viewModel = trashViewModel(memoRepository = FakeMemoRepository())
         advanceUntilIdle()
-        viewModel.uiState.first { !it.isLoading && it.memos.isEmpty() }
+        viewModel.uiState.first { it.status == ScreenUiStatus.CONTENT && it.memos.isEmpty() }
 
         // Act
         viewModel.requestEmptyTrash()
@@ -311,11 +335,11 @@ class TrashViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.hasError }
+        val state = viewModel.uiState.first { it.status == ScreenUiStatus.ERROR }
 
         // Assert
         assertAll(
-            { assertEquals(true, state.hasError) },
+            { assertEquals(ScreenUiStatus.ERROR, state.status) },
             { assertEquals(emptyList<MemoId>(), state.memos.map { it.id }) }
         )
     }
@@ -326,17 +350,64 @@ class TrashViewModelTest {
         val repository = PurgeFailingOnceMemoRepository()
         val viewModel = trashViewModel(memoRepository = repository)
         advanceUntilIdle()
-        viewModel.uiState.first { it.hasError }
+        viewModel.uiState.first { it.status == ScreenUiStatus.ERROR }
 
         // Act
         viewModel.retry()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.hasError }
+        val state = viewModel.uiState.first { it.status == ScreenUiStatus.CONTENT }
 
         // Assert
         assertAll(
-            { assertEquals(false, state.hasError) },
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
             { assertEquals(2, repository.purgeAttempts) }
+        )
+    }
+
+    @Test
+    fun errorObservationFailureHidesEmptyTrashDialog() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val repository = FailableTrashedMemoRepository(listOf(memo))
+        val viewModel = trashViewModel(memoRepository = repository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.requestEmptyTrash()
+        runCurrent()
+
+        // Act
+        // Error: a whole-screen failure does not carry the empty trash dialog into the error state.
+        repository.fail()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertEquals(ScreenUiStatus.ERROR, state.status) },
+            { assertEquals(false, state.showEmptyTrashDialog) }
+        )
+    }
+
+    @Test
+    fun stateTransitionRetryClosesEmptyTrashDialog() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val viewModel = trashViewModel(memoRepository = FakeMemoRepository(listOf(memo)))
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.requestEmptyTrash()
+        runCurrent()
+
+        // Act
+        // StateTransition: retry starts with the empty trash dialog closed.
+        viewModel.retry()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value
+        assertAll(
+            { assertEquals(ScreenUiStatus.CONTENT, state.status) },
+            { assertEquals(false, state.showEmptyTrashDialog) }
         )
     }
 
@@ -383,6 +454,23 @@ class TrashViewModelTest {
         override fun observeTrashedMemos(): Flow<List<Memo>> = flow {
             throw IllegalStateException("Failed to observe trashed memos.")
         }
+    }
+
+    private class FailableTrashedMemoRepository(
+        memos: List<Memo>,
+        private val delegate: FakeMemoRepository = FakeMemoRepository(memos)
+    ) : MemoRepository by delegate {
+        private val failure = MutableStateFlow<Throwable?>(null)
+
+        fun fail() {
+            failure.value = IllegalStateException("Failed to observe trashed memos.")
+        }
+
+        override fun observeTrashedMemos(): Flow<List<Memo>> =
+            combine(delegate.observeTrashedMemos(), failure) { memos, error ->
+                if (error != null) throw error
+                memos
+            }
     }
 
     private class PurgeFailingOnceMemoRepository(

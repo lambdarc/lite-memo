@@ -13,6 +13,7 @@ import com.lambdarc.litememo.domain.usecase.RestoreMemosFromTrashUseCase
 import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.model.TrashedMemoUiModel
 import com.lambdarc.litememo.ui.state.MemoSelectionUiState
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.TrashUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -84,11 +85,10 @@ class TrashViewModel @Inject constructor(
         }
         val visibleMemoIds = uiMemos.map { it.id }.toSet()
         TrashUiState(
-            isLoading = false,
-            hasError = hasError,
+            status = ScreenUiStatus.loaded(hasError),
             memos = uiMemos,
             selection = activeSelection.retain(visibleMemoIds),
-            showEmptyTrashDialog = showEmptyDialog
+            showEmptyTrashDialog = showEmptyDialog && !hasError
         )
     }.stateIn(
         scope = viewModelScope,
@@ -163,6 +163,7 @@ class TrashViewModel @Inject constructor(
     }
 
     fun retry() {
+        showEmptyTrashDialog.value = false
         hasPurgeError.value = false
         purgeExpiredTrashedMemos()
         retryTrigger.update { !it }
