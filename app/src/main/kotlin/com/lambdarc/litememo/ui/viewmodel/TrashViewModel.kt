@@ -74,7 +74,7 @@ class TrashViewModel @Inject constructor(
         showEmptyTrashDialog
     ) { observed, purgeError, activeSelection, showEmptyDialog ->
         if (observed.memos == null || observed.tags == null || purgeError) {
-            TrashUiState.Error
+            TrashUiState.Error(selection = activeSelection)
         } else {
             val uiMemos = toUiModels(memos = observed.memos, tags = observed.tags)
             val visibleMemoIds = uiMemos.map { it.id }.toSet()

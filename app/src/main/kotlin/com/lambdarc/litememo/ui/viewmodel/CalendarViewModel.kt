@@ -125,7 +125,6 @@ class CalendarViewModel @Inject constructor(
                     selectedMonth = month.value,
                     selectedDate = date.value,
                     isCalendarExpanded = controls.expanded,
-                    isDatePickerVisible = controls.datePickerVisible,
                     search = search
                 )
             } else {
@@ -196,6 +195,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun retry() {
+        dismissDatePicker()
         retryTrigger.update { it + 1 }
     }
 

@@ -47,7 +47,7 @@ class TrashScreenComposeTest {
     fun normalErrorShowsMessageWithoutMenu() {
         // Act
         // Normal: error displays its message and retry without menu actions.
-        setScreen(uiState = { TrashUiState.Error })
+        setScreen(uiState = { TrashUiState.Error() })
 
         // Assert
         composeRule.onNodeWithText(string(R.string.unknown_error)).assertIsDisplayed()
@@ -60,7 +60,7 @@ class TrashScreenComposeTest {
         // Arrange
         var retryCount = 0
         setScreen(
-            uiState = { TrashUiState.Error },
+            uiState = { TrashUiState.Error() },
             onRetry = { retryCount += 1 }
         )
 
@@ -106,6 +106,25 @@ class TrashScreenComposeTest {
             string(R.string.clear_selection)
         ).assertDoesNotExist()
         composeRule.onNodeWithText("Deleted memo").assertIsDisplayed()
+    }
+
+    @Test
+    fun interactionErrorSelectionCanBeCleared() {
+        // Arrange
+        var state: TrashUiState by mutableStateOf(
+            TrashUiState.Error(selection = MemoSelectionUiState(setOf(MemoId("memo-1"))))
+        )
+        setScreen(uiState = { state }, onClearSelection = { state = TrashUiState.Error() })
+
+        // Act
+        // Interaction: the selection kept during an error can still be cleared from the top bar.
+        composeRule.onNodeWithContentDescription(string(R.string.clear_selection)).performClick()
+
+        // Assert
+        composeRule.onNodeWithContentDescription(
+            string(R.string.clear_selection)
+        ).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.retry_label)).assertIsDisplayed()
     }
 
     private fun setScreen(

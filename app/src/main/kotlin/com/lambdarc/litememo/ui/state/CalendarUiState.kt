@@ -12,7 +12,6 @@ sealed class CalendarUiState {
         val selectedMonth: YearMonth? = null,
         val selectedDate: LocalDate? = null,
         val isCalendarExpanded: Boolean = true,
-        val isDatePickerVisible: Boolean = false,
         val search: SearchUiState = SearchUiState()
     ) : CalendarUiState()
 

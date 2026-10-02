@@ -338,7 +338,7 @@ class TrashViewModelTest {
         val state = viewModel.uiState.first { it is TrashUiState.Error }
 
         // Assert
-        assertEquals(TrashUiState.Error, state)
+        assertEquals(TrashUiState.Error(), state)
     }
 
     @Test
@@ -378,7 +378,50 @@ class TrashViewModelTest {
         runCurrent()
 
         // Assert
-        assertEquals(TrashUiState.Error, viewModel.uiState.value)
+        assertEquals(TrashUiState.Error(), viewModel.uiState.value)
+    }
+
+    @Test
+    fun errorObservationFailureKeepsSelection() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val repository = FailableTrashedMemoRepository(listOf(memo))
+        val viewModel = trashViewModel(memoRepository = repository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startSelection(memo.id)
+        runCurrent()
+
+        // Act
+        // Error: a whole-screen failure keeps the selection as an operation state.
+        repository.fail()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asError()
+        assertEquals(setOf(memo.id), state.selection.selectedMemoIds)
+    }
+
+    @Test
+    fun stateTransitionClearSelectionUpdatesErrorState() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val repository = FailableTrashedMemoRepository(listOf(memo))
+        val viewModel = trashViewModel(memoRepository = repository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startSelection(memo.id)
+        runCurrent()
+        repository.fail()
+        runCurrent()
+
+        // Act
+        // StateTransition/Error: clearing the selection during an error updates the error state.
+        viewModel.clearSelection()
+        runCurrent()
+
+        // Assert
+        assertEquals(TrashUiState.Error(), viewModel.uiState.value)
     }
 
     @Test
@@ -420,6 +463,9 @@ class TrashViewModelTest {
 
     private fun TrashUiState.asContent(): TrashUiState.Content =
         assertInstanceOf(TrashUiState.Content::class.java, this)
+
+    private fun TrashUiState.asError(): TrashUiState.Error =
+        assertInstanceOf(TrashUiState.Error::class.java, this)
 
     private fun trashViewModel(
         memoRepository: MemoRepository = FakeMemoRepository(),

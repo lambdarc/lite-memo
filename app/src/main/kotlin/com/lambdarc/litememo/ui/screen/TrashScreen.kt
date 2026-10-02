@@ -120,7 +120,7 @@ private fun TrashTopAppBar(uiState: TrashUiState, actions: TrashScreenActions) {
 
 private fun TrashUiState.selectionOrEmpty(): MemoSelectionUiState = when (this) {
     TrashUiState.Loading -> MemoSelectionUiState()
-    TrashUiState.Error -> MemoSelectionUiState()
+    is TrashUiState.Error -> selection
     is TrashUiState.Content -> selection
 }
 
@@ -205,7 +205,7 @@ private fun TrashScreenContent(
     when (uiState) {
         TrashUiState.Loading -> LoadingContent(modifier = modifier)
 
-        TrashUiState.Error -> ErrorContent(
+        is TrashUiState.Error -> ErrorContent(
             onRetry = actions::onRetry,
             modifier = modifier
         )

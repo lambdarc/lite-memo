@@ -614,6 +614,25 @@ class CalendarViewModelTest {
         )
     }
 
+    @Test
+    fun stateTransitionRetryClosesDatePickerOpenedBeforeLoadError() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = RetryableCalendarMemoRepository(delegate = FakeMemoRepository())
+        val viewModel = calendarViewModel(memoRepository = memoRepository)
+        viewModel.showDatePicker()
+        viewModel.uiState.first { it is CalendarUiState.Error }
+        memoRepository.allowCalendarLoad()
+
+        // Act
+        // StateTransition/Error: retry starts with the date picker closed.
+        viewModel.retry()
+        advanceUntilIdle()
+        val state = viewModel.firstContent()
+
+        // Assert
+        assertEquals(false, state.isDatePickerVisible)
+    }
+
     private suspend fun CalendarViewModel.firstContent(
         predicate: (CalendarUiState.Content) -> Boolean = { true }
     ): CalendarUiState.Content =

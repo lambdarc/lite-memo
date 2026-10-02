@@ -81,7 +81,7 @@ private fun TrashScreenLoadingPreview() {
 private fun TrashScreenErrorPreview() {
     LiteMemoTheme {
         TrashScreen(
-            uiState = TrashUiState.Error,
+            uiState = TrashUiState.Error(),
             actions = previewTrashScreenActions
         )
     }

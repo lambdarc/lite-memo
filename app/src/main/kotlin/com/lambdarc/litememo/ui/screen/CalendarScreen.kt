@@ -149,7 +149,7 @@ fun CalendarScreen(
 
 private fun CalendarUiState.datePickerDateOrNull(): LocalDate? = when (this) {
     CalendarUiState.Loading -> null
-    is CalendarUiState.Error -> selectedDate.takeIf { isDatePickerVisible }
+    is CalendarUiState.Error -> null
     is CalendarUiState.Content -> selectedDate.takeIf { isDatePickerVisible }
 }
 
