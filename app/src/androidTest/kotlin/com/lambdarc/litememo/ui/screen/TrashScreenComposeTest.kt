@@ -17,7 +17,6 @@ import com.lambdarc.litememo.domain.model.value.MemoId
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.ui.model.TrashedMemoUiModel
 import com.lambdarc.litememo.ui.state.MemoSelectionUiState
-import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.TrashUiState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -34,7 +33,7 @@ class TrashScreenComposeTest {
     fun normalLoadingShowsProgressWithoutErrorOrMenu() {
         // Act
         // Normal: loading displays progress without error or menu actions.
-        setScreen(uiState = { TrashUiState() })
+        setScreen(uiState = { TrashUiState.Loading })
 
         // Assert
         composeRule.onNode(
@@ -48,7 +47,7 @@ class TrashScreenComposeTest {
     fun normalErrorShowsMessageWithoutMenu() {
         // Act
         // Normal: error displays its message and retry without menu actions.
-        setScreen(uiState = { TrashUiState(status = ScreenUiStatus.ERROR) })
+        setScreen(uiState = { TrashUiState.Error() })
 
         // Assert
         composeRule.onNodeWithText(string(R.string.unknown_error)).assertIsDisplayed()
@@ -61,7 +60,7 @@ class TrashScreenComposeTest {
         // Arrange
         var retryCount = 0
         setScreen(
-            uiState = { TrashUiState(status = ScreenUiStatus.ERROR) },
+            uiState = { TrashUiState.Error() },
             onRetry = { retryCount += 1 }
         )
 
@@ -77,7 +76,7 @@ class TrashScreenComposeTest {
     fun boundaryEmptyContentShowsEmptyMessage() {
         // Act
         // Boundary: empty trash displays its message without a loading or error state.
-        setScreen(uiState = { TrashUiState(status = ScreenUiStatus.CONTENT) })
+        setScreen(uiState = { TrashUiState.Content() })
 
         // Assert
         composeRule.onNodeWithText(string(R.string.trash_empty_title)).assertIsDisplayed()
@@ -88,8 +87,7 @@ class TrashScreenComposeTest {
     fun stateTransitionContentSelectionCanBeClearedIndependently() {
         // Arrange
         var state by mutableStateOf(
-            TrashUiState(
-                status = ScreenUiStatus.CONTENT,
+            TrashUiState.Content(
                 memos = listOf(memo()),
                 selection = MemoSelectionUiState(setOf(MemoId("memo-1")))
             )
@@ -108,6 +106,25 @@ class TrashScreenComposeTest {
             string(R.string.clear_selection)
         ).assertDoesNotExist()
         composeRule.onNodeWithText("Deleted memo").assertIsDisplayed()
+    }
+
+    @Test
+    fun interactionErrorSelectionCanBeCleared() {
+        // Arrange
+        var state: TrashUiState by mutableStateOf(
+            TrashUiState.Error(selection = MemoSelectionUiState(setOf(MemoId("memo-1"))))
+        )
+        setScreen(uiState = { state }, onClearSelection = { state = TrashUiState.Error() })
+
+        // Act
+        // Interaction: the selection kept during an error can still be cleared from the top bar.
+        composeRule.onNodeWithContentDescription(string(R.string.clear_selection)).performClick()
+
+        // Assert
+        composeRule.onNodeWithContentDescription(
+            string(R.string.clear_selection)
+        ).assertDoesNotExist()
+        composeRule.onNodeWithText(string(R.string.retry_label)).assertIsDisplayed()
     }
 
     private fun setScreen(

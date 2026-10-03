@@ -7,7 +7,6 @@ import com.lambdarc.litememo.domain.model.value.TagId
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.model.TrashedMemoUiModel
-import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.TrashUiState
 import com.lambdarc.litememo.ui.theme.LiteMemoTheme
 
@@ -39,8 +38,7 @@ private val previewTrashScreenActions = object : TrashScreenActions {
 private fun TrashScreenPreview() {
     LiteMemoTheme {
         TrashScreen(
-            uiState = TrashUiState(
-                status = ScreenUiStatus.CONTENT,
+            uiState = TrashUiState.Content(
                 memos = listOf(
                     TrashedMemoUiModel(
                         id = MemoId("memo-1"),
@@ -61,7 +59,7 @@ private fun TrashScreenPreview() {
 private fun TrashScreenEmptyPreview() {
     LiteMemoTheme {
         TrashScreen(
-            uiState = TrashUiState(status = ScreenUiStatus.CONTENT),
+            uiState = TrashUiState.Content(),
             actions = previewTrashScreenActions
         )
     }
@@ -72,7 +70,7 @@ private fun TrashScreenEmptyPreview() {
 private fun TrashScreenLoadingPreview() {
     LiteMemoTheme {
         TrashScreen(
-            uiState = TrashUiState(status = ScreenUiStatus.LOADING),
+            uiState = TrashUiState.Loading,
             actions = previewTrashScreenActions
         )
     }
@@ -83,7 +81,7 @@ private fun TrashScreenLoadingPreview() {
 private fun TrashScreenErrorPreview() {
     LiteMemoTheme {
         TrashScreen(
-            uiState = TrashUiState(status = ScreenUiStatus.ERROR),
+            uiState = TrashUiState.Error(),
             actions = previewTrashScreenActions
         )
     }

@@ -10,7 +10,6 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lambdarc.litememo.R
-import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.TagEditUiState
 import com.lambdarc.litememo.ui.state.TagManageUiState
 import org.junit.Assert.assertEquals
@@ -28,7 +27,7 @@ class TagManageScreenComposeTest {
     fun normalLoadingShowsProgressWithoutCreateAction() {
         // Act
         // Normal: loading displays progress without error or create actions.
-        setScreen(uiState = { TagManageUiState() })
+        setScreen(uiState = { TagManageUiState.Loading })
 
         // Assert
         composeRule.onNode(
@@ -42,7 +41,7 @@ class TagManageScreenComposeTest {
     fun normalErrorShowsMessageWithoutCreateAction() {
         // Act
         // Normal: error displays its message and retry without the create action.
-        setScreen(uiState = { TagManageUiState(status = ScreenUiStatus.ERROR) })
+        setScreen(uiState = { TagManageUiState.Error })
 
         // Assert
         composeRule.onNodeWithText(string(R.string.unknown_error)).assertIsDisplayed()
@@ -55,7 +54,7 @@ class TagManageScreenComposeTest {
         // Arrange
         var retryCount = 0
         setScreen(
-            uiState = { TagManageUiState(status = ScreenUiStatus.ERROR) },
+            uiState = { TagManageUiState.Error },
             onRetry = { retryCount += 1 }
         )
 
@@ -71,7 +70,7 @@ class TagManageScreenComposeTest {
     fun boundaryEmptyContentShowsEmptyMessageAndCreateAction() {
         // Act
         // Boundary: empty tags remain content with the create action.
-        setScreen(uiState = { TagManageUiState(status = ScreenUiStatus.CONTENT) })
+        setScreen(uiState = { TagManageUiState.Content() })
 
         // Assert
         composeRule.onNodeWithText(string(R.string.tag_empty_title)).assertIsDisplayed()
@@ -83,8 +82,7 @@ class TagManageScreenComposeTest {
         // Act
         // Normal: the editing draft remains independent from the screen status.
         setScreen(uiState = {
-            TagManageUiState(
-                status = ScreenUiStatus.CONTENT,
+            TagManageUiState.Content(
                 tags = listOf(testTagUiModel(name = "Work")),
                 editingTag = TagEditUiState(name = "Draft")
             )

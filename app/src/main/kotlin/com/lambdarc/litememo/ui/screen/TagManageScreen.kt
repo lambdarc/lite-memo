@@ -59,7 +59,6 @@ import com.lambdarc.litememo.ui.component.MessageContent
 import com.lambdarc.litememo.ui.component.tagColor
 import com.lambdarc.litememo.ui.component.toComposeColor
 import com.lambdarc.litememo.ui.model.TagUiModel
-import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.TagEditUiState
 import com.lambdarc.litememo.ui.state.TagManageUiState
 import com.lambdarc.litememo.ui.theme.DEFAULT_TAG_COLORS
@@ -103,7 +102,7 @@ fun TagManageScreen(
             )
         },
         floatingActionButton = {
-            if (uiState.status == ScreenUiStatus.CONTENT) {
+            if (uiState is TagManageUiState.Content) {
                 FloatingActionButton(onClick = onCreateClick) {
                     Icon(
                         Icons.Default.Add,
@@ -113,15 +112,15 @@ fun TagManageScreen(
             }
         }
     ) { innerPadding ->
-        when (uiState.status) {
-            ScreenUiStatus.LOADING -> LoadingContent(modifier = Modifier.padding(innerPadding))
+        when (uiState) {
+            TagManageUiState.Loading -> LoadingContent(modifier = Modifier.padding(innerPadding))
 
-            ScreenUiStatus.ERROR -> ErrorContent(
+            TagManageUiState.Error -> ErrorContent(
                 onRetry = onRetry,
                 modifier = Modifier.padding(innerPadding)
             )
 
-            ScreenUiStatus.CONTENT -> {
+            is TagManageUiState.Content -> {
                 if (uiState.tags.isEmpty()) {
                     MessageContent(
                         title = stringResource(R.string.tag_empty_title),
@@ -367,8 +366,7 @@ private const val CHECKMARK_TINT_ON_LIGHT_ALPHA = 0.87f
 private fun TagManageScreenPreview() {
     LiteMemoTheme {
         TagManageScreen(
-            uiState = TagManageUiState(
-                status = ScreenUiStatus.CONTENT,
+            uiState = TagManageUiState.Content(
                 tags = listOf(
                     TagUiModel(TagId("1"), "仕事", 0xFFB3261E),
                     TagUiModel(TagId("2"), "生活", 0xFF6750A4),

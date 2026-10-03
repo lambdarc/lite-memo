@@ -17,7 +17,6 @@ import com.lambdarc.litememo.ui.model.MemoUiModel
 import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.CalendarDayUiState
 import com.lambdarc.litememo.ui.state.CalendarUiState
-import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.state.SearchUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -121,22 +120,22 @@ class CalendarViewModel @Inject constructor(
                     emptyList()
                 }
             }
-            CalendarUiState(
-                status = ScreenUiStatus.loaded(hasError),
-                selectedMonth = month.value,
-                selectedDate = date.value,
-                isCalendarExpanded = controls.expanded,
-                isDatePickerVisible = controls.datePickerVisible,
-                search = search,
-                days = if (hasError) {
-                    emptyList()
-                } else {
-                    observed.monthSummary.toDayUiStates(date)
-                },
-                memos = if (hasError) {
-                    emptyList()
-                } else {
-                    observed.memos.map { memo ->
+            if (hasError) {
+                CalendarUiState.Error(
+                    selectedMonth = month.value,
+                    selectedDate = date.value,
+                    isCalendarExpanded = controls.expanded,
+                    search = search
+                )
+            } else {
+                CalendarUiState.Content(
+                    selectedMonth = month.value,
+                    selectedDate = date.value,
+                    isCalendarExpanded = controls.expanded,
+                    isDatePickerVisible = controls.datePickerVisible,
+                    search = search,
+                    days = observed.monthSummary.toDayUiStates(date),
+                    memos = observed.memos.map { memo ->
                         MemoUiModel(
                             id = memo.id,
                             title = memo.title.value,
@@ -149,16 +148,13 @@ class CalendarViewModel @Inject constructor(
                             }
                         )
                     }
-                }
-            )
+                )
+            }
         }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-        initialValue = CalendarUiState(
-            selectedMonth = selectedMonth.value.value,
-            selectedDate = selectedDate.value.value
-        )
+        initialValue = CalendarUiState.Loading
     )
 
     fun previousMonth() {
@@ -199,6 +195,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun retry() {
+        dismissDatePicker()
         retryTrigger.update { it + 1 }
     }
 
