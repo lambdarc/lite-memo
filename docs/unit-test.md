@@ -110,7 +110,7 @@ fun normalImagesShowImageListAndItems() {
 
     // Act
     // Normal: an image is shown in the image list
-    setMemoEditScreen(uiState = MemoEditUiState(images = listOf(image)))
+    setMemoEditScreen(uiState = { MemoEditUiState(images = listOf(image)) })
 
     // Assert
     composeRule.onNodeWithTag(MemoEditTestTags.IMAGE_LIST).assertIsDisplayed()

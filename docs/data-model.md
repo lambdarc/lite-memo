@@ -30,7 +30,9 @@ Data 層の方針とメモ画像の扱いは [`docs/architecture.md`](architectu
 - `deletedAt IS NULL` が通常のメモ、`IS NOT NULL` がごみ箱内のメモ
 - ほぼ全てのクエリがこの述語で分岐する。新しいクエリを足すときも、どちらを対象にするか必ず決める
 - `deletedAt` に index があるのはこの分岐のため
-- ごみ箱への移動と復元は `deletedAt` の UPDATE で、更新行数を返す。対象がすでにその状態なら 0 行になり、呼び出し側はこれを失敗として扱う
+- 単体のごみ箱移動と復元（`MemoDao.moveMemoToTrash` / `restoreMemoFromTrash`）は `deletedAt` の UPDATE で、更新行数を返す。対象がすでにその状態なら 0 行になり、`RoomMemoRepository` は `check` でこれを失敗（例外）として扱う
+- 一括のごみ箱移動は、`ApplyMemoBulkActionUseCase` が先に `getActiveMemos` で対象を取得し、通常のメモでないものがあれば `requireNotNull` で例外にする。`MemoBulkDao.moveMemosToTrash` が読み飛ばすのは、その確認の後に通常のメモでなくなったもの（並行変更）だけ
+- 一括の復元と一括の完全削除（`MemoBulkDao.restoreMemosFromTrash` / `deleteMemosPermanentlyAndCollectImageFileNames`）は事前確認が無い。ごみ箱に無いメモと存在しない id は読み飛ばして成功する
 - ごみ箱へ移す UPDATE は `deletedAt` に保存時点の `updatedAt` 以上の値を書く。呼び出し側が時刻を決めてから書き込むまでに別の更新が入っても、domain の `deletedAt >= updatedAt` を満たす行だけが残る
 - 物理削除は原則として、ごみ箱内メモの完全削除と 30 日経過分の一括削除に限る
 

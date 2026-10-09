@@ -5,7 +5,7 @@ CI の実行条件、job 構成、カバレッジ計測、キャッシュ戦略�
 
 ## 前提
 
-- JDK 17（Gradle の `jvmToolchain` は 17）
+- JDK 17（Gradle の `jvmToolchain` と、`gradle/gradle-daemon-jvm.properties` が指定する Gradle daemon の JDK）
 - Android SDK（compileSdk 36.1）
 - fastlane を使う場合は、[`.ruby-version`](../.ruby-version) に合う Ruby と Bundler
 - ビルドフレーバーは `dev` / `prod`。開発・動作確認は `dev` を使う
@@ -53,6 +53,8 @@ git config core.hooksPath .githooks
 - **ktlint**: コード整形（フォーマット）
 - **detekt**: 書き方・複雑度・アンチパターン（+ Compose 特化ルール）
 - **Android Lint**: Android 特有のバグ・非推奨 API・リソース・アクセシビリティ
+
+Kotlin の行長上限は ktlint の 100 文字です（`.editorconfig` の `ktlint_code_style = android_studio` による）。detekt 既定の 120 文字ではありません。
 
 detekt は baseline を使用せず、`maxIssues: 0` で検出した違反をすべて失敗として扱います。
 Android Lint は baseline なしで実行し、警告もエラーとして扱います。

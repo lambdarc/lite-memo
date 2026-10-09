@@ -27,11 +27,12 @@
 
 ## 依存の受け取り
 
-ウィジェットでは `@AndroidEntryPoint` を使えません。
-`GlanceAppWidget` は Glance が管理するクラスで、receiver は manifest 経由でウィジェットホストが生成するため、
-Hilt の生成コードによる注入経路に乗らないからです。
+ウィジェットでは `@AndroidEntryPoint` で依存を受け取れません。
 
-代わりに `ui/widget/di` の `@EntryPoint` から `EntryPointAccessors.fromApplication` で取り出します。
+- `GlanceAppWidget` は Android のコンポーネントではないため、`@AndroidEntryPoint` を付けられない
+- receiver は `BroadcastReceiver` なので `@AndroidEntryPoint` を付けられるが、注入は `provideGlance` に届かない。`WidgetRefresher` が receiver を経由せず `RecentMemosWidget()` を生成して `updateAll` を呼ぶため
+
+そこで `ui/widget/di` の `@EntryPoint` から `EntryPointAccessors.fromApplication` で取り出します。
 公開しているのは `ObserveRecentMemosUseCase` と `ObserveAppLockEnabledUseCase` で、取得箇所は最近のメモの `provideGlance` 1 箇所です。
 新規メモ側はデータ依存が無いため、この経路を使いません。
 
@@ -80,6 +81,9 @@ deep link ではなく、`MainActivity` を宛先にした明示的な `Intent` 
 
 メモを開く Intent には `litememo://memo/...` の URI も設定されていますが、
 遷移の判定に使っているのは extras の方で、URI は参照していません。
+ただし URI は外してはいけません。`Intent.filterEquals` は extras を比較しないため、URI が無いとメモごとの `PendingIntent` が同一と見なされ、
+別のメモの行をタップしても同じメモが開きます。
+メモ ID ごとに Intent が異なることは `WidgetLaunchIntentsInstrumentedTest` で固定しています。
 
 `MainActivity` は `singleTop` のため、アプリが起動中のタップでは Activity は作り直されません。
 
