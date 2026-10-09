@@ -25,8 +25,8 @@ Lite Memo のビジネスルールと公開 contract を、Android Framework に
 | value object | [`references/value-object.md`](references/value-object.md) |
 | UseCase | [`references/usecase.md`](references/usecase.md) |
 | provider（時刻・ID 生成などの抽象） | [`references/provider.md`](references/provider.md) |
-| Repository interface | reference なし。`docs/architecture.md` の contract 方針に従う |
-| 単純な model | reference なし。`docs/architecture.md` の contract 方針に従う |
+| Repository interface | reference なし。`docs/architecture.md` の「基本方針」と「レイヤー構成」の domain に従う |
+| 単純な model | reference なし。`docs/architecture.md` の「基本方針」と「レイヤー構成」の domain に従う |
 
 # 手順
 

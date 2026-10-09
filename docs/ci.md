@@ -31,7 +31,8 @@ domain / data 層は `domain.model` / `domain.usecase` / `data.mapper` / `data.r
 ここで挙げたパッケージは代表例であり、正確な集計対象は `classes(...)` の設定を確認します。
 UI 層は `*ViewModel*` / `*UiState*` / `*UiResult*` / `*UiModel*` / `*UiDirection*` / `*UiMessage*` / `*UiStatus*` / `*UiType*` と、
 役割を表す接尾語のパターンで選びます。
-接尾語のパターンで選ぶため、UI 層はパッケージを移動しても集計対象は変わりません。
+パターンは `com.lambdarc.litememo.ui.*.*Suffix*` の形で、Kover は `*` を `.*` の正規表現にするためパッケージの区切りの `.` も越えます。
+そのため `ui` 配下のサブパッケージ間（深さを問わない）の移動では集計対象は変わりませんが、`ui` 直下へ移した型は外れます。
 
 役割の接尾語に合わない名前の型を追加すると、集計対象から外れます。
 外れても失敗しないため、集計したい型は既存の接尾語へ命名をそろえるか、`classes(...)` にパターンを追加します。
