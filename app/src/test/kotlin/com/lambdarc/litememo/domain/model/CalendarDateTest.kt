@@ -1,8 +1,14 @@
 package com.lambdarc.litememo.domain.model
 
+import com.lambdarc.litememo.calendarZoneId
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.model.value.TimestampRange
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.long
+import io.kotest.property.checkAll
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.LocalDate
@@ -120,6 +126,22 @@ class CalendarDateTest {
         assertEquals(TimestampRange(TimestampMillis(0L), TimestampMillis(0L)), range)
     }
 
+    @Test
+    fun propertyFromKeepsTimestampInsideItsDateRange() = runTest {
+        // Act & Assert
+        // Property: any timestamp falls inside the range of the date it maps to in any zone
+        checkAll(Arb.long(0L..LATEST_TIMESTAMP_MILLIS), Arb.calendarZoneId()) { millis, zoneId ->
+            val range = CalendarDate.from(TimestampMillis(millis), zoneId).toTimestampRange(zoneId)
+            assertTrue(millis >= range.fromInclusive.value && millis < range.toExclusive.value) {
+                "$millis in $zoneId is outside $range"
+            }
+        }
+    }
+
     private fun timestamp(value: String): TimestampMillis =
         TimestampMillis(Instant.parse(value).toEpochMilli())
+
+    private companion object {
+        val LATEST_TIMESTAMP_MILLIS = Instant.parse("2200-01-01T00:00:00Z").toEpochMilli()
+    }
 }

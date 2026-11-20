@@ -2,12 +2,32 @@ package com.lambdarc.litememo.data.export
 
 import com.lambdarc.litememo.data.model.export.LiteMemoExportDto
 import com.lambdarc.litememo.domain.model.ExportData
+import com.lambdarc.litememo.nonBlankText
+import com.lambdarc.litememo.text
+import io.kotest.property.Arb
+import io.kotest.property.PropTestConfig
+import io.kotest.property.arbitrary.arbitrary
+import io.kotest.property.arbitrary.bind
+import io.kotest.property.arbitrary.boolean
+import io.kotest.property.arbitrary.byte
+import io.kotest.property.arbitrary.byteArray
+import io.kotest.property.arbitrary.choice
+import io.kotest.property.arbitrary.flatMap
+import io.kotest.property.arbitrary.int
+import io.kotest.property.arbitrary.list
+import io.kotest.property.arbitrary.long
+import io.kotest.property.arbitrary.map
+import io.kotest.property.arbitrary.of
+import io.kotest.property.checkAll
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.time.Instant
 
 class MemoArchiveReaderTest {
 
@@ -429,6 +449,64 @@ class MemoArchiveReaderTest {
         }
     }
 
+    @Test
+    fun propertyWrittenArchiveReadsBackToSameManifestAndImages() = runTest {
+        // Act & Assert
+        // Property: any valid manifest and image bytes survive a write and read round trip
+        checkAll(PropTestConfig(iterations = 100), archiveSamples) { sample ->
+            val archive = writeArchive(sample.manifest, sample.images)
+
+            val result = readArchive(archive)
+
+            assertAll(
+                { assertEquals(sample.manifest, result.manifest) },
+                {
+                    assertEquals(
+                        sample.images.mapValues { it.value.toList() },
+                        result.images.mapValues { it.value.toList() }
+                    )
+                }
+            )
+        }
+    }
+
+    @Test
+    fun propertyReadOfArbitraryBytesFailsOnlyWithArchiveException() = runTest {
+        // Act & Assert
+        // Property: random input, with or without a ZIP signature, is rejected as an archive error
+        checkAll(PropTestConfig(iterations = 300), arbitraryInputs) { input ->
+            assertThrows(MemoArchiveException::class.java) { readArchive(input) }
+        }
+    }
+
+    @Test
+    fun propertyReadOfCorruptedArchiveFailsOnlyWithArchiveException() = runTest {
+        // Arrange
+        val content = compressedImageBytes(sizeBytes = 256, seed = 1)
+        val manifest = manifestFixture(
+            tags = listOf(tagDtoFixture()),
+            memos = listOf(
+                memoDtoFixture(tagIds = listOf("tag-1"), images = listOf(imageDtoFixture(content)))
+            )
+        )
+        val archive = writeArchive(manifest, contentsOf(manifest, listOf(content)))
+        val corruptions = Arb.choice(
+            Arb.int(0 until archive.size).map { length -> archive.copyOf(length) },
+            Arb.bind(Arb.int(archive.indices), Arb.byte()) { index, byte ->
+                archive.copyOf().also { it[index] = byte }
+            }
+        )
+
+        // Act & Assert
+        // Property: a truncated or corrupted archive is either read or rejected as an archive error
+        checkAll(PropTestConfig(iterations = 300), corruptions) { corrupted ->
+            val failure = runCatching { readArchive(corrupted) }.exceptionOrNull()
+            assertTrue(failure == null || failure is MemoArchiveException) {
+                "unexpected failure: $failure"
+            }
+        }
+    }
+
     private fun withInvalidUtf8InEntryName(archive: ByteArray, entryName: String): ByteArray {
         val nameBytes = entryName.toByteArray(Charsets.UTF_8)
         val localHeaderNameOffset = (0..archive.size - nameBytes.size).first { offset ->
@@ -445,6 +523,54 @@ class MemoArchiveReaderTest {
         .mapIndexed { index, image -> image.archiveEntry to contents[index] }
         .toMap()
 }
+
+private class ArchiveSample(val manifest: LiteMemoExportDto, val images: Map<String, ByteArray>)
+
+private val LATEST_TIMESTAMP_MILLIS = Instant.parse("2200-01-01T00:00:00Z").toEpochMilli()
+
+private val ZIP_SIGNATURE = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
+
+private val archiveSamples: Arb<ArchiveSample> = arbitrary {
+    val tags = Arb.list(Arb.nonBlankText(), 0..3).bind().mapIndexed { index, name ->
+        tagDtoFixture(id = "tag-${index + 1}", name = name)
+    }
+    var imageIndex = 0
+    val images = linkedMapOf<String, ByteArray>()
+    val memos = (1..Arb.int(0..3).bind()).map { memoNumber ->
+        val memoImages = (1..Arb.int(0..2).bind()).map {
+            imageIndex++
+            val content = Arb.byteArray(Arb.int(0..64), Arb.byte()).bind()
+            val fileName = "picked-$imageIndex" +
+                Arb.text(0..12).bind().filterNot { it.isISOControl() || it == '/' || it == '\\' }
+            imageDtoFixture(content, index = imageIndex, fileName = fileName)
+                .also { images[it.archiveEntry] = content }
+        }
+        val createdAt = Arb.long(0L..LATEST_TIMESTAMP_MILLIS).bind()
+        memoDtoFixture(
+            id = "memo-$memoNumber:" + Arb.text(0..12).bind(),
+            title = Arb.text().bind(),
+            body = Arb.text(0..200).bind(),
+            createdAt = createdAt,
+            updatedAt = createdAt + Arb.long(0L..LATEST_TIMESTAMP_MILLIS - createdAt).bind(),
+            isFavorite = Arb.boolean().bind(),
+            tagIds = tags.filter { Arb.boolean().bind() }.map { it.id },
+            images = memoImages
+        )
+    }
+    ArchiveSample(
+        manifest = manifestFixture(
+            exportedAt = Arb.long(0L..LATEST_TIMESTAMP_MILLIS).bind(),
+            tags = tags,
+            memos = memos
+        ),
+        images = images
+    )
+}
+
+private val arbitraryInputs: Arb<ByteArray> =
+    Arb.byteArray(Arb.int(0..256), Arb.byte()).flatMap { bytes ->
+        Arb.of(bytes, ZIP_SIGNATURE + bytes)
+    }
 
 private const val EXPANDED_ENTRY_BYTES = 1024 * 1024
 

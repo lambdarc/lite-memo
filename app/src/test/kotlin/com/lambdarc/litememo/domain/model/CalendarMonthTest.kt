@@ -1,8 +1,15 @@
 package com.lambdarc.litememo.domain.model
 
+import com.lambdarc.litememo.calendarZoneId
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.model.value.TimestampRange
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.yearMonth
+import io.kotest.property.checkAll
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.LocalDate
@@ -134,6 +141,32 @@ class CalendarMonthTest {
 
         // Assert
         assertEquals(TimestampRange(TimestampMillis(0L), TimestampMillis(0L)), range)
+    }
+
+    @Test
+    fun propertyDayRangesTileMonthRangeWithoutGapsOrOverlaps() = runTest {
+        // Act & Assert
+        // Property: consecutive day ranges cover exactly the month range in any zone
+        checkAll(
+            Arb.yearMonth(YearMonth.of(1970, 1), YearMonth.of(2199, 12)),
+            Arb.calendarZoneId()
+        ) { yearMonth, zoneId ->
+            val month = CalendarMonth(yearMonth)
+            val dayRanges = month.toCalendarDates().map { it.toTimestampRange(zoneId) }
+            val monthRange = month.toTimestampRange(zoneId)
+            assertAll(
+                { assertEquals(yearMonth.lengthOfMonth(), dayRanges.size) },
+                { assertEquals(monthRange.fromInclusive, dayRanges.first().fromInclusive) },
+                { assertEquals(monthRange.toExclusive, dayRanges.last().toExclusive) },
+                {
+                    assertTrue(
+                        dayRanges.zipWithNext().all { (day, next) ->
+                            day.toExclusive == next.fromInclusive
+                        }
+                    ) { "$yearMonth in $zoneId has a gap or overlap: $dayRanges" }
+                }
+            )
+        }
     }
 
     private fun timestamp(value: String): TimestampMillis =

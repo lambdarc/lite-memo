@@ -1,22 +1,36 @@
 package com.lambdarc.litememo.data.mapper
 
+import com.lambdarc.litememo.data.export.imageDtoFixture
 import com.lambdarc.litememo.data.model.export.LiteMemoExportDto
 import com.lambdarc.litememo.data.model.export.MemoExportDto
 import com.lambdarc.litememo.data.model.export.MemoImageExportDto
 import com.lambdarc.litememo.data.model.export.TagExportDto
 import com.lambdarc.litememo.domain.memoFixture
+import com.lambdarc.litememo.domain.memoImageFixture
 import com.lambdarc.litememo.domain.model.ExportData
+import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.MemoImage
+import com.lambdarc.litememo.domain.model.Tag
 import com.lambdarc.litememo.domain.model.value.MemoImageFileName
 import com.lambdarc.litememo.domain.model.value.MemoImageId
 import com.lambdarc.litememo.domain.model.value.TagId
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.tagFixture
+import com.lambdarc.litememo.nonBlankText
+import com.lambdarc.litememo.text
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.arbitrary
+import io.kotest.property.arbitrary.boolean
+import io.kotest.property.arbitrary.list
+import io.kotest.property.arbitrary.long
+import io.kotest.property.checkAll
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import java.time.Instant
 
 class ExportDataMapperTest {
 
@@ -125,6 +139,27 @@ class ExportDataMapperTest {
             // Assert
             assertEquals(original, roundTripped)
         }
+
+        @Test
+        fun propertyMemoWithImagesSurvivesExportAndImport() = runTest {
+            // Act & Assert
+            // Property: any active memo, images and odd text included, maps back unchanged
+            checkAll(activeMemos) { original ->
+                val imageDtos = original.images.mapIndexed { index, image ->
+                    imageDtoFixture(
+                        content = ByteArray(0),
+                        index = index + 1,
+                        id = image.id.value,
+                        fileName = image.fileName.value
+                    )
+                }
+                val storedFileNames = original.images.associate { it.id.value to it.fileName }
+
+                val roundTripped = original.toExportDto(imageDtos).toDomain(storedFileNames)
+
+                assertEquals(original, roundTripped)
+            }
+        }
     }
 
     @Nested
@@ -145,6 +180,15 @@ class ExportDataMapperTest {
 
             // Assert
             assertEquals(original, roundTripped)
+        }
+
+        @Test
+        fun propertyTagSurvivesExportAndImport() = runTest {
+            // Act & Assert
+            // Property: any tag, full ARGB range and odd names included, maps back unchanged
+            checkAll(tags) { original ->
+                assertEquals(original, original.toExportDto().toDomain())
+            }
         }
     }
 
@@ -288,5 +332,39 @@ class ExportDataMapperTest {
             sizeBytes = 16L,
             sha256 = "0".repeat(64)
         )
+    }
+
+    private companion object {
+        val LATEST_TIMESTAMP_MILLIS = Instant.parse("2200-01-01T00:00:00Z").toEpochMilli()
+
+        val activeMemos: Arb<Memo> = arbitrary {
+            val createdAt = Arb.long(0L..LATEST_TIMESTAMP_MILLIS).bind()
+            val images = Arb.list(Arb.text(0..12), 0..3).bind().mapIndexed { index, name ->
+                memoImageFixture(
+                    id = "image-${index + 1}",
+                    fileName = "picked-${index + 1}" +
+                        name.filterNot { it.isISOControl() || it == '/' || it == '\\' }
+                )
+            }
+            memoFixture(
+                id = Arb.nonBlankText().bind(),
+                title = Arb.text().bind(),
+                body = Arb.text(0..200).bind(),
+                createdAt = createdAt,
+                updatedAt = createdAt + Arb.long(0L..LATEST_TIMESTAMP_MILLIS - createdAt).bind(),
+                tagIds = Arb.list(Arb.nonBlankText(1..12), 0..3).bind().map { TagId(it) },
+                images = images,
+                isFavorite = Arb.boolean().bind()
+            )
+        }
+
+        val tags: Arb<Tag> = arbitrary {
+            tagFixture(
+                id = Arb.nonBlankText().bind(),
+                name = Arb.nonBlankText().bind(),
+                color = Arb.long(0L..0xFFFFFFFFL).bind(),
+                createdAt = Arb.long(0L..LATEST_TIMESTAMP_MILLIS).bind()
+            )
+        }
     }
 }
