@@ -358,6 +358,50 @@ class TagManageViewModelTest {
     }
 
     @Test
+    fun stateTransitionUpdateEditNameClearsDuplicateNameError() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = tagManageViewModel(
+            tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1", name = "Work")))
+        )
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startCreate()
+        viewModel.updateEditName("Work")
+        viewModel.saveEdit()
+        advanceUntilIdle()
+        assertEquals(true, viewModel.uiState.value.asContent().editingTag?.duplicateNameError)
+
+        // Act
+        // StateTransition: typing a new name clears the duplicate name error
+        viewModel.updateEditName("Home")
+        runCurrent()
+
+        // Assert
+        assertEquals(false, viewModel.uiState.value.asContent().editingTag?.duplicateNameError)
+    }
+
+    @Test
+    fun stateTransitionUpdateEditNameClearsSaveError() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = tagManageViewModel(tagRepository = SaveFailingTagRepository())
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startCreate()
+        viewModel.updateEditName("Work")
+        viewModel.saveEdit()
+        advanceUntilIdle()
+        assertEquals(true, viewModel.uiState.value.asContent().editingTag?.saveError)
+
+        // Act
+        // StateTransition: typing a new name clears the save error
+        viewModel.updateEditName("Home")
+        runCurrent()
+
+        // Assert
+        assertEquals(false, viewModel.uiState.value.asContent().editingTag?.saveError)
+    }
+
+    @Test
     fun normalSelectEditColorUpdatesEditingColor() = runTest(dispatcher) {
         // Arrange
         val viewModel = tagManageViewModel()

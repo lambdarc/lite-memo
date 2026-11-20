@@ -543,6 +543,7 @@ class HomeViewModelSelectionTest {
         openBulkTagDialog(viewModel, memoId)
         memoRepository.fail()
         runCurrent()
+        assertTrue(viewModel.uiState.value is HomeUiState.Error)
 
         // Act
         // Boundary: without content state the selected tags are unknown, so the tag is added.
@@ -554,7 +555,10 @@ class HomeViewModelSelectionTest {
 
         // Assert
         val state = viewModel.uiState.value.asContent()
-        assertEquals(listOf(tagId), state.memos.single().tags.map { it.id })
+        assertAll(
+            { assertEquals(listOf(tagId), state.memos.single().tags.map { it.id }) },
+            { assertEquals(emptySet<MemoId>(), state.selection.selectedMemoIds) }
+        )
     }
 
     @Test
