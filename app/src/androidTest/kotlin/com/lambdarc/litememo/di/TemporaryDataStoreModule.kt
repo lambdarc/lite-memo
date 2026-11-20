@@ -20,9 +20,9 @@ object TemporaryDataStoreModule {
     @Provides
     @Singleton
     @UserSettingsDataStore
-    fun provideUserSettingsDataStore(@ApplicationContext context: Context): DataStore<Preferences> =
-        PreferenceDataStoreFactory.create {
-            File(context.cacheDir, "user_settings_${UUID.randomUUID()}.preferences_pb")
-        }
+    fun provideUserSettingsDataStore(@ApplicationContext context: Context): DataStore<Preferences> {
+        val file = File(context.cacheDir, "user_settings_${UUID.randomUUID()}.preferences_pb")
+        return PreferenceDataStoreFactory.create { file }
+    }
 
 }

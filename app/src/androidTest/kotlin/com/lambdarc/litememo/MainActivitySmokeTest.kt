@@ -124,10 +124,13 @@ class MainActivitySmokeTest {
         navigate(click = createMemoButton, arriveAt = titleInput)
         composeRule.onNode(titleInput).performTextInput("Draft title")
         composeRule.onNode(bodyInput).performTextInput("Draft body")
+        // An open soft keyboard would consume the first back press
+        Espresso.closeSoftKeyboard()
 
         // Act
         // Normal: leaving the editor with system back saves what was typed before the debounce
         Espresso.pressBack()
+        awaitGone(bodyInput)
         awaitSingle(hasText("Draft title"))
         navigate(click = hasText("Draft title"), arriveAt = bodyInput)
 
