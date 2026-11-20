@@ -46,4 +46,14 @@ class ExportFileReferenceTest {
             ExportFileReference("export.json")
         }
     }
+
+    @Test
+    fun errorConstructorThrowsWhenSchemeHasNoSchemeSpecificPart() {
+        // Act & Assert
+        // Error: a scheme alone does not identify an export destination
+        assertThrows(IllegalArgumentException::class.java) {
+            ExportFileReference("content:")
+        }
+    }
+
 }

@@ -281,4 +281,110 @@ class MemoArchiveManifestValidatorTest {
             MemoArchiveManifestValidator.validate(manifest, limits.copy(maxEntryCount = 2))
         }
     }
+
+    @Test
+    fun boundaryValidateAcceptsSingleImageAtImageLimit() {
+        // Arrange
+        val content = compressedImageBytes(sizeBytes = 64, seed = 1)
+        val manifest = manifestFixture(
+            memos = listOf(
+                memoDtoFixture(images = listOf(imageDtoFixture(content, sizeBytes = 8)))
+            )
+        )
+
+        // Act & Assert
+        // Boundary: a declaration exactly at the single-image limit is accepted
+        assertDoesNotThrow {
+            MemoArchiveManifestValidator.validate(manifest, limits.copy(maxImageBytes = 8))
+        }
+    }
+
+    @Test
+    fun boundaryValidateAcceptsTotalImageBytesAtLimit() {
+        // Arrange
+        val content = compressedImageBytes(sizeBytes = 64, seed = 1)
+        val manifest = manifestFixture(
+            memos = listOf(
+                memoDtoFixture(
+                    images = listOf(
+                        imageDtoFixture(content, index = 1, sizeBytes = 8),
+                        imageDtoFixture(content, index = 2, sizeBytes = 8)
+                    )
+                )
+            )
+        )
+
+        // Act & Assert
+        // Boundary: a declaration exactly at the total extracted byte limit is accepted
+        assertDoesNotThrow {
+            MemoArchiveManifestValidator.validate(
+                manifest,
+                limits.copy(maxImageBytes = 8, maxTotalImageBytes = 16)
+            )
+        }
+    }
+
+    @Test
+    fun boundaryValidateAcceptsEntryCountAtLimit() {
+        // Arrange
+        val content = compressedImageBytes(sizeBytes = 64, seed = 1)
+        val manifest = manifestFixture(
+            memos = listOf(
+                memoDtoFixture(
+                    images = listOf(
+                        imageDtoFixture(content, index = 1),
+                        imageDtoFixture(content, index = 2)
+                    )
+                )
+            )
+        )
+
+        // Act & Assert
+        // Boundary: two images plus the manifest exactly fill the entry count limit
+        assertDoesNotThrow {
+            MemoArchiveManifestValidator.validate(manifest, limits.copy(maxEntryCount = 3))
+        }
+    }
+
+    @Test
+    fun boundaryValidateAcceptsZeroByteImage() {
+        // Arrange
+        val manifest = manifestFixture(
+            memos = listOf(memoDtoFixture(images = listOf(imageDtoFixture(ByteArray(0)))))
+        )
+
+        // Act & Assert
+        // Boundary: zero is the smallest valid declared image size
+        assertDoesNotThrow { MemoArchiveManifestValidator.validate(manifest, limits) }
+    }
+
+    @Test
+    fun errorValidateRejectsNegativeImageSize() {
+        // Arrange
+        val content = compressedImageBytes(sizeBytes = 64, seed = 1)
+        val manifest = manifestFixture(
+            memos = listOf(
+                memoDtoFixture(images = listOf(imageDtoFixture(content, sizeBytes = -1)))
+            )
+        )
+
+        // Act & Assert
+        // Error: a negative declared size is malformed rather than over a limit
+        assertArchiveFailure(MemoArchiveFailureReason.MALFORMED_ARCHIVE) {
+            MemoArchiveManifestValidator.validate(manifest, limits)
+        }
+    }
+
+    @Test
+    fun boundaryValidateAcceptsMemoUpdatedAtCreationTime() {
+        // Arrange
+        val manifest = manifestFixture(
+            memos = listOf(memoDtoFixture(createdAt = 1000L, updatedAt = 1000L))
+        )
+
+        // Act & Assert
+        // Boundary: an unedited memo keeps updatedAt equal to createdAt
+        assertDoesNotThrow { MemoArchiveManifestValidator.validate(manifest, limits) }
+    }
+
 }
