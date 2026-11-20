@@ -13,6 +13,7 @@ import com.lambdarc.litememo.domain.tagFixture
 import com.lambdarc.litememo.domain.usecase.DeleteTagUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.SaveTagUseCase
+import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.state.TagManageUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -290,6 +291,314 @@ class TagManageViewModelTest {
         }
     }
 
+    @Test
+    fun normalStartEditLoadsExistingTagIntoEditingState() = runTest(dispatcher) {
+        // Arrange
+        val tag = tagFixture(id = "tag-1", name = "Work", color = 0xFF112233)
+        val viewModel = tagManageViewModel(tagRepository = FakeTagRepository(listOf(tag)))
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+
+        // Act
+        // Normal: the selected tag is copied into the edit dialog
+        viewModel.startEdit(tag.id)
+        runCurrent()
+
+        // Assert
+        val editing = viewModel.uiState.value.asContent().editingTag
+        assertAll(
+            { assertEquals(tag.id, editing?.id) },
+            { assertEquals("Work", editing?.name) },
+            { assertEquals(0xFF112233, editing?.colorArgb) }
+        )
+    }
+
+    @Test
+    fun boundaryStartEditIgnoresUnknownTagId() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = tagManageViewModel(
+            tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1")))
+        )
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+
+        // Act
+        // Boundary: an unknown tag id does not open the edit dialog
+        viewModel.startEdit(TagId("missing"))
+        runCurrent()
+
+        // Assert
+        assertEquals(null, viewModel.uiState.value.asContent().editingTag)
+    }
+
+    @Test
+    fun stateTransitionUpdateEditNameClearsPreviousErrors() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = tagManageViewModel()
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startCreate()
+        viewModel.updateEditName("   ")
+        viewModel.saveEdit()
+        runCurrent()
+
+        // Act
+        // StateTransition: typing a new name clears the name error
+        viewModel.updateEditName("Work")
+        runCurrent()
+
+        // Assert
+        val editing = viewModel.uiState.value.asContent().editingTag
+        assertAll(
+            { assertEquals("Work", editing?.name) },
+            { assertEquals(false, editing?.nameError) },
+            { assertEquals(false, editing?.duplicateNameError) },
+            { assertEquals(false, editing?.saveError) }
+        )
+    }
+
+    @Test
+    fun stateTransitionUpdateEditNameClearsDuplicateNameError() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = tagManageViewModel(
+            tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1", name = "Work")))
+        )
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startCreate()
+        viewModel.updateEditName("Work")
+        viewModel.saveEdit()
+        advanceUntilIdle()
+        assertEquals(true, viewModel.uiState.value.asContent().editingTag?.duplicateNameError)
+
+        // Act
+        // StateTransition: typing a new name clears the duplicate name error
+        viewModel.updateEditName("Home")
+        runCurrent()
+
+        // Assert
+        assertEquals(false, viewModel.uiState.value.asContent().editingTag?.duplicateNameError)
+    }
+
+    @Test
+    fun stateTransitionUpdateEditNameClearsSaveError() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = tagManageViewModel(tagRepository = SaveFailingTagRepository())
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startCreate()
+        viewModel.updateEditName("Work")
+        viewModel.saveEdit()
+        advanceUntilIdle()
+        assertEquals(true, viewModel.uiState.value.asContent().editingTag?.saveError)
+
+        // Act
+        // StateTransition: typing a new name clears the save error
+        viewModel.updateEditName("Home")
+        runCurrent()
+
+        // Assert
+        assertEquals(false, viewModel.uiState.value.asContent().editingTag?.saveError)
+    }
+
+    @Test
+    fun normalSelectEditColorUpdatesEditingColor() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = tagManageViewModel()
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startCreate()
+
+        // Act
+        // Normal: the chosen color is reflected in the edit dialog
+        viewModel.selectEditColor(0xFF445566)
+        runCurrent()
+
+        // Assert
+        assertEquals(0xFF445566, viewModel.uiState.value.asContent().editingTag?.colorArgb)
+    }
+
+    @Test
+    fun boundaryEditChangesWithoutDialogKeepEditingTagNull() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = tagManageViewModel()
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+
+        // Act
+        // Boundary: name and color changes are no-ops when no dialog is open
+        viewModel.updateEditName("Work")
+        viewModel.selectEditColor(0xFF445566)
+        runCurrent()
+
+        // Assert
+        assertEquals(null, viewModel.uiState.value.asContent().editingTag)
+    }
+
+    @Test
+    fun boundarySaveEditWithoutDialogDoesNotSaveTag() = runTest(dispatcher) {
+        // Arrange
+        val tagRepository = FakeTagRepository()
+        val viewModel = tagManageViewModel(tagRepository = tagRepository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+
+        // Act
+        // Boundary: saving without an open dialog is a no-op
+        viewModel.saveEdit()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(emptyList<Tag>(), tagRepository.savedTags)
+    }
+
+    @Test
+    fun errorSaveEditSetsSaveErrorWhenSaveFails() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = tagManageViewModel(tagRepository = SaveFailingTagRepository())
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startCreate()
+        viewModel.updateEditName("Work")
+
+        // Act
+        // Error: a non-duplicate failure keeps the dialog open with a save error
+        viewModel.saveEdit()
+        advanceUntilIdle()
+
+        // Assert
+        val editing = viewModel.uiState.value.asContent().editingTag
+        assertAll(
+            { assertEquals(true, editing?.saveError) },
+            { assertEquals(false, editing?.duplicateNameError) },
+            { assertEquals(false, editing?.isSaving) }
+        )
+    }
+
+    @Test
+    fun stateTransitionSelectEditColorClearsSaveError() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = tagManageViewModel(tagRepository = SaveFailingTagRepository())
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startCreate()
+        viewModel.updateEditName("Work")
+        viewModel.saveEdit()
+        advanceUntilIdle()
+        assertEquals(true, viewModel.uiState.value.asContent().editingTag?.saveError)
+
+        // Act
+        // StateTransition: choosing another color clears the save error
+        viewModel.selectEditColor(0xFF445566)
+        runCurrent()
+
+        // Assert
+        val editing = viewModel.uiState.value.asContent().editingTag
+        assertAll(
+            { assertEquals(false, editing?.saveError) },
+            { assertEquals(0xFF445566, editing?.colorArgb) }
+        )
+    }
+
+    @Test
+    fun normalCancelEditClosesEditDialog() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = tagManageViewModel()
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startCreate()
+        runCurrent()
+
+        // Act
+        // Normal: cancelling discards the edit state
+        viewModel.cancelEdit()
+        runCurrent()
+
+        // Assert
+        assertEquals(null, viewModel.uiState.value.asContent().editingTag)
+    }
+
+    @Test
+    fun normalRequestDeleteShowsDeleteDialog() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = tagManageViewModel(
+            tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1", name = "Work")))
+        )
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        val tagUiModel = viewModel.uiState.value.asContent().tags.single()
+
+        // Act
+        // Normal: the requested tag is held for delete confirmation
+        viewModel.requestDelete(tagUiModel)
+        runCurrent()
+
+        // Assert
+        assertEquals(tagUiModel, viewModel.uiState.value.asContent().showDeleteDialog)
+    }
+
+    @Test
+    fun normalConfirmDeleteDeletesTagAndClosesDialog() = runTest(dispatcher) {
+        // Arrange
+        val tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1", name = "Work")))
+        val viewModel = tagManageViewModel(tagRepository = tagRepository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.requestDelete(viewModel.uiState.value.asContent().tags.single())
+
+        // Act
+        // Normal: confirming deletes the tag and closes the dialog
+        viewModel.confirmDelete()
+        advanceUntilIdle()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertAll(
+            { assertEquals(listOf(TagId("tag-1")), tagRepository.deletedIds) },
+            { assertEquals(null, state.showDeleteDialog) },
+            { assertEquals(emptyList<TagUiModel>(), state.tags) }
+        )
+    }
+
+    @Test
+    fun boundaryConfirmDeleteWithoutDialogDoesNotDeleteTag() = runTest(dispatcher) {
+        // Arrange
+        val tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1")))
+        val viewModel = tagManageViewModel(tagRepository = tagRepository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+
+        // Act
+        // Boundary: confirming without a requested tag is a no-op
+        viewModel.confirmDelete()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(emptyList<TagId>(), tagRepository.deletedIds)
+    }
+
+    @Test
+    fun normalDismissDeleteDialogClosesDialogWithoutDeleting() = runTest(dispatcher) {
+        // Arrange
+        val tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1", name = "Work")))
+        val viewModel = tagManageViewModel(tagRepository = tagRepository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.requestDelete(viewModel.uiState.value.asContent().tags.single())
+        runCurrent()
+
+        // Act
+        // Normal: dismissing closes the dialog and keeps the tag
+        viewModel.dismissDeleteDialog()
+        runCurrent()
+
+        // Assert
+        assertAll(
+            { assertEquals(null, viewModel.uiState.value.asContent().showDeleteDialog) },
+            { assertEquals(emptyList<TagId>(), tagRepository.deletedIds) }
+        )
+    }
+
     private suspend fun TagManageViewModel.firstContent(
         predicate: (TagManageUiState.Content) -> Boolean = { true }
     ): TagManageUiState.Content =
@@ -326,6 +635,11 @@ class TagManageViewModelTest {
                 if (error != null) throw error
                 tags
             }
+    }
+
+    private class SaveFailingTagRepository : TagRepository by FakeTagRepository() {
+
+        override suspend fun saveTag(tag: Tag): Unit = error("Failed to save tag.")
     }
 
     private class DeleteFailingTagRepository(initialTags: List<Tag>) : TagRepository {

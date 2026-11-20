@@ -13,6 +13,8 @@ import com.lambdarc.litememo.domain.exception.MemoImportException
 import com.lambdarc.litememo.domain.exception.MemoImportFailureReason
 import com.lambdarc.litememo.domain.memoFixture
 import com.lambdarc.litememo.domain.model.ExportData
+import com.lambdarc.litememo.domain.model.MemoSortOrder
+import com.lambdarc.litememo.domain.model.ThemeMode
 import com.lambdarc.litememo.domain.model.value.ExportFileReference
 import com.lambdarc.litememo.domain.model.value.MemoExportToken
 import com.lambdarc.litememo.domain.model.value.TagName
@@ -39,8 +41,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -601,6 +605,191 @@ class SettingsViewModelTest {
             AppLockAuthenticationUiResult.CANCELED,
             SettingsSnackbarUiEvent.AppLockAuthenticationCanceled
         )
+    }
+
+    @Test
+    fun normalSetThemeModePersistsSelectedMode() = runTest(dispatcher) {
+        // Arrange
+        val settings = FakeUserSettingsRepository()
+        val viewModel = viewModel(FakeMemoExportArchiveRepository(), settings = settings)
+
+        // Act
+        // Normal: the selected theme mode is stored in settings
+        viewModel.setThemeMode(ThemeMode.DARK)
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(ThemeMode.DARK, settings.observeThemeMode().first())
+    }
+
+    @Test
+    fun normalSetMemoSortOrderPersistsSelectedOrder() = runTest(dispatcher) {
+        // Arrange
+        val settings = FakeUserSettingsRepository()
+        val viewModel = viewModel(FakeMemoExportArchiveRepository(), settings = settings)
+
+        // Act
+        // Normal: the selected sort order is stored in settings
+        viewModel.setMemoSortOrder(MemoSortOrder.CREATED_NEWEST)
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(MemoSortOrder.CREATED_NEWEST, settings.observeMemoSortOrder().first())
+    }
+
+    @Test
+    fun interactionBeginAppLockAuthenticationRejectsRequestWhileAuthenticating() {
+        // Arrange
+        val viewModel = viewModel(FakeMemoExportArchiveRepository())
+        viewModel.beginAppLockAuthentication()
+
+        // Act
+        // Interaction: a second request during authentication is ignored
+        val accepted = viewModel.beginAppLockAuthentication()
+
+        // Assert
+        assertEquals(false, accepted)
+    }
+
+    @Test
+    fun interactionBeginAppLockAuthenticationAcceptsRequestAfterResult() {
+        // Arrange
+        val viewModel = viewModel(FakeMemoExportArchiveRepository())
+        viewModel.beginAppLockAuthentication()
+        viewModel.onAppLockEnableAuthenticationResult(AppLockAuthenticationUiResult.CANCELED)
+
+        // Act
+        // Interaction: a delivered result releases the authentication guard
+        val accepted = viewModel.beginAppLockAuthentication()
+
+        // Assert
+        assertEquals(true, accepted)
+    }
+
+    @Test
+    fun interactionOnImportFileSelectedIgnoredWhenExportIsRunning() = runTest(dispatcher) {
+        // Arrange
+        val prepareGate = CompletableDeferred<Unit>()
+        val archiveRepository = importArchiveRepository()
+        val viewModel = viewModel(
+            FakeMemoExportArchiveRepository(prepareGate = prepareGate),
+            importMemosFromFileUseCase(archiveRepository)
+        )
+        viewModel.prepareExport()
+        runCurrent()
+        prepareGate.complete(Unit)
+        advanceUntilIdle()
+
+        // Act
+        // Interaction: a selection made during export is dropped, not kept for later
+        viewModel.onImportFileSelected(IMPORT_REFERENCE)
+        viewModel.cancelPreparedExport()
+        advanceUntilIdle()
+        viewModel.confirmImport()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(emptyList<ExportFileReference>(), archiveRepository.stagedReferences)
+    }
+
+    @Test
+    fun interactionOnImportFileSelectedIgnoredWhenImportIsRunning() = runTest(dispatcher) {
+        // Arrange
+        val gate = CompletableDeferred<Unit>()
+        val archiveRepository = importArchiveRepository()
+        val viewModel = viewModel(
+            FakeMemoExportArchiveRepository(),
+            importMemosFromFileUseCase(archiveRepository, FakeMemoImportRepository(gate))
+        )
+        viewModel.onImportFileSelected(IMPORT_REFERENCE)
+        viewModel.confirmImport()
+        runCurrent()
+
+        // Act
+        // Interaction: a selection made during import is dropped, not kept for later
+        viewModel.onImportFileSelected(IMPORT_REFERENCE)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        viewModel.confirmImport()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(listOf(IMPORT_REFERENCE), archiveRepository.stagedReferences)
+    }
+
+    @Test
+    fun flowConfirmImportShowsSizeLimitExceededDialog() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = importFailingViewModel(MemoImportFailureReason.SIZE_LIMIT_EXCEEDED)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect {}
+        }
+
+        // Act
+        // Flow/Error: oversized archives have a dedicated dialog.
+        viewModel.confirmImport()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(
+            SettingsImportErrorDialogUiState.SizeLimitExceeded,
+            viewModel.uiState.value.importErrorDialog
+        )
+    }
+
+    @Test
+    fun flowConfirmImportShowsInsufficientStorageDialog() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = importFailingViewModel(MemoImportFailureReason.INSUFFICIENT_STORAGE)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect {}
+        }
+
+        // Act
+        // Flow/Error: a full device has a dedicated dialog.
+        viewModel.confirmImport()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(
+            SettingsImportErrorDialogUiState.InsufficientStorage,
+            viewModel.uiState.value.importErrorDialog
+        )
+    }
+
+    @Test
+    fun boundaryHostStoppedKeepsPreparedExportAfterPickerRequestIsHandled() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeMemoExportArchiveRepository()
+        val viewModel = viewModel(repository)
+        viewModel.prepareExport()
+        advanceUntilIdle()
+        val requestId = viewModel.uiState.first { it.exportPickerRequestId != null }
+            .exportPickerRequestId!!
+        viewModel.onExportPickerRequestHandled(requestId)
+
+        // Act
+        // Boundary: the host stops while the picker is open, which must not discard the archive
+        viewModel.onExportPickerHostStopped()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(emptyList<MemoExportToken>(), repository.discardedTokens)
+    }
+
+    @Test
+    fun boundaryCancelPreparedExportWithoutTokenDiscardsNothing() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeMemoExportArchiveRepository()
+        val viewModel = viewModel(repository)
+
+        // Act
+        // Boundary: cancel without a prepared archive is a no-op
+        viewModel.cancelPreparedExport()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(emptyList<MemoExportToken>(), repository.discardedTokens)
     }
 
     private fun importFailingViewModel(reason: MemoImportFailureReason): SettingsViewModel =

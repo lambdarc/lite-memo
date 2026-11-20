@@ -6,9 +6,12 @@ import com.lambdarc.litememo.domain.FakeTagRepository
 import com.lambdarc.litememo.domain.MutableTimeProvider
 import com.lambdarc.litememo.domain.memoFixture
 import com.lambdarc.litememo.domain.model.Memo
+import com.lambdarc.litememo.domain.model.Tag
 import com.lambdarc.litememo.domain.model.value.MemoId
+import com.lambdarc.litememo.domain.model.value.TagId
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.repository.MemoRepository
+import com.lambdarc.litememo.domain.repository.TagRepository
 import com.lambdarc.litememo.domain.tagFixture
 import com.lambdarc.litememo.domain.usecase.DeleteMemosPermanentlyUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
@@ -457,6 +460,231 @@ class TrashViewModelTest {
         assertEquals(listOf(TimestampMillis(0L)), repository.purgeCutoffs)
     }
 
+    @Test
+    fun normalUiStateAttachesTagsToTrashedMemo() = runTest(dispatcher) {
+        // Arrange
+        val tag = tagFixture(id = "tag-1", name = "Work")
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L, tagIds = listOf(tag.id))
+        val viewModel = trashViewModel(
+            memoRepository = FakeMemoRepository(listOf(memo)),
+            tagRepository = FakeTagRepository(listOf(tag))
+        )
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+
+        // Act
+        // Normal: tags of a trashed memo are resolved into UI models
+        runCurrent()
+
+        // Assert
+        val tags = viewModel.uiState.value.asContent().memos.single().tags
+        assertEquals(listOf("Work"), tags.map { it.name })
+    }
+
+    @Test
+    fun boundaryUiStateDropsTagsThatNoLongerExist() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(
+            id = "memo-1",
+            deletedAt = 2_000L,
+            tagIds = listOf(TagId("missing"))
+        )
+        val viewModel = trashViewModel(
+            memoRepository = FakeMemoRepository(listOf(memo)),
+            tagRepository = FakeTagRepository()
+        )
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+
+        // Act
+        // Boundary: a tag id without a matching tag is omitted
+        runCurrent()
+
+        // Assert
+        val tags = viewModel.uiState.value.asContent().memos.single().tags
+        assertEquals(emptyList<String>(), tags.map { it.name })
+    }
+
+    @Test
+    fun errorUiStateIsErrorWhenObserveTagsFails() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = trashViewModel(tagRepository = ObserveTagsFailingTagRepository())
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+
+        // Act
+        // Error: a tag observation failure surfaces as a screen error
+        runCurrent()
+
+        // Assert
+        assertEquals(TrashUiState.Error(), viewModel.uiState.value)
+    }
+
+    @Test
+    fun stateTransitionClearSelectionDeselectsAllMemos() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val viewModel = trashViewModel(memoRepository = FakeMemoRepository(listOf(memo)))
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startSelection(memo.id)
+        runCurrent()
+
+        // Act
+        // StateTransition: clearing leaves no memo selected
+        viewModel.clearSelection()
+        runCurrent()
+
+        // Assert
+        val selection = viewModel.uiState.value.asContent().selection
+        assertEquals(emptySet<MemoId>(), selection.selectedMemoIds)
+    }
+
+    @Test
+    fun boundaryRestoreSelectedMemosDoesNothingWhenNothingIsSelected() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val repository = FakeMemoRepository(listOf(memo))
+        val viewModel = trashViewModel(memoRepository = repository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+
+        // Act
+        // Boundary: an empty selection does not call restore
+        viewModel.restoreSelectedMemos()
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(emptyList<MemoId>(), repository.restoredIds)
+    }
+
+    @Test
+    fun coroutineRapidRestoreSelectedMemosRestoresOnlyOnce() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val repository = CallRecordingMemoRepository(listOf(memo))
+        val viewModel = trashViewModel(memoRepository = repository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startSelection(memo.id)
+        runCurrent()
+
+        // Act & Assert
+        // Coroutine/Boundary: the in-flight guard blocks the second rapid restore
+        viewModel.actionErrorEvent.test {
+            viewModel.restoreSelectedMemos()
+            viewModel.restoreSelectedMemos()
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertEquals(listOf(listOf(memo.id)), repository.restoreCalls)
+    }
+
+    @Test
+    fun coroutineConfirmEmptyTrashIsIgnoredWhileRestoreIsInFlight() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val repository = CallRecordingMemoRepository(listOf(memo))
+        val viewModel = trashViewModel(memoRepository = repository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startSelection(memo.id)
+        runCurrent()
+
+        // Act
+        // Coroutine/Boundary: an empty-trash confirm during a restore is ignored
+        viewModel.restoreSelectedMemos()
+        viewModel.confirmEmptyTrash()
+        advanceUntilIdle()
+
+        // Assert
+        assertAll(
+            { assertEquals(listOf(listOf(memo.id)), repository.restoreCalls) },
+            { assertEquals(emptyList<List<MemoId>>(), repository.deleteCalls) }
+        )
+    }
+
+    @Test
+    fun coroutineRestoreSelectedMemosIsIgnoredWhileEmptyTrashIsInFlight() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val repository = CallRecordingMemoRepository(listOf(memo))
+        val viewModel = trashViewModel(memoRepository = repository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.startSelection(memo.id)
+        runCurrent()
+
+        // Act
+        // Coroutine/Boundary: a restore during an empty-trash run is ignored
+        viewModel.confirmEmptyTrash()
+        viewModel.restoreSelectedMemos()
+        advanceUntilIdle()
+
+        // Assert
+        assertAll(
+            { assertEquals(listOf(listOf(memo.id)), repository.deleteCalls) },
+            { assertEquals(emptyList<List<MemoId>>(), repository.restoreCalls) }
+        )
+    }
+
+    @Test
+    fun normalDismissEmptyTrashDialogHidesDialog() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val viewModel = trashViewModel(memoRepository = FakeMemoRepository(listOf(memo)))
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.requestEmptyTrash()
+        runCurrent()
+
+        // Act
+        // Normal: dismissing closes the dialog
+        viewModel.dismissEmptyTrashDialog()
+        runCurrent()
+
+        // Assert
+        assertEquals(false, viewModel.uiState.value.asContent().showEmptyTrashDialog)
+    }
+
+    @Test
+    fun stateTransitionConfirmEmptyTrashHidesDialogWhenDeleteSucceeds() = runTest(dispatcher) {
+        // Arrange
+        val memo = memoFixture(id = "memo-1", deletedAt = 2_000L)
+        val viewModel = trashViewModel(memoRepository = FakeMemoRepository(listOf(memo)))
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.requestEmptyTrash()
+        runCurrent()
+
+        // Act
+        // StateTransition: a successful empty-trash closes the dialog
+        viewModel.confirmEmptyTrash()
+        advanceUntilIdle()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertAll(
+            { assertEquals(false, state.showEmptyTrashDialog) },
+            { assertEquals(emptyList<MemoId>(), state.memos.map { it.id }) }
+        )
+    }
+
+    @Test
+    fun boundaryConfirmEmptyTrashDoesNothingWhenTrashIsEmpty() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeMemoRepository()
+        val viewModel = trashViewModel(memoRepository = repository)
+        backgroundScope.launch(dispatcher) { viewModel.uiState.collect() }
+        runCurrent()
+
+        // Act & Assert
+        // Boundary: an empty trash neither deletes nor emits an error
+        viewModel.actionErrorEvent.test {
+            viewModel.confirmEmptyTrash()
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        assertEquals(emptyList<MemoId>(), repository.permanentlyDeletedIds)
+    }
+
     private suspend fun TrashViewModel.firstContent(
         predicate: (TrashUiState.Content) -> Boolean = { true }
     ): TrashUiState.Content = uiState.filterIsInstance<TrashUiState.Content>().first(predicate)
@@ -469,7 +697,7 @@ class TrashViewModelTest {
 
     private fun trashViewModel(
         memoRepository: MemoRepository = FakeMemoRepository(),
-        tagRepository: FakeTagRepository = FakeTagRepository(listOf(tagFixture()))
+        tagRepository: TagRepository = FakeTagRepository(listOf(tagFixture()))
     ) = TrashViewModel(
         observeTrashedMemosUseCase = ObserveTrashedMemosUseCase(memoRepository),
         observeTagsUseCase = ObserveTagsUseCase(tagRepository),
@@ -480,6 +708,24 @@ class TrashViewModelTest {
             currentTimeProvider = MutableTimeProvider(TimestampMillis(0L))
         )
     )
+
+    private class CallRecordingMemoRepository(
+        initialMemos: List<Memo>,
+        private val delegate: FakeMemoRepository = FakeMemoRepository(initialMemos)
+    ) : MemoRepository by delegate {
+        val restoreCalls = mutableListOf<List<MemoId>>()
+        val deleteCalls = mutableListOf<List<MemoId>>()
+
+        override suspend fun restoreMemosFromTrash(ids: List<MemoId>) {
+            restoreCalls += ids
+            delegate.restoreMemosFromTrash(ids)
+        }
+
+        override suspend fun deleteMemosPermanently(ids: List<MemoId>) {
+            deleteCalls += ids
+            delegate.deleteMemosPermanently(ids)
+        }
+    }
 
     private class RestoreFailingMemoRepository(initialMemos: List<Memo>) :
         MemoRepository by FakeMemoRepository(initialMemos) {
@@ -496,6 +742,12 @@ class TrashViewModelTest {
     private class ObserveTrashedFailingMemoRepository : MemoRepository by FakeMemoRepository() {
         override fun observeTrashedMemos(): Flow<List<Memo>> = flow {
             throw IllegalStateException("Failed to observe trashed memos.")
+        }
+    }
+
+    private class ObserveTagsFailingTagRepository : TagRepository by FakeTagRepository() {
+        override fun observeTags(): Flow<List<Tag>> = flow {
+            throw IllegalStateException("Failed to observe tags.")
         }
     }
 
