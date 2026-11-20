@@ -37,6 +37,10 @@ UI 層は `*ViewModel*` / `*UiState*` / `*UiResult*` / `*UiModel*` / `*UiDirecti
 役割の接尾語に合わない名前の型を追加すると、集計対象から外れます。
 外れても失敗しないため、集計したい型は既存の接尾語へ命名をそろえるか、`classes(...)` にパターンを追加します。
 
+集計対象のパッケージには Hilt が生成する `*_Factory` や `*_HiltModules*` も含まれます。
+これらは Unit Test から直接呼ばれず、未到達の行として全体の値を押し下げるため、`excludes` の `classes(...)` で除外します。
+Hilt の生成物に新しい命名パターンが増えた場合は、`excludes` に追加します。
+
 ## キャッシュ
 
 GitHub Actions の Gradle / AVD キャッシュは、長期運用する `main` の push で作成します。
