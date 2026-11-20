@@ -157,6 +157,35 @@ class MemoArchiveReaderTest {
     }
 
     @Test
+    fun errorReadRejectsManifestEntryNameThatIsNotValidUtf8() {
+        // Arrange
+        val archive = writeArchive(manifestFixture())
+        val corrupted = withInvalidUtf8InEntryName(archive, MemoArchiveLayout.MANIFEST_ENTRY_NAME)
+
+        // Act & Assert
+        // Error: an undecodable first entry name is reported as a malformed archive
+        assertArchiveFailure(MemoArchiveFailureReason.MALFORMED_ARCHIVE) {
+            readArchive(corrupted)
+        }
+    }
+
+    @Test
+    fun errorReadRejectsImageEntryNameThatIsNotValidUtf8() {
+        // Arrange
+        val content = compressedImageBytes(sizeBytes = 128, seed = 1)
+        val image = imageDtoFixture(content)
+        val manifest = manifestFixture(memos = listOf(memoDtoFixture(images = listOf(image))))
+        val archive = writeArchive(manifest, contentsOf(manifest, listOf(content)))
+        val corrupted = withInvalidUtf8InEntryName(archive, image.archiveEntry)
+
+        // Act & Assert
+        // Error: an undecodable image entry name is reported as a malformed archive
+        assertArchiveFailure(MemoArchiveFailureReason.MALFORMED_ARCHIVE) {
+            readArchive(corrupted)
+        }
+    }
+
+    @Test
     fun errorReadRejectsArchiveMissingDeclaredImageEntry() {
         // Arrange
         val content = compressedImageBytes(sizeBytes = 128, seed = 1)
@@ -400,6 +429,14 @@ class MemoArchiveReaderTest {
         }
     }
 
+    private fun withInvalidUtf8InEntryName(archive: ByteArray, entryName: String): ByteArray {
+        val nameBytes = entryName.toByteArray(Charsets.UTF_8)
+        val localHeaderNameOffset = (0..archive.size - nameBytes.size).first { offset ->
+            nameBytes.indices.all { archive[offset + it] == nameBytes[it] }
+        }
+        return archive.copyOf().also { it[localHeaderNameOffset] = INVALID_UTF8_BYTE }
+    }
+
     private fun contentsOf(
         manifest: LiteMemoExportDto,
         contents: List<ByteArray>
@@ -412,3 +449,5 @@ class MemoArchiveReaderTest {
 private const val EXPANDED_ENTRY_BYTES = 1024 * 1024
 
 private const val TRUNCATED_TAIL_BYTES = 512
+
+private const val INVALID_UTF8_BYTE: Byte = -1
