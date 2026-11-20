@@ -343,6 +343,63 @@ class MemoArchiveReaderTest {
         assertTrue(openedEntries.isEmpty())
     }
 
+    @Test
+    fun boundaryReadAcceptsManifestAtManifestSizeLimit() {
+        // Arrange
+        val manifest = manifestFixture(memos = listOf(memoDtoFixture()))
+        val manifestBytes = encodeManifest(manifest)
+        val archive = rawArchive(listOf(MemoArchiveLayout.MANIFEST_ENTRY_NAME to manifestBytes))
+        val limits = MemoArchiveLimits.DEFAULT.copy(maxManifestBytes = manifestBytes.size.toLong())
+
+        // Act
+        // Boundary: a manifest exactly at the size limit is read
+        val result = readArchive(archive, limits)
+
+        // Assert
+        assertEquals(manifest, result.manifest)
+    }
+
+    @Test
+    fun boundaryReadAcceptsEntryCountAtLimit() {
+        // Arrange
+        val content = compressedImageBytes(sizeBytes = 64, seed = 1)
+        val manifest = manifestFixture(
+            memos = listOf(memoDtoFixture(images = listOf(imageDtoFixture(content))))
+        )
+        val archive = writeArchive(manifest, contentsOf(manifest, listOf(content)))
+        val limits = MemoArchiveLimits.DEFAULT.copy(maxEntryCount = 2)
+
+        // Act
+        // Boundary: one image plus the manifest exactly fill the entry count limit
+        val result = readArchive(archive, limits)
+
+        // Assert
+        assertEquals(listOf(MemoArchiveLayout.imageEntryName(1)), result.images.keys.toList())
+    }
+
+    @Test
+    fun boundaryReadRejectsEntryBeyondEntryCountLimit() {
+        // Arrange
+        val content = compressedImageBytes(sizeBytes = 64, seed = 1)
+        val manifest = manifestFixture(
+            memos = listOf(memoDtoFixture(images = listOf(imageDtoFixture(content))))
+        )
+        val archive = rawArchive(
+            listOf(
+                MemoArchiveLayout.MANIFEST_ENTRY_NAME to encodeManifest(manifest),
+                MemoArchiveLayout.imageEntryName(1) to content,
+                MemoArchiveLayout.imageEntryName(2) to content
+            )
+        )
+        val limits = MemoArchiveLimits.DEFAULT.copy(maxEntryCount = 2)
+
+        // Act & Assert
+        // Boundary: entries actually read are counted even when the manifest stays within the limit
+        assertArchiveFailure(MemoArchiveFailureReason.LIMIT_EXCEEDED) {
+            readArchive(archive, limits)
+        }
+    }
+
     private fun contentsOf(
         manifest: LiteMemoExportDto,
         contents: List<ByteArray>
