@@ -146,6 +146,7 @@ Screen を直接呼ぶとテストごとに全 callback を書くことになり
 | `Flow` | `StateFlow` / event stream の発火を検証 |
 | `Coroutine` | 仮想時間・debounce・キャンセルなど coroutine の挙動 |
 | `StateTransition` | 操作前後の UI state の遷移 |
+| `Property` | 生成した任意の入力に対して成り立つ性質（往復変換、不変条件、例外の種類など） |
 
 ### 適用ルール
 
@@ -154,6 +155,81 @@ Screen を直接呼ぶとテストごとに全 callback を書くことになり
 - 複数観点が絡む場合は `// Boundary/Interaction: ...` のように `/` で連結する
 - 観点は検証の主目的に合わせて選び、無理に増やさない
 - このルールは新規テストと、振る舞いを実質的に変更するテストへ適用する。既存テスト全体は、意図した移行作業でない限り一括変更しない
+
+## テストケースの選び方
+
+### 境界値分析
+
+上限・下限・閾値を持つ条件は、境界の両側をテストします。
+
+- on ポイント: 境界ちょうどの値（上限ちょうど、30 日ちょうど、デバウンス時間ちょうど）
+- off ポイント: 境界を 1 単位越えた値（上限 + 1、999ms、`updatedAt` が `createdAt` の 1ms 前）
+- 片側だけでは `>` と `>=` の取り違えを検出できないため、拒否側だけ・受理側だけで終わらせない
+- 単位は条件の型に合わせる（バイト数なら 1 バイト、文字数なら 1 文字、時刻なら 1ms）
+- 0 件・空・負値は、条件として明示されていなくても境界として扱う
+
+### 同値分割
+
+入力を「同じ扱いを受けるクラス」に分け、無効なクラスも含めて 1 クラスにつき代表値を 1 つテストします。
+
+- 文字列の空白判定は、空文字、半角スペースのみ、全角スペース（U+3000）のみ、改行のみ、タブのみを別クラスとして扱う
+- 「拒否される値に似ているが正しい値」（`.` / `..` に対する `...` や `.hidden`）を正常クラスとして入れる
+- 同じ観点で複数のクラスを並べる場合は、次のパラメータ化テストを使う
+
+### パラメータ化テスト
+
+同じ振る舞いを複数の同値クラスで確かめる場合は、`@ParameterizedTest` と `@ValueSource` / `@MethodSource` を使います。
+
+- 期待結果が異なるクラスを 1 つのパラメータ化テストへ混ぜない。受理するクラスと拒否するクラスは関数を分ける
+- 関数名、AAA ラベル、観点コメントは通常のテストと同じ規則に従う
+- 境界の on / off ポイントのように値ごとに意図が異なるものは、パラメータ化せず関数を分ける
+
+```kotlin
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
+
+@ParameterizedTest
+@ValueSource(strings = ["", " ", "　", "\n", "\t"])
+fun errorConstructorThrowsWhenValueIsBlank(input: String) {
+    // Act & Assert
+    // Error: every blank character class is rejected
+    assertThrows(IllegalArgumentException::class.java) { TagName(input) }
+}
+```
+
+### プロパティテスト
+
+任意の入力で成り立つべき性質は、`kotest-property` の `checkAll` で検証します。
+`kotest` のテストランナーは使わず、JUnit Jupiter の `@Test` から呼びます。
+
+- 対象は往復変換（export → import、encode → decode）、不変条件（時刻が自分の日付範囲に入る）、失敗時の例外の種類など
+- 例ベースのテストは境界ちょうどの値を固定し、プロパティテストは同値クラスの中を広く探る、という分担にする
+- `checkAll` は suspend 関数なので `runTest` の中で呼ぶ
+- 1 回の検証が重い場合（アーカイブの読み書きなど）は `PropTestConfig(iterations = ...)` で回数を下げる
+- seed は固定しない。失敗時は縮小された反例と `Repeat this test by using seed ...` が出力されるので、`PropTestConfig(seed = ...)` でローカル再現し、反例は例ベースのテストとして追加してから修正する
+
+```kotlin
+import io.kotest.property.Arb
+import io.kotest.property.PropTestConfig
+import io.kotest.property.arbitrary.string
+import io.kotest.property.checkAll
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
+
+@Test
+fun propertyEncodedNavigationArgumentDecodesToOriginal() = runTest {
+    // Act & Assert
+    // Property: any string survives an encode and decode round trip
+    checkAll(PropTestConfig(iterations = 200), Arb.string()) { value ->
+        val encoded = encodeNavigationArgument(value)
+        assertEquals(value, URLDecoder.decode(encoded, StandardCharsets.UTF_8))
+    }
+}
+```
 
 ## Coroutine Test
 

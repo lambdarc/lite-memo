@@ -152,6 +152,13 @@ kover {
                     "com.lambdarc.litememo.ui.*.*UiType*"
                 )
             }
+            excludes {
+                classes(
+                    "*_Factory*",
+                    "*_HiltModules*",
+                    "*_MembersInjector*"
+                )
+            }
         }
     }
 }
@@ -246,6 +253,8 @@ dependencies {
 
     // Unit test
     testImplementation(libs.junit.jupiter.api)
+    testImplementation(libs.junit.jupiter.params)
+    testImplementation(libs.kotest.property)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)
