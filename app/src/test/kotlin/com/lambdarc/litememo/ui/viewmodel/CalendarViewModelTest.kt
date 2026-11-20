@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -631,6 +632,186 @@ class CalendarViewModelTest {
 
         // Assert
         assertEquals(false, state.isDatePickerVisible)
+    }
+
+    @Test
+    fun boundaryNextMonthCoercesDay31ToLastDayOfFebruaryInCommonYear() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.selectDate(LocalDate.of(2027, 1, 31))
+        runCurrent()
+
+        // Act
+        // Boundary: day 31 is coerced to 28 in February of a common year.
+        viewModel.nextMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertAll(
+            { assertEquals(YearMonth.of(2027, 2), state.selectedMonth) },
+            { assertEquals(LocalDate.of(2027, 2, 28), state.selectedDate) }
+        )
+    }
+
+    @Test
+    fun boundaryNextMonthCoercesDay31ToLastDayOfFebruaryInLeapYear() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.selectDate(LocalDate.of(2028, 1, 31))
+        runCurrent()
+
+        // Act
+        // Boundary: day 31 is coerced to 29 in February of a leap year.
+        viewModel.nextMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(LocalDate.of(2028, 2, 29), state.selectedDate)
+    }
+
+    @Test
+    fun boundaryNextMonthCoercesDay31ToDay30WhenNextMonthHas30Days() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.selectDate(LocalDate.of(2026, 5, 31))
+        runCurrent()
+
+        // Act
+        // Boundary: day 31 is coerced to 30 in a 30-day month.
+        viewModel.nextMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(LocalDate.of(2026, 6, 30), state.selectedDate)
+    }
+
+    @Test
+    fun boundaryPreviousMonthCoercesDay31ToLastDayOfFebruary() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.selectDate(LocalDate.of(2027, 3, 31))
+        runCurrent()
+
+        // Act
+        // Boundary: moving back to a shorter month coerces the day as well.
+        viewModel.previousMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(LocalDate.of(2027, 2, 28), state.selectedDate)
+    }
+
+    @Test
+    fun boundaryNextMonthKeepsDay28WhenFebruaryHas28Days() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.selectDate(LocalDate.of(2027, 1, 28))
+        runCurrent()
+
+        // Act
+        // Boundary: day 28 already fits February and is kept.
+        viewModel.nextMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(LocalDate.of(2027, 2, 28), state.selectedDate)
+    }
+
+    @Test
+    fun boundaryNextMonthCoercesDay29ToDay28WhenFebruaryHas28Days() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.selectDate(LocalDate.of(2027, 1, 29))
+        runCurrent()
+
+        // Act
+        // Boundary: day 29 is one past the last day of a common-year February.
+        viewModel.nextMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(LocalDate.of(2027, 2, 28), state.selectedDate)
+    }
+
+    @Test
+    fun stateTransitionShowDatePickerMakesDatePickerVisible() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        runCurrent()
+
+        // Act
+        // StateTransition: showing the picker is reflected in UI state.
+        viewModel.showDatePicker()
+        runCurrent()
+
+        // Assert
+        assertTrue(viewModel.uiState.value.asContent().isDatePickerVisible)
+    }
+
+    @Test
+    fun stateTransitionDismissDatePickerHidesDatePicker() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.showDatePicker()
+        runCurrent()
+
+        // Act
+        // StateTransition: dismissing the picker is reflected in UI state.
+        viewModel.dismissDatePicker()
+        runCurrent()
+
+        // Assert
+        assertFalse(viewModel.uiState.value.asContent().isDatePickerVisible)
+    }
+
+    @Test
+    fun stateTransitionSelectDateFromPickerDismissesDatePicker() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.showDatePicker()
+        runCurrent()
+
+        // Act
+        // StateTransition: picking a date closes the picker.
+        viewModel.selectDateFromPicker(epochMillis("2026-07-03T00:00:00Z"))
+        runCurrent()
+
+        // Assert
+        assertFalse(viewModel.uiState.value.asContent().isDatePickerVisible)
+    }
+
+    @Test
+    fun normalUiStateMarksOnlySelectedDateAsSelected() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+
+        // Act
+        // Normal: exactly one day of the month is flagged as selected.
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(listOf(15), state.days.filter { it.isSelected }.map { it.dayOfMonth })
+    }
+
+    private fun TestScope.collectUiState(viewModel: CalendarViewModel) {
+        backgroundScope.launch { viewModel.uiState.collect {} }
     }
 
     private suspend fun CalendarViewModel.firstContent(
