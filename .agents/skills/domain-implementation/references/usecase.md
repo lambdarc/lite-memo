@@ -25,5 +25,6 @@
 
 ## 検証観点
 
-- 単純な委譲だけの UseCase を不要に増やしていないか（結合を避ける必要があるときだけ挟む）。
+- UI の入口（ViewModel / Glance）が Repository interface や provider を直接持たず、UseCase 経由になっているか。
+- 同じ操作の UseCase を重複させていないか。
 - 例外・空・境界時の振る舞いが定義されているか。

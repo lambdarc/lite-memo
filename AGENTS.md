@@ -23,17 +23,17 @@ Lite Memo で Codex が最初に読む入口です。
 作業の種類に応じて、必要な Skill を最初に確認します。
 Codex 向け skill は `.agents/skills/` で管理する。Claude Code 向けの `.claude/skills/` とは自動同期しない。
 
-- `ui-implementation`: Compose / ViewModel / UI state / 画面テスト
+- `ui-implementation`: 画面まわりの実装をするときに使う（Compose / ViewModel / UI state / 画面テスト）
   - [`.agents/skills/ui-implementation/SKILL.md`](.agents/skills/ui-implementation/SKILL.md)
-- `domain-implementation`: model / value object / UseCase / Repository interface
+- `domain-implementation`: 業務ルールまわりの実装をするときに使う（model / value object / UseCase / Repository interface）
   - [`.agents/skills/domain-implementation/SKILL.md`](.agents/skills/domain-implementation/SKILL.md)
-- `data-implementation`: Repository 実装 / mapper / DataStore / export-import
+- `data-implementation`: データ入出力の実装をするときに使う（Repository 実装 / mapper / DataStore / export-import）
   - [`.agents/skills/data-implementation/SKILL.md`](.agents/skills/data-implementation/SKILL.md)
-- `db-implementation`: Room entity / DAO / migration / schema
+- `db-implementation`: DB まわりの実装をするときに使う（Room entity / DAO / migration / schema）
   - [`.agents/skills/db-implementation/SKILL.md`](.agents/skills/db-implementation/SKILL.md)
-- `test-implementation`: Unit Test / androidTest / coroutine / Flow 検証
+- `test-implementation`: テストの実装をするときに使う（Unit Test / androidTest / coroutine / Flow 検証）
   - [`.agents/skills/test-implementation/SKILL.md`](.agents/skills/test-implementation/SKILL.md)
-- `implementation-review`: 実装後レビューと指摘整理
+- `implementation-review`: 実装をレビューするときに使う（依存方向 / 責務分離 / migration / UI state / テスト不足）
   - [`.agents/skills/implementation-review/SKILL.md`](.agents/skills/implementation-review/SKILL.md)
 
 ## 最低限の前提

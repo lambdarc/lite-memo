@@ -332,6 +332,72 @@ class WidgetMemoLoaderTest {
         )
     }
 
+    @Test
+    fun boundaryTitleAtMaxLengthIsKept() = runTest {
+        // Arrange
+        val title = "t".repeat(50)
+        val loader = loader(
+            memoRepository = memoRepository(memoFixture(id = "m", title = title, body = ""))
+        )
+
+        // Act
+        // Boundary: a title exactly at the limit is shown without truncation
+        val item = loader.observeRecent().first().single()
+
+        // Assert
+        assertEquals(title, item.title)
+    }
+
+    @Test
+    fun boundaryTitleOneOverMaxLengthIsTruncated() = runTest {
+        // Arrange
+        val loader = loader(
+            memoRepository = memoRepository(
+                memoFixture(id = "m", title = "t".repeat(51), body = "")
+            )
+        )
+
+        // Act
+        // Boundary: one character over the limit is cut back to the limit
+        val item = loader.observeRecent().first().single()
+
+        // Assert
+        assertEquals("t".repeat(50), item.title)
+    }
+
+    @Test
+    fun boundarySnippetAtMaxLengthIsKept() = runTest {
+        // Arrange
+        val body = "s".repeat(80)
+        val loader = loader(
+            memoRepository = memoRepository(memoFixture(id = "m", title = "T", body = body))
+        )
+
+        // Act
+        // Boundary: a snippet exactly at the limit is shown without truncation
+        val item = loader.observeRecent().first().single()
+
+        // Assert
+        assertEquals(body, item.snippet)
+    }
+
+    @Test
+    fun boundarySnippetOneOverMaxLengthIsTruncated() = runTest {
+        // Arrange
+        val loader = loader(
+            memoRepository = memoRepository(
+                memoFixture(id = "m", title = "T", body = "s".repeat(81))
+            )
+        )
+
+        // Act
+        // Boundary: one character over the limit is cut back to the limit
+        val item = loader.observeRecent().first().single()
+
+        // Assert
+        assertEquals("s".repeat(80), item.snippet)
+    }
+
     private fun memoRepository(vararg memos: Memo) = FakeMemoRepository(memos.toList())
 
     private fun loader(

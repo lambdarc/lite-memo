@@ -4,13 +4,19 @@ import com.lambdarc.litememo.domain.model.value.TagId
 import com.lambdarc.litememo.ui.model.TagUiModel
 import com.lambdarc.litememo.ui.theme.DEFAULT_TAG_COLORS
 
-data class TagManageUiState(
-    val isLoading: Boolean = true,
-    val hasError: Boolean = false,
-    val tags: List<TagUiModel> = emptyList(),
-    val editingTag: TagEditUiState? = null,
-    val showDeleteDialog: TagUiModel? = null
-)
+sealed class TagManageUiState {
+
+    data object Loading : TagManageUiState()
+
+    data object Error : TagManageUiState()
+
+    data class Content(
+        val tags: List<TagUiModel> = emptyList(),
+        val editingTag: TagEditUiState? = null,
+        val showDeleteDialog: TagUiModel? = null
+    ) : TagManageUiState()
+
+}
 
 data class TagEditUiState(
     val id: TagId? = null,

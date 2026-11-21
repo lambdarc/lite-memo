@@ -63,6 +63,7 @@ import com.lambdarc.litememo.ui.component.LoadingContent
 import com.lambdarc.litememo.ui.component.MemoImageThumbnail
 import com.lambdarc.litememo.ui.component.toComposeColor
 import com.lambdarc.litememo.ui.state.MemoEditUiState
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import com.lambdarc.litememo.ui.theme.LiteMemoTheme
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -81,7 +82,7 @@ fun MemoEditScreen(
     onShareMemo: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val canEdit = !uiState.isLoading && !uiState.hasError && !uiState.isDeletePending
+    val canEdit = uiState.status == ScreenUiStatus.CONTENT && !uiState.isDeletePending
     Scaffold(
         modifier = modifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -96,12 +97,12 @@ fun MemoEditScreen(
             )
         }
     ) { innerPadding ->
-        when {
-            uiState.isLoading -> LoadingContent()
+        when (uiState.status) {
+            ScreenUiStatus.LOADING -> LoadingContent()
 
-            uiState.hasError -> ErrorContent(onRetry = onRetry)
+            ScreenUiStatus.ERROR -> ErrorContent(onRetry = onRetry)
 
-            else -> {
+            ScreenUiStatus.CONTENT -> {
                 val colorScheme = MaterialTheme.colorScheme
                 val bodyFocusRequester = remember { FocusRequester() }
                 LaunchedEffect(uiState.memoId) {
@@ -324,7 +325,6 @@ private fun MemoEditScreenPreview() {
     LiteMemoTheme {
         MemoEditScreen(
             uiState = MemoEditUiState(
-                isLoading = false,
                 memoId = "memo-1",
                 title = "買い物リスト",
                 body = "卵、牛乳、コーヒー豆。帰りに駅前で買う。",

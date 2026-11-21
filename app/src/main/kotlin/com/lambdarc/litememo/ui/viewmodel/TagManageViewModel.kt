@@ -53,10 +53,13 @@ class TagManageViewModel @Inject constructor(
             editingTag,
             deleteDialog
         ) { tags, editing, deleting ->
-            TagManageUiState(
-                isLoading = false,
-                hasError = tags == null,
-                tags = tags?.map { TagUiModel.fromDomain(it) } ?: emptyList(),
+            if (tags == null) {
+                return@combine TagManageUiState.Error
+            }
+            TagManageUiState.Content(
+                tags = tags.map {
+                    TagUiModel(id = it.id, name = it.name.value, colorArgb = it.color.argb)
+                },
                 editingTag = editing,
                 showDeleteDialog = deleting
             )
@@ -64,7 +67,7 @@ class TagManageViewModel @Inject constructor(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-        initialValue = TagManageUiState()
+        initialValue = TagManageUiState.Loading
     )
 
     fun startCreate() {
@@ -72,7 +75,7 @@ class TagManageViewModel @Inject constructor(
     }
 
     fun startEdit(tagId: TagId) {
-        val tag = uiState.value.tags.find { it.id == tagId } ?: return
+        val tag = contentTags().find { it.id == tagId } ?: return
         editingTag.value = TagEditUiState(
             id = tag.id,
             name = tag.name,
@@ -157,11 +160,16 @@ class TagManageViewModel @Inject constructor(
     }
 
     fun retry() {
+        editingTag.value = null
+        deleteDialog.value = null
         retryTrigger.update { !it }
     }
 
     private fun isDuplicateName(name: String, excludeId: TagId?): Boolean =
-        uiState.value.tags.any { it.name == name && it.id != excludeId }
+        contentTags().any { it.name == name && it.id != excludeId }
+
+    private fun contentTags(): List<TagUiModel> =
+        (uiState.value as? TagManageUiState.Content)?.tags.orEmpty()
 
     private companion object {
         const val STOP_TIMEOUT_MILLIS = 5_000L

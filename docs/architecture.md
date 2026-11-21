@@ -61,6 +61,9 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 ## MVVM
 
 - ViewModel は画面全体の状態とビジネス処理に由来する state を `StateFlow` で公開する
+- 読み込みと失敗がある画面の UiState は `Loading` / `Error` / `Content` の sealed class で排他的に表し、各状態はその状態で意味を持つ値だけを持つ。一覧やダイアログなどの表示データは `Content` だけに持たせ、選択・フィルタ・検索などエラーをまたいで残す操作状態は `Error` と `Content` の両方に持たせる。空の一覧は `Content` に含める。検索エラー、タグ読込エラー、選択、変更有無、削除中など独立した状態軸は統合しない
+- フォームのように読み込み中も値を残す画面は、画面本体を `ScreenUiStatus` の `LOADING` / `ERROR` / `CONTENT` で表す。新規の空メモは `CONTENT` に含める。メモ編集の下書きと画像の所有状態は保存・復元・cleanup に必要なセッション状態として保持し、画面本体では `CONTENT` のときだけ表示する（[`docs/memo-edit-lifecycle.md`](memo-edit-lifecycle.md)）
+- データ取得の失敗は例外のまま流さず state の値へ変換し、エラー中も選択・フィルタ・検索などの操作状態を更新し続ける。表示用の変換が失敗しても、操作状態の観測は終了させない
 - Android の Route は `StateFlow` を `collectAsStateWithLifecycle()` で収集し、state と callback を Screen に渡す
 - プロセス再生成後に復元する最小限の状態は、ViewModel 側では `SavedStateHandle`、UI 側では `rememberSaveable` を使う
 - メニューの開閉、focus など再生成後の復元が不要な UI element state は、必要な Composable の近くで `remember` により保持する
@@ -69,6 +72,7 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 - 画面固有の状態とドメインモデルを混ぜすぎない
 - 新規実装または event delivery を実質的に変更する場合、保存結果など失ってはいけない処理結果は UI state に保持し、UI から確認済み callback を受けて消費済みにする
 - UI 操作だけで完結する画面遷移は UI callback として Navigation へ渡し、ViewModel の Channel を必須経路にしない
+- ダイアログなど画面本体に重なる UI は、loading / error / content を切り替える分岐の content 側でだけ描画する。画面全体のエラーではオーバーレイを表示せず、再試行は閉じた状態から始める。選択・フィルタ・検索など画面本体の状態はエラーをまたいで保持する
 
 ## UseCase
 

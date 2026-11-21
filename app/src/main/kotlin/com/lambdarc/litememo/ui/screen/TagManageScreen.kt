@@ -102,7 +102,7 @@ fun TagManageScreen(
             )
         },
         floatingActionButton = {
-            if (!uiState.isLoading && !uiState.hasError) {
+            if (uiState is TagManageUiState.Content) {
                 FloatingActionButton(onClick = onCreateClick) {
                     Icon(
                         Icons.Default.Add,
@@ -112,77 +112,76 @@ fun TagManageScreen(
             }
         }
     ) { innerPadding ->
-        when {
-            uiState.isLoading -> LoadingContent(modifier = Modifier.padding(innerPadding))
+        when (uiState) {
+            TagManageUiState.Loading -> LoadingContent(modifier = Modifier.padding(innerPadding))
 
-            uiState.hasError -> ErrorContent(
+            TagManageUiState.Error -> ErrorContent(
                 onRetry = onRetry,
                 modifier = Modifier.padding(innerPadding)
             )
 
-            uiState.tags.isEmpty() -> {
-                MessageContent(
-                    title = stringResource(R.string.tag_empty_title),
-                    body = stringResource(R.string.tag_empty_body),
-                    modifier = Modifier.padding(innerPadding)
-                )
-            }
-
-            else -> {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    items(
-                        items = uiState.tags,
-                        key = { it.id.value }
-                    ) { tag ->
-                        TagRow(
-                            tag = tag,
-                            onEditClick = { onEditClick(tag.id) },
-                            onDeleteClick = { onDeleteRequest(tag) }
-                        )
+            is TagManageUiState.Content -> {
+                if (uiState.tags.isEmpty()) {
+                    MessageContent(
+                        title = stringResource(R.string.tag_empty_title),
+                        body = stringResource(R.string.tag_empty_body),
+                        modifier = Modifier.padding(innerPadding)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        items(
+                            items = uiState.tags,
+                            key = { it.id.value }
+                        ) { tag ->
+                            TagRow(
+                                tag = tag,
+                                onEditClick = { onEditClick(tag.id) },
+                                onDeleteClick = { onDeleteRequest(tag) }
+                            )
+                        }
                     }
+                }
+                uiState.editingTag?.let { editState ->
+                    TagEditDialog(
+                        state = editState,
+                        onNameChange = onEditNameChange,
+                        onColorSelect = onEditColorSelect,
+                        onSave = onSaveEdit,
+                        onDismiss = onCancelEdit
+                    )
+                }
+
+                uiState.showDeleteDialog?.let { tag ->
+                    AlertDialog(
+                        onDismissRequest = onDismissDelete,
+                        title = { Text(text = stringResource(R.string.tag_delete_confirm_title)) },
+                        text = {
+                            Text(
+                                text = stringResource(R.string.tag_delete_confirm_message, tag.name)
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = onConfirmDelete) {
+                                Text(
+                                    text = stringResource(R.string.delete_label),
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = onDismissDelete) {
+                                Text(text = stringResource(R.string.cancel_label))
+                            }
+                        }
+                    )
                 }
             }
         }
-    }
-
-    uiState.editingTag?.let { editState ->
-        TagEditDialog(
-            state = editState,
-            onNameChange = onEditNameChange,
-            onColorSelect = onEditColorSelect,
-            onSave = onSaveEdit,
-            onDismiss = onCancelEdit
-        )
-    }
-
-    uiState.showDeleteDialog?.let { tag ->
-        AlertDialog(
-            onDismissRequest = onDismissDelete,
-            title = { Text(text = stringResource(R.string.tag_delete_confirm_title)) },
-            text = {
-                Text(
-                    text = stringResource(R.string.tag_delete_confirm_message, tag.name)
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = onConfirmDelete) {
-                    Text(
-                        text = stringResource(R.string.delete_label),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismissDelete) {
-                    Text(text = stringResource(R.string.cancel_label))
-                }
-            }
-        )
     }
 }
 
@@ -367,8 +366,7 @@ private const val CHECKMARK_TINT_ON_LIGHT_ALPHA = 0.87f
 private fun TagManageScreenPreview() {
     LiteMemoTheme {
         TagManageScreen(
-            uiState = TagManageUiState(
-                isLoading = false,
+            uiState = TagManageUiState.Content(
                 tags = listOf(
                     TagUiModel(TagId("1"), "仕事", 0xFFB3261E),
                     TagUiModel(TagId("2"), "生活", 0xFF6750A4),

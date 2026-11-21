@@ -43,4 +43,16 @@ class ImageSourceReferenceTest {
         }
     }
 
+    @Test
+    fun errorInvokeThrowsWhenSchemeHasNoSchemeSpecificPart() {
+        // Arrange
+        val input = "content:"
+
+        // Act & Assert
+        // Error: a scheme alone does not identify a picker source
+        assertThrows(IllegalArgumentException::class.java) {
+            ImageSourceReference(input)
+        }
+    }
+
 }

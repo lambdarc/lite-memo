@@ -33,6 +33,8 @@ complexity:
     thresholdInClasses: 20
     thresholdInInterfaces: 30
     ignorePrivate: true
+  LargeClass:
+    threshold: 1000
 
 naming:
   FunctionNaming:

@@ -151,10 +151,6 @@ fun SettingsRoute(
                 viewModel.setAppLockEnabled(false)
             }
         },
-        onExpandThemeDropdown = { viewModel.expandThemeDropdown() },
-        onCollapseThemeDropdown = { viewModel.collapseThemeDropdown() },
-        onExpandSortOrder = { viewModel.expandSortOrder() },
-        onCollapseSortOrder = { viewModel.collapseSortOrder() },
         onTagManageClick = onTagManageClick,
         onTrashClick = onTrashClick,
         onExportClick = { viewModel.prepareExport() },

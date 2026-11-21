@@ -15,6 +15,7 @@ import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.model.value.TimestampRange
 import com.lambdarc.litememo.domain.repository.FakeDisplaySettingsRepository
 import com.lambdarc.litememo.domain.repository.MemoRepository
+import com.lambdarc.litememo.domain.repository.TagRepository
 import com.lambdarc.litememo.domain.tagFixture
 import com.lambdarc.litememo.domain.usecase.GetCurrentCalendarDateUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveCalendarMonthSummaryUseCase
@@ -22,22 +23,32 @@ import com.lambdarc.litememo.domain.usecase.ObserveMemosByCalendarDateUseCase
 import com.lambdarc.litememo.domain.usecase.ObserveTagsUseCase
 import com.lambdarc.litememo.domain.usecase.ResolveMemoImagePathUseCase
 import com.lambdarc.litememo.domain.usecase.SearchMemosUseCase
+import com.lambdarc.litememo.ui.model.MemoUiModel
+import com.lambdarc.litememo.ui.model.TagUiModel
+import com.lambdarc.litememo.ui.state.CalendarUiState
 import com.lambdarc.litememo.ui.state.SearchUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -64,6 +75,34 @@ class CalendarViewModelTest {
     }
 
     @Test
+    fun boundaryEmptyCalendarDataIsContent() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+
+        // Act
+        // Boundary: successfully observed empty memo data is content rather than loading or error.
+        runCurrent()
+        val state = viewModel.uiState.value
+
+        // Assert
+        assertEquals(emptyList<MemoUiModel>(), state.asContent().memos)
+    }
+
+    @Test
+    fun normalInitialStatusIsLoadingBeforeCollection() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+
+        // Act
+        // Normal: the initial calendar state waits for its data observations.
+        val state = viewModel.uiState.value
+
+        // Assert
+        assertEquals(CalendarUiState.Loading, state)
+    }
+
+    @Test
     fun nextMonthUpdatesSelectedMonth() = runTest(dispatcher) {
         // Arrange
         val viewModel = calendarViewModel()
@@ -72,7 +111,7 @@ class CalendarViewModelTest {
         // Act
         viewModel.nextMonth()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.firstContent()
 
         // Assert
         assertEquals(YearMonth.of(2026, 6), state.selectedMonth)
@@ -87,7 +126,7 @@ class CalendarViewModelTest {
         // Act
         viewModel.selectDate(LocalDate.of(2026, 5, 11))
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.firstContent()
 
         // Assert
         assertEquals(LocalDate.of(2026, 5, 11), state.selectedDate)
@@ -98,12 +137,14 @@ class CalendarViewModelTest {
         // Arrange
         val viewModel = calendarViewModel()
         advanceUntilIdle()
-        assertTrue(viewModel.uiState.first { !it.isLoading }.isCalendarExpanded)
+        assertTrue(
+            viewModel.firstContent().isCalendarExpanded
+        )
 
         // Act
         viewModel.toggleCalendarExpanded()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.firstContent()
 
         // Assert
         assertFalse(state.isCalendarExpanded)
@@ -118,7 +159,7 @@ class CalendarViewModelTest {
         // Act
         viewModel.selectDateFromPicker(epochMillis("2026-07-03T00:00:00Z"))
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.firstContent()
 
         // Assert
         assertAll(
@@ -137,7 +178,7 @@ class CalendarViewModelTest {
         // Act
         viewModel.selectDateFromPicker(epochMillis("2026-07-03T00:00:00Z"))
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.firstContent()
 
         // Assert
         assertEquals(LocalDate.of(2026, 7, 3), state.selectedDate)
@@ -153,7 +194,7 @@ class CalendarViewModelTest {
         // Act
         viewModel.selectDateFromPicker(epochMillis("2026-07-03T23:00:00Z"))
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.firstContent()
 
         // Assert
         assertEquals(LocalDate.of(2026, 7, 3), state.selectedDate)
@@ -213,7 +254,7 @@ class CalendarViewModelTest {
         viewModel.toggleSearch()
         viewModel.updateSearchQuery("shopping")
         advanceUntilIdle()
-        viewModel.uiState.first {
+        viewModel.firstContent {
             it.search.isActive && it.search.query == "shopping"
         }
 
@@ -221,7 +262,7 @@ class CalendarViewModelTest {
         // StateTransition: closing search resets active, query, error, and results together.
         viewModel.closeSearch()
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.search.isActive }
+        val state = viewModel.firstContent { !it.search.isActive }
 
         // Assert
         assertEquals(SearchUiState(), state.search)
@@ -244,10 +285,68 @@ class CalendarViewModelTest {
         viewModel.toggleSearch()
         viewModel.updateSearchQuery("shopping")
         advanceUntilIdle()
-        val state = viewModel.uiState.first { it.search.results.isNotEmpty() }
+        val state = viewModel.firstContent { it.search.results.isNotEmpty() }
 
         // Assert
         assertEquals(selectedDate, state.selectedDate)
+    }
+
+    @Test
+    fun boundarySearchHidesResultsWhenTagsFailToLoad() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = FakeMemoRepository(
+            listOf(memoFixture(id = "shopping", title = "Shopping list"))
+        )
+        val viewModel = calendarViewModel(
+            memoRepository = memoRepository,
+            tagRepository = FailingTagRepository()
+        )
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        // Act
+        // Boundary: search hits are not shown without tags to map them.
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("shopping")
+        advanceUntilIdle()
+        val state = viewModel.uiState.value
+
+        // Assert
+        assertAll(
+            { assertEquals(listOf(SearchQuery("shopping")), memoRepository.searchedQueries) },
+            {
+                assertEquals(
+                    SearchUiState(isActive = true, query = "shopping"),
+                    state.asError().search
+                )
+            }
+        )
+    }
+
+    @Test
+    fun errorTagFailureLeavesNoDaysOrMemos() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel(
+            memoRepository = FakeMemoRepository(
+                listOf(
+                    memoFixture(
+                        id = "memo-1",
+                        createdAt = epochMillis("2026-05-11T10:00:00Z")
+                    )
+                )
+            ),
+            tagRepository = FailingTagRepository()
+        )
+
+        // Act
+        // Error: content-only data is withheld when any observed source fails.
+        advanceUntilIdle()
+        val state = viewModel.uiState.first { it !is CalendarUiState.Loading }
+
+        // Assert
+        assertInstanceOf(CalendarUiState.Error::class.java, state)
     }
 
     @Test
@@ -266,7 +365,7 @@ class CalendarViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.firstContent()
 
         // Assert
         assertEquals(
@@ -294,34 +393,127 @@ class CalendarViewModelTest {
 
         // Act
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.firstContent()
 
         // Assert
         assertEquals(listOf("仕事"), state.memos.single().tags.map { it.name })
     }
 
     @Test
-    fun normalUiStateMapsThumbnailPathFromFirstImage() = runTest(dispatcher) {
+    fun normalUiStateMapsMemoFields() = runTest(dispatcher) {
         // Arrange
-        val viewModel = calendarViewModel(
-            memoRepository = FakeMemoRepository(
-                listOf(
-                    memoFixture(
-                        id = "memo-1",
-                        createdAt = epochMillis("2026-05-15T10:00:00Z"),
-                        images = listOf(memoImageFixture(fileName = "image-1.jpg"))
-                    )
-                )
+        val tags = listOf(
+            tagFixture(id = "tag-1", name = "First", color = 0xFF112233),
+            tagFixture(id = "tag-2", name = "Second", color = 0xFF445566)
+        )
+        val memo = memoFixture(
+            id = "mapped",
+            title = "Mapped title",
+            body = "Mapped body",
+            createdAt = today,
+            updatedAt = today + 1000L,
+            isFavorite = true,
+            tagIds = listOf(TagId("tag-2"), TagId("missing"), TagId("tag-1")),
+            images = listOf(
+                memoImageFixture(id = "first", fileName = "first.jpg"),
+                memoImageFixture(id = "second", fileName = "second.jpg")
             )
+        )
+        val memoWithoutImage = memoFixture(id = "empty", title = "Mapped empty", createdAt = today)
+        val viewModel = calendarViewModel(
+            memoRepository = FakeMemoRepository(listOf(memo, memoWithoutImage)),
+            tags = tags
         )
 
         // Act
-        // Normal: calendar memo cards resolve the first memo image into a thumbnail path.
+        // Normal: memo fields preserve tag order, skip missing tags, and use only the first image.
         advanceUntilIdle()
-        val state = viewModel.uiState.first { !it.isLoading }
+        val state = viewModel.firstContent()
 
         // Assert
-        assertEquals("/images/image-1.jpg", state.memos.single().thumbnailPath)
+        assertAll(
+            {
+                assertEquals(
+                    MemoUiModel(
+                        id = memo.id,
+                        title = "Mapped title",
+                        body = "Mapped body",
+                        tags = listOf(
+                            TagUiModel(TagId("tag-2"), "Second", 0xFF445566),
+                            TagUiModel(TagId("tag-1"), "First", 0xFF112233)
+                        ),
+                        updatedAtMillis = today + 1000L,
+                        isFavorite = true,
+                        thumbnailPath = "/images/first.jpg"
+                    ),
+                    state.memos.first { it.id == memo.id }
+                )
+            },
+            { assertEquals(null, state.memos.first { it.id == memoWithoutImage.id }.thumbnailPath) }
+        )
+    }
+
+    @Test
+    fun normalSearchResultsMapMemoFields() = runTest(dispatcher) {
+        // Arrange
+        val tags = listOf(
+            tagFixture(id = "tag-1", name = "First", color = 0xFF112233),
+            tagFixture(id = "tag-2", name = "Second", color = 0xFF445566)
+        )
+        val memo = memoFixture(
+            id = "mapped",
+            title = "Mapped title",
+            body = "Mapped body",
+            createdAt = today,
+            updatedAt = today + 1000L,
+            isFavorite = true,
+            tagIds = listOf(TagId("tag-2"), TagId("missing"), TagId("tag-1")),
+            images = listOf(
+                memoImageFixture(id = "first", fileName = "first.jpg"),
+                memoImageFixture(id = "second", fileName = "second.jpg")
+            )
+        )
+        val memoWithoutImage = memoFixture(id = "empty", title = "Mapped empty", createdAt = today)
+        val viewModel = calendarViewModel(
+            memoRepository = FakeMemoRepository(listOf(memo, memoWithoutImage)),
+            tags = tags
+        )
+
+        // Act
+        // Normal: memo fields preserve tag order, skip missing tags, and use only the first image.
+        viewModel.toggleSearch()
+        viewModel.updateSearchQuery("Mapped")
+        advanceUntilIdle()
+        val state = viewModel.firstContent { it.search.results.size == 2 }
+
+        // Assert
+        assertAll(
+            {
+                assertEquals(
+                    MemoUiModel(
+                        id = memo.id,
+                        title = "Mapped title",
+                        body = "Mapped body",
+                        tags = listOf(
+                            TagUiModel(TagId("tag-2"), "Second", 0xFF445566),
+                            TagUiModel(TagId("tag-1"), "First", 0xFF112233)
+                        ),
+                        updatedAtMillis = today + 1000L,
+                        isFavorite = true,
+                        thumbnailPath = "/images/first.jpg"
+                    ),
+                    state.search.results.first { it.id == memo.id }
+                )
+            },
+            {
+                assertEquals(
+                    null,
+                    state.search.results.first {
+                        it.id == memoWithoutImage.id
+                    }.thumbnailPath
+                )
+            }
+        )
     }
 
     @Test
@@ -343,14 +535,14 @@ class CalendarViewModelTest {
         viewModel.toggleSearch()
         viewModel.updateSearchQuery("Shopping")
         advanceUntilIdle()
-        viewModel.uiState.first { it.search.hasError }
+        viewModel.firstContent { it.search.hasError }
 
         // Act
         // StateTransition: retry replaces the failed search snapshot with recovered results.
         memoRepository.allowSearch()
         viewModel.retry()
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             !it.search.hasError && it.search.results.isNotEmpty()
         }
 
@@ -376,14 +568,14 @@ class CalendarViewModelTest {
         viewModel.toggleSearch()
         viewModel.updateSearchQuery("Shopping")
         advanceUntilIdle()
-        viewModel.uiState.first { it.search.hasError }
+        viewModel.firstContent { it.search.hasError }
 
         // Act
         // StateTransition/Error: a changed query starts a fresh search after the source recovers.
         memoRepository.allowSearch()
         viewModel.updateSearchQuery("Coffee")
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
+        val state = viewModel.firstContent {
             !it.search.hasError && it.search.query == "Coffee" && it.search.results.isNotEmpty()
         }
 
@@ -406,16 +598,14 @@ class CalendarViewModelTest {
             )
         )
         val viewModel = calendarViewModel(memoRepository = memoRepository)
-        viewModel.uiState.first { !it.isLoading && it.hasError }
+        viewModel.uiState.first { it is CalendarUiState.Error }
 
         // Act
         // StateTransition/Error: retry resubscribes failed calendar data and restores the content.
         memoRepository.allowCalendarLoad()
         viewModel.retry()
         advanceUntilIdle()
-        val state = viewModel.uiState.first {
-            !it.hasError && it.memos.isNotEmpty()
-        }
+        val state = viewModel.firstContent { it.memos.isNotEmpty() }
 
         // Assert
         assertAll(
@@ -425,12 +615,222 @@ class CalendarViewModelTest {
         )
     }
 
+    @Test
+    fun stateTransitionRetryClosesDatePickerOpenedBeforeLoadError() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = RetryableCalendarMemoRepository(delegate = FakeMemoRepository())
+        val viewModel = calendarViewModel(memoRepository = memoRepository)
+        viewModel.showDatePicker()
+        viewModel.uiState.first { it is CalendarUiState.Error }
+        memoRepository.allowCalendarLoad()
+
+        // Act
+        // StateTransition/Error: retry starts with the date picker closed.
+        viewModel.retry()
+        advanceUntilIdle()
+        val state = viewModel.firstContent()
+
+        // Assert
+        assertEquals(false, state.isDatePickerVisible)
+    }
+
+    @Test
+    fun boundaryNextMonthCoercesDay31ToLastDayOfFebruaryInCommonYear() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.selectDate(LocalDate.of(2027, 1, 31))
+        runCurrent()
+
+        // Act
+        // Boundary: day 31 is coerced to 28 in February of a common year.
+        viewModel.nextMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertAll(
+            { assertEquals(YearMonth.of(2027, 2), state.selectedMonth) },
+            { assertEquals(LocalDate.of(2027, 2, 28), state.selectedDate) }
+        )
+    }
+
+    @Test
+    fun boundaryNextMonthCoercesDay31ToLastDayOfFebruaryInLeapYear() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.selectDate(LocalDate.of(2028, 1, 31))
+        runCurrent()
+
+        // Act
+        // Boundary: day 31 is coerced to 29 in February of a leap year.
+        viewModel.nextMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(LocalDate.of(2028, 2, 29), state.selectedDate)
+    }
+
+    @Test
+    fun boundaryNextMonthCoercesDay31ToDay30WhenNextMonthHas30Days() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.selectDate(LocalDate.of(2026, 5, 31))
+        runCurrent()
+
+        // Act
+        // Boundary: day 31 is coerced to 30 in a 30-day month.
+        viewModel.nextMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(LocalDate.of(2026, 6, 30), state.selectedDate)
+    }
+
+    @Test
+    fun boundaryPreviousMonthCoercesDay31ToLastDayOfFebruary() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.selectDate(LocalDate.of(2027, 3, 31))
+        runCurrent()
+
+        // Act
+        // Boundary: moving back to a shorter month coerces the day as well.
+        viewModel.previousMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(LocalDate.of(2027, 2, 28), state.selectedDate)
+    }
+
+    @Test
+    fun boundaryNextMonthKeepsDay28WhenFebruaryHas28Days() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.selectDate(LocalDate.of(2027, 1, 28))
+        runCurrent()
+
+        // Act
+        // Boundary: day 28 already fits February and is kept.
+        viewModel.nextMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(LocalDate.of(2027, 2, 28), state.selectedDate)
+    }
+
+    @Test
+    fun boundaryNextMonthCoercesDay29ToDay28WhenFebruaryHas28Days() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.selectDate(LocalDate.of(2027, 1, 29))
+        runCurrent()
+
+        // Act
+        // Boundary: day 29 is one past the last day of a common-year February.
+        viewModel.nextMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(LocalDate.of(2027, 2, 28), state.selectedDate)
+    }
+
+    @Test
+    fun stateTransitionShowDatePickerMakesDatePickerVisible() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        runCurrent()
+
+        // Act
+        // StateTransition: showing the picker is reflected in UI state.
+        viewModel.showDatePicker()
+        runCurrent()
+
+        // Assert
+        assertTrue(viewModel.uiState.value.asContent().isDatePickerVisible)
+    }
+
+    @Test
+    fun stateTransitionDismissDatePickerHidesDatePicker() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.showDatePicker()
+        runCurrent()
+
+        // Act
+        // StateTransition: dismissing the picker is reflected in UI state.
+        viewModel.dismissDatePicker()
+        runCurrent()
+
+        // Assert
+        assertFalse(viewModel.uiState.value.asContent().isDatePickerVisible)
+    }
+
+    @Test
+    fun stateTransitionSelectDateFromPickerDismissesDatePicker() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+        viewModel.showDatePicker()
+        runCurrent()
+
+        // Act
+        // StateTransition: picking a date closes the picker.
+        viewModel.selectDateFromPicker(epochMillis("2026-07-03T00:00:00Z"))
+        runCurrent()
+
+        // Assert
+        assertFalse(viewModel.uiState.value.asContent().isDatePickerVisible)
+    }
+
+    @Test
+    fun normalUiStateMarksOnlySelectedDateAsSelected() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = calendarViewModel()
+        collectUiState(viewModel)
+
+        // Act
+        // Normal: exactly one day of the month is flagged as selected.
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertEquals(listOf(15), state.days.filter { it.isSelected }.map { it.dayOfMonth })
+    }
+
+    private fun TestScope.collectUiState(viewModel: CalendarViewModel) {
+        backgroundScope.launch { viewModel.uiState.collect {} }
+    }
+
+    private suspend fun CalendarViewModel.firstContent(
+        predicate: (CalendarUiState.Content) -> Boolean = { true }
+    ): CalendarUiState.Content =
+        uiState.filterIsInstance<CalendarUiState.Content>().first(predicate)
+
+    private fun CalendarUiState.asContent(): CalendarUiState.Content =
+        assertInstanceOf(CalendarUiState.Content::class.java, this)
+
+    private fun CalendarUiState.asError(): CalendarUiState.Error =
+        assertInstanceOf(CalendarUiState.Error::class.java, this)
+
     private fun calendarViewModel(
         memoRepository: MemoRepository = FakeMemoRepository(),
         tags: List<Tag> = emptyList(),
+        tagRepository: TagRepository = FakeTagRepository(tags),
         zone: ZoneId = zoneId
     ): CalendarViewModel {
-        val tagRepository = FakeTagRepository(tags)
         val displaySettingsRepository = FakeDisplaySettingsRepository()
         return CalendarViewModel(
             observeCalendarMonthSummaryUseCase = ObserveCalendarMonthSummaryUseCase(
@@ -454,6 +854,13 @@ class CalendarViewModelTest {
             ),
             zoneId = zone
         )
+    }
+
+    private class FailingTagRepository : TagRepository by FakeTagRepository() {
+
+        override fun observeTags(): Flow<List<Tag>> = flow {
+            throw IllegalStateException("Tag load failed.")
+        }
     }
 
     private class RetryableSearchMemoRepository(private val delegate: FakeMemoRepository) :

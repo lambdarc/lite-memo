@@ -3,6 +3,7 @@ package com.lambdarc.litememo.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lambdarc.litememo.domain.model.ApplyMemoBulkActionCommand
+import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.MemoBulkAction
 import com.lambdarc.litememo.domain.model.MemoFilter
 import com.lambdarc.litememo.domain.model.Tag
@@ -22,11 +23,12 @@ import com.lambdarc.litememo.ui.state.HomeFilterUiState
 import com.lambdarc.litememo.ui.state.HomeUiState
 import com.lambdarc.litememo.ui.state.MemoSelectionUiState
 import com.lambdarc.litememo.ui.state.SearchUiState
-import com.lambdarc.litememo.ui.state.searchMemoResults
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -78,65 +80,25 @@ class HomeViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<HomeUiState> = retryTrigger.flatMapLatest {
-        combine(
+        val observedData = combine<List<Memo>, List<Tag>, HomeObservedData>(
             observeMemosUseCase(),
-            observeTagsUseCase(),
-            uiControls,
-            searchResults
-        ) { memos, tags, controls, searchResult ->
-            val tagUiModels = tags.map { TagUiModel.fromDomain(it) }
-            val effectiveFilter = controls.filter.effectiveFilter(tags)
-            val filteredMemos = filterMemosUseCase(memos, effectiveFilter.toDomainFilter())
-            val memoById = memos.associateBy { it.id }
-            val selectedMemos = controls.selection.selectedMemoIds.mapNotNull(memoById::get)
-            val allSelectedFavorite = controls.selection.selectedMemoIds.isNotEmpty() &&
-                controls.selection.selectedMemoIds.all { memoById[it]?.isFavorite == true }
-            val allSelectedTagIds = selectedMemos
-                .takeIf {
-                    it.isNotEmpty() && it.size == controls.selection.selectedMemoIds.size
-                }
-                ?.map { memo -> memo.tagIds.toSet() }
-                ?.reduce { commonTagIds, tagIds -> commonTagIds intersect tagIds }
-                ?: emptySet()
-            val search = controls.search.withResult(searchResult) { searchHits ->
-                MemoUiModel.fromDomain(
-                    searchHits,
-                    tags,
-                    resolveMemoImagePathUseCase::invoke
-                )
+            observeTagsUseCase()
+        ) { memos, tags ->
+            HomeObservedData.Success(memos, tags)
+        }.catch { error ->
+            if (error is CancellationException) currentCoroutineContext().ensureActive()
+            emit(HomeObservedData.Failure)
+        }
+        combine(observedData, uiControls, searchResults) { observed, controls, searchResult ->
+            when (observed) {
+                HomeObservedData.Failure -> controls.errorState()
+                is HomeObservedData.Success -> contentState(observed, controls, searchResult)
             }
-
-            HomeUiState(
-                isLoading = false,
-                selectedFilter = effectiveFilter,
-                search = search,
-                selection = controls.selection,
-                allSelectedFavorite = allSelectedFavorite,
-                allSelectedTagIds = allSelectedTagIds,
-                bulkTagDialog = controls.tagDialog,
-                tags = tagUiModels,
-                memos = MemoUiModel.fromDomain(
-                    filteredMemos,
-                    tags,
-                    resolveMemoImagePathUseCase::invoke
-                )
-            )
-        }.catch {
-            emit(
-                HomeUiState(
-                    isLoading = false,
-                    hasError = true,
-                    selectedFilter = selectedFilter.value,
-                    search = searchControls.value,
-                    selection = selection.value,
-                    bulkTagDialog = bulkTagDialog.value
-                )
-            )
         }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-        initialValue = HomeUiState()
+        initialValue = HomeUiState.Loading
     )
 
     fun selectFilter(filter: HomeFilterUiState) {
@@ -148,7 +110,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun updateSearchQuery(query: String) {
-        searchControls.update { search -> search.withQuery(query) }
+        searchControls.update { search -> search.updateQuery(query) }
     }
 
     fun closeSearch() {
@@ -191,7 +153,10 @@ class HomeViewModel @Inject constructor(
 
     fun toggleSelectedMemosTag(tagId: TagId) {
         if (!bulkTagDialog.value.isVisible) return
-        val action = if (tagId in uiState.value.allSelectedTagIds) {
+        val allSelectedTagIds = (uiState.value as? HomeUiState.Content)
+            ?.allSelectedTagIds
+            .orEmpty()
+        val action = if (tagId in allSelectedTagIds) {
             MemoBulkAction.removeTag(tagId)
         } else {
             MemoBulkAction.addTag(tagId)
@@ -203,12 +168,13 @@ class HomeViewModel @Inject constructor(
     fun formatMemoText(title: String, body: String): String? = formatMemoTextUseCase(title, body)
 
     fun getSelectedMemoForShare(): MemoUiModel? {
-        val state = uiState.value
+        val state = uiState.value as? HomeUiState.Content ?: return null
         val selectedId = state.selection.selectedMemoIds.singleOrNull() ?: return null
         return (state.memos + state.search.results).find { it.id == selectedId }
     }
 
     fun retry() {
+        bulkTagDialog.value = HomeBulkTagDialogUiState()
         retryTrigger.update { !it }
     }
 
@@ -238,6 +204,63 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private suspend fun contentState(
+        observed: HomeObservedData.Success,
+        controls: HomeUiControls,
+        searchResult: MemoSearchUiResult
+    ): HomeUiState = try {
+        val memos = observed.memos
+        val tags = observed.tags
+        val tagUiModels = tags.map {
+            TagUiModel(id = it.id, name = it.name.value, colorArgb = it.color.argb)
+        }
+        val tagsById = tagUiModels.associateBy { it.id }
+        val effectiveFilter = controls.filter.effectiveFilter(tags)
+        val filteredMemos = filterMemosUseCase(memos, effectiveFilter.toDomainFilter())
+        val memoById = memos.associateBy { it.id }
+        val selectedMemos = controls.selection.selectedMemoIds.mapNotNull(memoById::get)
+        val allSelectedFavorite = controls.selection.selectedMemoIds.isNotEmpty() &&
+            controls.selection.selectedMemoIds.all { memoById[it]?.isFavorite == true }
+        val allSelectedTagIds = selectedMemos
+            .takeIf {
+                it.isNotEmpty() && it.size == controls.selection.selectedMemoIds.size
+            }
+            ?.map { memo -> memo.tagIds.toSet() }
+            ?.reduce { commonTagIds, tagIds -> commonTagIds intersect tagIds }
+            ?: emptySet()
+        val search = controls.search.applySearchResult(searchResult) { searchHits ->
+            searchHits.map { memo -> memo.toUiModel(tagsById) }
+        }
+
+        HomeUiState.Content(
+            selectedFilter = effectiveFilter,
+            search = search,
+            selection = controls.selection,
+            allSelectedFavorite = allSelectedFavorite,
+            allSelectedTagIds = allSelectedTagIds,
+            bulkTagDialog = controls.tagDialog,
+            tags = tagUiModels,
+            memos = filteredMemos.map { memo -> memo.toUiModel(tagsById) }
+        )
+    } catch (_: CancellationException) {
+        currentCoroutineContext().ensureActive()
+        controls.errorState()
+    } catch (_: Throwable) {
+        controls.errorState()
+    }
+
+    private fun Memo.toUiModel(tagsById: Map<TagId, TagUiModel>) = MemoUiModel(
+        id = id,
+        title = title.value,
+        body = body.value,
+        tags = tagIds.mapNotNull { tagsById[it] },
+        updatedAtMillis = updatedAt.value,
+        isFavorite = isFavorite,
+        thumbnailPath = images.firstOrNull()?.let { image ->
+            resolveMemoImagePathUseCase(image.fileName)
+        }
+    )
+
     private fun HomeFilterUiState.toDomainFilter(): MemoFilter = when (this) {
         HomeFilterUiState.All -> MemoFilter.All
         HomeFilterUiState.Unorganized -> MemoFilter.Unorganized
@@ -262,4 +285,10 @@ private data class HomeUiControls(
     val search: SearchUiState,
     val selection: MemoSelectionUiState,
     val tagDialog: HomeBulkTagDialogUiState
+)
+
+private fun HomeUiControls.errorState() = HomeUiState.Error(
+    selectedFilter = filter,
+    search = search,
+    selection = selection
 )

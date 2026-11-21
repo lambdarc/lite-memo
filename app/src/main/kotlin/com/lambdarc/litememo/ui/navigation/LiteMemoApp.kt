@@ -274,8 +274,7 @@ fun LiteMemoApp(
                     onNavigateBack = {
                         navController.popBackStackIfResumed(
                             isPopInFlight = { memoEditPopInFlight },
-                            setPopInFlight = { memoEditPopInFlight = it },
-                            deferUntilResumed = true
+                            setPopInFlight = { memoEditPopInFlight = it }
                         )
                     },
                     onShareError = {
@@ -293,8 +292,7 @@ fun LiteMemoApp(
                     onMemoDelete = { memoId ->
                         navController.popBackStackIfResumed(
                             isPopInFlight = { memoEditPopInFlight },
-                            setPopInFlight = { memoEditPopInFlight = it },
-                            deferUntilResumed = true
+                            setPopInFlight = { memoEditPopInFlight = it }
                         )
                         coroutineScope.launch {
                             val result = snackbarHostState.showSnackbar(
@@ -319,33 +317,12 @@ private fun NavController.isCurrentEntryResumed(): Boolean =
 
 private fun NavController.popBackStackIfResumed(
     isPopInFlight: () -> Boolean = { false },
-    setPopInFlight: (Boolean) -> Unit = {},
-    deferUntilResumed: Boolean = false
+    setPopInFlight: (Boolean) -> Unit = {}
 ) {
-    val entry = currentBackStackEntry
-    if (isPopInFlight() || entry == null) return
+    if (isPopInFlight() || currentBackStackEntry == null) return
     if (isCurrentEntryResumed()) {
         setPopInFlight(true)
         if (!popBackStack()) setPopInFlight(false)
-    } else if (deferUntilResumed) {
-        setPopInFlight(true)
-        lateinit var observer: LifecycleEventObserver
-        observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> {
-                    entry.lifecycle.removeObserver(observer)
-                    if (!popBackStack()) setPopInFlight(false)
-                }
-
-                Lifecycle.Event.ON_DESTROY -> {
-                    entry.lifecycle.removeObserver(observer)
-                    setPopInFlight(false)
-                }
-
-                else -> Unit
-            }
-        }
-        entry.lifecycle.addObserver(observer)
     }
 }
 

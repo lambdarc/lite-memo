@@ -26,12 +26,13 @@ import com.lambdarc.litememo.domain.usecase.ResolveMemoImagePathUseCase
 import com.lambdarc.litememo.domain.usecase.SaveMemoUseCase
 import com.lambdarc.litememo.ui.model.MemoImageUiModel
 import com.lambdarc.litememo.ui.model.TagUiModel
+import com.lambdarc.litememo.ui.state.MemoEditUiResult
 import com.lambdarc.litememo.ui.state.MemoEditUiState
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -41,7 +42,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -85,15 +85,16 @@ class MemoEditViewModel @Inject constructor(
     }
 
     private val _uiState = MutableStateFlow(
-        MemoEditUiState(isLoading = initialMemoId != null, memoId = initialMemoId)
+        MemoEditUiState(
+            status = if (initialMemoId != null) ScreenUiStatus.LOADING else ScreenUiStatus.CONTENT,
+            memoId = initialMemoId
+        )
     )
     val uiState: StateFlow<MemoEditUiState> = _uiState.asStateFlow()
 
-    private val _navigationEvent = Channel<MemoEditNavigationUiEvent>(Channel.BUFFERED)
-    val navigationEvent = _navigationEvent.receiveAsFlow()
-
-    private val _operationErrorEvent = Channel<MemoEditOperationErrorUiEvent>(Channel.BUFFERED)
-    val operationErrorEvent = _operationErrorEvent.receiveAsFlow()
+    private val _uiResults = MutableStateFlow<List<MemoEditUiResult>>(emptyList())
+    val uiResults: StateFlow<List<MemoEditUiResult>> = _uiResults.asStateFlow()
+    private var nextUiResultId = 0L
 
     private val persistMutex = Mutex()
     private var autosaveJob: Job? = null
@@ -104,6 +105,19 @@ class MemoEditViewModel @Inject constructor(
     init {
         loadInitialState()
         observeTags()
+    }
+
+    fun onUiResultConsumed(resultId: Long) {
+        _uiResults.update { results ->
+            if (results.firstOrNull()?.id == resultId) results.drop(1) else results
+        }
+    }
+
+    private fun enqueueUiResult(createResult: (Long) -> MemoEditUiResult) {
+        val result = createResult(nextUiResultId++)
+        _uiResults.update { results ->
+            if (results.any { it::class == result::class }) results else results + result
+        }
     }
 
     fun retryTags() {
@@ -118,7 +132,9 @@ class MemoEditViewModel @Inject constructor(
                 _uiState.update { state ->
                     val validTagIds = tags.map { it.id }.toSet()
                     state.copy(
-                        availableTags = tags.map { TagUiModel.fromDomain(it) },
+                        availableTags = tags.map {
+                            TagUiModel(id = it.id, name = it.name.value, colorArgb = it.color.argb)
+                        },
                         selectedTagIds = state.selectedTagIds.intersect(validTagIds),
                         hasTagError = false
                     )
@@ -132,7 +148,7 @@ class MemoEditViewModel @Inject constructor(
     }
 
     fun reload() {
-        _uiState.update { it.copy(isLoading = true, hasError = false) }
+        _uiState.update { it.copy(status = ScreenUiStatus.LOADING) }
         loadInitialState()
     }
 
@@ -171,9 +187,10 @@ class MemoEditViewModel @Inject constructor(
                     try {
                         withContext(NonCancellable) {
                             val image = attachMemoImageUseCase(ImageSourceReference(uri))
-                            attached += MemoImageUiModel.fromDomain(
-                                image = image,
-                                resolveImagePath = resolveMemoImagePathUseCase::invoke,
+                            attached += MemoImageUiModel(
+                                id = image.id.value,
+                                fileName = image.fileName.value,
+                                filePath = resolveMemoImagePathUseCase(image.fileName),
                                 isPersisted = false
                             )
                         }
@@ -199,7 +216,7 @@ class MemoEditViewModel @Inject constructor(
                 }
             }
             if (hasFailure) {
-                _operationErrorEvent.trySend(MemoEditOperationErrorUiEvent.ImageAttachFailed)
+                enqueueUiResult { MemoEditUiResult.ImageAttachFailed(it) }
             }
         }
     }
@@ -224,20 +241,29 @@ class MemoEditViewModel @Inject constructor(
         if (_uiState.value.isDeletePending || isFinishing) return
         isFinishing = true
         autosaveJob?.cancel()
-        _uiState.update { state -> state.copy(isDeletePending = true, hasError = false) }
+        _uiState.update { state ->
+            state.copy(
+                isDeletePending = true,
+                status = if (state.status == ScreenUiStatus.ERROR) {
+                    ScreenUiStatus.CONTENT
+                } else {
+                    state.status
+                }
+            )
+        }
         viewModelScope.launch {
             persistMutex.withLock {
                 try {
                     val deletedMemoId = moveMemoToTrashUseCase(targetMemoId)
                     clearSavedState()
                     _uiState.update { state -> state.copy(isDeletePending = false) }
-                    _navigationEvent.trySend(MemoEditNavigationUiEvent.MemoDeleted(deletedMemoId))
+                    enqueueUiResult { MemoEditUiResult.MemoDeleted(it, deletedMemoId) }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Throwable) {
                     isFinishing = false
                     _uiState.update { state -> state.copy(isDeletePending = false) }
-                    _operationErrorEvent.trySend(MemoEditOperationErrorUiEvent.DeleteFailed)
+                    enqueueUiResult { MemoEditUiResult.DeleteFailed(it) }
                 }
             }
         }
@@ -248,9 +274,9 @@ class MemoEditViewModel @Inject constructor(
         isFinishing = true
         autosaveJob?.cancel()
         val initialState = _uiState.value
-        if (initialMemoId != null && (initialState.isLoading || initialState.hasError)) {
+        if (initialMemoId != null && initialState.status != ScreenUiStatus.CONTENT) {
             clearSavedState()
-            _navigationEvent.trySend(MemoEditNavigationUiEvent.NavigateBack)
+            enqueueUiResult { MemoEditUiResult.NavigateBack(it) }
             return
         }
         viewModelScope.launch {
@@ -261,7 +287,7 @@ class MemoEditViewModel @Inject constructor(
             }
             if (persist()) {
                 clearSavedState()
-                _navigationEvent.trySend(MemoEditNavigationUiEvent.NavigateBack)
+                enqueueUiResult { MemoEditUiResult.NavigateBack(it) }
             } else {
                 isFinishing = false
             }
@@ -290,13 +316,13 @@ class MemoEditViewModel @Inject constructor(
             }
 
             val currentMemoId = initialMemoId ?: run {
-                _uiState.update { it.copy(isLoading = false, hasError = false) }
+                _uiState.update { it.copy(status = ScreenUiStatus.CONTENT) }
                 return@launch
             }
             try {
                 val memo = getMemoUseCase(MemoId(currentMemoId))
                 if (memo == null) {
-                    _uiState.update { it.copy(isLoading = false, hasError = true) }
+                    _uiState.update { it.copy(status = ScreenUiStatus.ERROR) }
                     return@launch
                 }
                 _uiState.update { current ->
@@ -308,7 +334,7 @@ class MemoEditViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Throwable) {
-                _uiState.update { it.copy(isLoading = false, hasError = true) }
+                _uiState.update { it.copy(status = ScreenUiStatus.ERROR) }
             }
         }
     }
@@ -358,7 +384,7 @@ class MemoEditViewModel @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (_: Throwable) {
-            _operationErrorEvent.trySend(MemoEditOperationErrorUiEvent.SaveFailed)
+            enqueueUiResult { MemoEditUiResult.SaveFailed(it) }
             false
         } finally {
             activePersistImageIds = emptySet()
@@ -371,17 +397,17 @@ class MemoEditViewModel @Inject constructor(
                 if (isNewMemoSession) {
                     discardMemoUseCase(memoId)
                     clearSavedState()
-                    _navigationEvent.trySend(MemoEditNavigationUiEvent.NavigateBack)
+                    enqueueUiResult { MemoEditUiResult.NavigateBack(it) }
                 } else {
                     val deletedMemoId = moveMemoToTrashUseCase(memoId)
                     clearSavedState()
-                    _navigationEvent.trySend(MemoEditNavigationUiEvent.MemoDeleted(deletedMemoId))
+                    enqueueUiResult { MemoEditUiResult.MemoDeleted(it, deletedMemoId) }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Throwable) {
                 isFinishing = false
-                _operationErrorEvent.trySend(MemoEditOperationErrorUiEvent.DeleteFailed)
+                enqueueUiResult { MemoEditUiResult.DeleteFailed(it) }
             }
         }
     }
@@ -392,8 +418,7 @@ class MemoEditViewModel @Inject constructor(
         _uiState.update { state ->
             val nextState = state.copy(
                 memoId = memo.id.value,
-                isLoading = false,
-                hasError = false,
+                status = ScreenUiStatus.CONTENT,
                 images = state.images.map { image ->
                     if (image.id in savedImageIds) image.copy(isPersisted = true) else image
                 }
@@ -428,7 +453,7 @@ class MemoEditViewModel @Inject constructor(
         }
 
         return MemoEditUiState(
-            isLoading = false,
+            status = ScreenUiStatus.CONTENT,
             memoId = initialMemoId,
             title = title,
             body = body,
@@ -467,16 +492,17 @@ class MemoEditViewModel @Inject constructor(
     }
 
     private fun Memo.toUiState() = MemoEditUiState(
-        isLoading = false,
+        status = ScreenUiStatus.CONTENT,
         memoId = id.value,
         title = title.value,
         body = body.value,
         isFavorite = isFavorite,
         selectedTagIds = tagIds.toSet(),
         images = images.map { image ->
-            MemoImageUiModel.fromDomain(
-                image = image,
-                resolveImagePath = resolveMemoImagePathUseCase::invoke,
+            MemoImageUiModel(
+                id = image.id.value,
+                fileName = image.fileName.value,
+                filePath = resolveMemoImagePathUseCase(image.fileName),
                 isPersisted = true
             )
         }
@@ -496,7 +522,7 @@ class MemoEditViewModel @Inject constructor(
         title.isBlank() && body.isBlank() && images.isEmpty()
 
     private fun canEdit(state: MemoEditUiState): Boolean =
-        !isFinishing && !state.isDeletePending && !state.isLoading && !state.hasError
+        !isFinishing && !state.isDeletePending && state.status == ScreenUiStatus.CONTENT
 
     private companion object {
         const val AUTOSAVE_DEBOUNCE_MILLIS = 1_000L

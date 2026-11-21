@@ -52,6 +52,7 @@ import com.lambdarc.litememo.ui.component.ErrorContent
 import com.lambdarc.litememo.ui.component.LoadingContent
 import com.lambdarc.litememo.ui.component.MessageContent
 import com.lambdarc.litememo.ui.model.TrashedMemoUiModel
+import com.lambdarc.litememo.ui.state.MemoSelectionUiState
 import com.lambdarc.litememo.ui.state.TrashUiState
 import java.time.Instant
 import java.time.ZoneId
@@ -74,18 +75,15 @@ fun TrashScreen(uiState: TrashUiState, actions: TrashScreenActions, modifier: Mo
             modifier = Modifier.padding(innerPadding)
         )
     }
-
-    if (uiState.showEmptyTrashDialog) {
-        EmptyTrashConfirmDialog(actions = actions)
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TrashTopAppBar(uiState: TrashUiState, actions: TrashScreenActions) {
     var isMenuExpanded by remember { mutableStateOf(false) }
-    val canShowMenu = !uiState.hasError &&
-        (uiState.selection.isActive || uiState.memos.isNotEmpty())
+    val selection = uiState.selectionOrEmpty()
+    val canShowMenu = uiState is TrashUiState.Content &&
+        (selection.isActive || uiState.memos.isNotEmpty())
 
     LaunchedEffect(canShowMenu) {
         if (!canShowMenu) {
@@ -96,10 +94,10 @@ private fun TrashTopAppBar(uiState: TrashUiState, actions: TrashScreenActions) {
     TopAppBar(
         windowInsets = WindowInsets(0, 0, 0, 0),
         navigationIcon = {
-            TrashNavigationIcon(uiState = uiState, actions = actions)
+            TrashNavigationIcon(selection = selection, actions = actions)
         },
         title = {
-            TrashTopBarTitle(uiState = uiState)
+            TrashTopBarTitle(selection = selection)
         },
         actions = {
             if (canShowMenu) {
@@ -111,7 +109,7 @@ private fun TrashTopAppBar(uiState: TrashUiState, actions: TrashScreenActions) {
                 }
                 TrashOverflowMenu(
                     expanded = isMenuExpanded,
-                    selectionActive = uiState.selection.isActive,
+                    selectionActive = selection.isActive,
                     onDismiss = { isMenuExpanded = false },
                     actions = actions
                 )
@@ -120,22 +118,28 @@ private fun TrashTopAppBar(uiState: TrashUiState, actions: TrashScreenActions) {
     )
 }
 
+private fun TrashUiState.selectionOrEmpty(): MemoSelectionUiState = when (this) {
+    TrashUiState.Loading -> MemoSelectionUiState()
+    is TrashUiState.Error -> selection
+    is TrashUiState.Content -> selection
+}
+
 @Composable
-private fun TrashNavigationIcon(uiState: TrashUiState, actions: TrashScreenActions) {
+private fun TrashNavigationIcon(selection: MemoSelectionUiState, actions: TrashScreenActions) {
     IconButton(
-        onClick = if (uiState.selection.isActive) {
+        onClick = if (selection.isActive) {
             actions::onClearSelection
         } else {
             actions::onBackClick
         }
     ) {
         Icon(
-            imageVector = if (uiState.selection.isActive) {
+            imageVector = if (selection.isActive) {
                 Icons.Default.Close
             } else {
                 Icons.AutoMirrored.Filled.ArrowBack
             },
-            contentDescription = if (uiState.selection.isActive) {
+            contentDescription = if (selection.isActive) {
                 stringResource(R.string.clear_selection)
             } else {
                 stringResource(R.string.navigate_back)
@@ -145,13 +149,13 @@ private fun TrashNavigationIcon(uiState: TrashUiState, actions: TrashScreenActio
 }
 
 @Composable
-private fun TrashTopBarTitle(uiState: TrashUiState) {
+private fun TrashTopBarTitle(selection: MemoSelectionUiState) {
     Text(
-        text = if (uiState.selection.isActive) {
+        text = if (selection.isActive) {
             pluralStringResource(
                 R.plurals.selected_memo_count,
-                uiState.selection.selectedCount,
-                uiState.selection.selectedCount
+                selection.selectedCount,
+                selection.selectedCount
             )
         } else {
             stringResource(R.string.trash_title)
@@ -198,31 +202,34 @@ private fun TrashScreenContent(
     actions: TrashScreenActions,
     modifier: Modifier = Modifier
 ) {
-    when {
-        uiState.isLoading -> LoadingContent(modifier = modifier)
+    when (uiState) {
+        TrashUiState.Loading -> LoadingContent(modifier = modifier)
 
-        uiState.hasError -> ErrorContent(
+        is TrashUiState.Error -> ErrorContent(
             onRetry = actions::onRetry,
             modifier = modifier
         )
 
-        uiState.memos.isEmpty() -> MessageContent(
-            title = stringResource(R.string.trash_empty_title),
-            body = stringResource(R.string.trash_empty_body),
-            modifier = modifier
-        )
-
-        else -> TrashedMemoList(
-            uiState = uiState,
-            actions = actions,
-            modifier = modifier
-        )
+        is TrashUiState.Content -> {
+            if (uiState.memos.isEmpty()) {
+                MessageContent(
+                    title = stringResource(R.string.trash_empty_title),
+                    body = stringResource(R.string.trash_empty_body),
+                    modifier = modifier
+                )
+            } else {
+                TrashedMemoList(uiState = uiState, actions = actions, modifier = modifier)
+            }
+            if (uiState.showEmptyTrashDialog) {
+                EmptyTrashConfirmDialog(actions = actions)
+            }
+        }
     }
 }
 
 @Composable
 private fun TrashedMemoList(
-    uiState: TrashUiState,
+    uiState: TrashUiState.Content,
     actions: TrashScreenActions,
     modifier: Modifier = Modifier
 ) {
