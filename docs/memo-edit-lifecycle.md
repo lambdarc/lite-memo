@@ -43,6 +43,11 @@ Compose のレイアウトや表示文言は、この文書の対象に含めま
 タグ一覧はセッション中も監視します。削除済みのタグ id が編集中の選択へ残っていた場合は、
 現在存在するタグだけへ絞り込みます。
 
+`MemoEditUiState` のタイトル、本文、お気に入り、選択タグ、画像は、表示用の一覧ではなく編集中の下書きです。
+`reload()` で `ScreenUiStatus` を `LOADING` に切り替えても、下書きと画像の所有状態は消去しません。
+保存処理と `SavedStateHandle` からの復元が同じ下書きを使うため、表示状態の切り替えだけで内容や画像参照を失わないようにします。
+画面本体の表示と編集操作は `CONTENT` のときだけ許可します。
+
 ## 編集と autosave
 
 タイトル、本文、タグ、お気に入り、画像が変わると、次の順序で処理します。
@@ -77,6 +82,7 @@ autosave、終了時保存、破棄、ごみ箱への移動は、同じ `persist
 | 内容がある状態で戻る | 最新状態を保存する | 編集状態を消去して前画面へ戻る |
 | 空の新規セッションで戻る | `discardMemo` で物理削除する | 前画面へ戻る |
 | 空の既存メモで戻る | メモをごみ箱へ移動する | 削除済み id を通知して前画面へ戻る |
+| 既存メモの読み込み中、または読み込みに失敗した状態で戻る | 保存もごみ箱移動もせず、編集状態を消去する | 前画面へ戻る |
 | 削除操作を実行する | メモをごみ箱へ移動する | 削除済み id を通知して前画面へ戻る |
 | 保存または削除に失敗する | 編集状態を保持してエラーを通知する | 画面に残る |
 
@@ -98,14 +104,29 @@ UI state の `isPersisted` は、その画像参照が Room へ保存済みか�
 未保存画像の cleanup は ViewModel、保存済み画像の差分 cleanup は Repository が担当します。
 この境界を Repository 側だけへ寄せると、Room に一度も保存されなかった画像を回収できません。
 
-## イベントと失敗
+## 操作結果と失敗
 
-Navigation と操作エラーは `Channel.BUFFERED` で通知し、collector の一時的な停止で結果を失いにくくします。
+画面遷移と操作エラーは、編集内容の `uiState` とは別の `uiResults` に発生順で保持します。
+結果の増減で編集画面全体を再コンポーズしないよう、`MemoEditUiState` には含めません。
+各 `MemoEditUiResult` は ViewModel 内で単調増加する識別子を持ちます。
+同じ種類の結果が未消費のまま残っている間は、新しい結果を追加しません。
+autosave の失敗が続いても、同じ Snackbar が件数分つながって表示されないようにするためです。
 
 - 保存失敗は `SaveFailed`、削除失敗は `DeleteFailed`、画像追加の一部または全部の失敗は `ImageAttachFailed` として通知する
 - 保存または削除に失敗した場合は `SavedStateHandle` を消去せず、再試行できる状態を保つ
-- Navigation event は保存、破棄、ごみ箱移動が成功してから送る
+- `NavigateBack` / `MemoDeleted` は終了時の保存、破棄、ごみ箱移動、または読み込み中・読み込み失敗時の編集状態の消去が完了してから追加する
 - 画像ファイルの best-effort cleanup 失敗は、Room の状態や画面遷移を巻き戻さない
+
+`MemoEditRoute` は lifecycle が `RESUMED` の間、先頭結果を既存の Navigation / エラー表示 callback へ渡します。
+`RESUMED` を待つのはこの Route だけで、Navigation 側の戻る処理は `RESUMED` でない呼び出しを待たずに無視します。
+共有シートが重なっているなど `RESUMED` でない間に起きたエラーは、画面へ戻ってから表示します。
+callback が戻った直後に、中断可能な処理を挟まず `onUiResultConsumed(resultId)` を呼びます。
+ViewModel は一致する先頭結果だけを削除し、重複、古い識別子、順序の異なる消費通知は無視します。
+エラー表示の消費は callback への引き渡し完了を意味し、Snackbar の表示終了や削除取り消しを待ちません。
+
+未消費結果は同じ ViewModel が生きている間保持されるため、Route の再生成や lifecycle による購読停止で消えません。
+結果は `SavedStateHandle` へ保存せず、プロセス終了後の再配送は保証しません。
+画面遷移の実行と、画像 picker・共有など UI 内で完結する処理は引き続き Route の callback が担当します。
 
 ## 変更時に守ること
 
@@ -113,4 +134,4 @@ Navigation と操作エラーは `Channel.BUFFERED` で通知し、collector の
 - Room に保存されたかどうかだけで、新規セッションと既存セッションを再分類しない
 - 終了処理の開始後に `updateEditState` から autosave を再予約しない
 - 一時画像と保存済み画像の cleanup 担当を混同しない
-- 保存成功前に Navigation event を送らない
+- 保存成功前に画面遷移の結果を追加しない

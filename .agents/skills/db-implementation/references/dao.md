@@ -4,7 +4,7 @@
 
 ## 確認する対象
 
-- `data/local/dao/`（`MemoDao`、`TagDao`）と `data/local/model/MemoWithRefs`
+- `data/local/dao/`（`MemoDao`、`MemoBulkDao`、`TagDao`）と `data/local/model/`（`MemoWithRefs`、`MemoSummaryProjection`）
 - active / trash / search / calendar など既存の絞り込み条件
 
 ## 実装時の注意

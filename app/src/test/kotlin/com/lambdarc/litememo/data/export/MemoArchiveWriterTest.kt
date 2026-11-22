@@ -103,6 +103,22 @@ class MemoArchiveWriterTest {
         }
     }
 
+    @Test
+    fun boundaryWriteAcceptsManifestAtManifestSizeLimit() {
+        // Arrange
+        val manifest = manifestFixture(memos = listOf(memoDtoFixture()))
+        val limits = MemoArchiveLimits.DEFAULT.copy(
+            maxManifestBytes = encodeManifest(manifest).size.toLong()
+        )
+
+        // Act
+        // Boundary: a manifest exactly at the size limit is written
+        val archive = writeArchive(manifest, limits = limits)
+
+        // Assert
+        assertEquals(listOf(MemoArchiveLayout.MANIFEST_ENTRY_NAME), entryNames(archive))
+    }
+
     private fun entryNames(archive: ByteArray): List<String> = buildList {
         ZipInputStream(ByteArrayInputStream(archive)).use { zip ->
             while (true) {

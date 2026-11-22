@@ -3,18 +3,24 @@ package com.lambdarc.litememo.ui.screen
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.lambdarc.litememo.R
 import com.lambdarc.litememo.ui.state.MemoEditUiState
+import com.lambdarc.litememo.ui.state.ScreenUiStatus
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -25,6 +31,78 @@ class MemoEditScreenComposeTest {
 
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun normalLoadingHidesEditorAndContentActions() {
+        // Act
+        // Normal: loading shows progress while editing and content actions are absent.
+        setMemoEditScreen(
+            uiState = { MemoEditUiState(status = ScreenUiStatus.LOADING, memoId = "memo-1") }
+        )
+
+        // Assert
+        composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate))
+            .assertIsDisplayed()
+        assertEditorAndActionsAbsent()
+    }
+
+    @Test
+    fun normalErrorHidesEditorAndContentActions() {
+        // Act
+        // Normal: the screen load error shows its retry action without editing controls.
+        setMemoEditScreen(
+            uiState = { MemoEditUiState(status = ScreenUiStatus.ERROR, memoId = "memo-1") }
+        )
+
+        // Assert
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        composeRule.onNodeWithText(context.getString(R.string.retry_label)).assertIsDisplayed()
+        assertEditorAndActionsAbsent()
+    }
+
+    @Test
+    fun interactionErrorRetryInvokesCallback() {
+        // Arrange
+        var retried = false
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        setMemoEditScreen(
+            uiState = { MemoEditUiState(status = ScreenUiStatus.ERROR, memoId = "memo-1") },
+            onRetry = { retried = true }
+        )
+
+        // Act
+        // Interaction: the retry button invokes the supplied callback.
+        composeRule.onNodeWithText(context.getString(R.string.retry_label)).performClick()
+
+        // Assert
+        assertEquals(true, retried)
+    }
+
+    @Test
+    fun normalContentWithTagErrorKeepsEditorEnabled() {
+        // Act
+        // Normal: an independent tag load error leaves memo editing and attachment available.
+        setMemoEditScreen(uiState = { MemoEditUiState(hasTagError = true) })
+
+        // Assert
+        composeRule.onNodeWithTag(MemoEditTestTags.TITLE_INPUT).assertIsEnabled()
+        composeRule.onNodeWithTag(MemoEditTestTags.BODY_INPUT).assertIsEnabled()
+        composeRule.onNodeWithTag(MemoEditTestTags.ATTACH_IMAGE_BUTTON).assertIsEnabled()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        composeRule.onNodeWithText(context.getString(R.string.memo_edit_tag_load_error))
+            .assertIsDisplayed()
+    }
+
+    private fun assertEditorAndActionsAbsent() {
+        composeRule.onNodeWithTag(MemoEditTestTags.TITLE_INPUT).assertDoesNotExist()
+        composeRule.onNodeWithTag(MemoEditTestTags.BODY_INPUT).assertDoesNotExist()
+        composeRule.onNodeWithTag(MemoEditTestTags.ATTACH_IMAGE_BUTTON).assertDoesNotExist()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        composeRule.onNodeWithContentDescription(context.getString(R.string.more_options))
+            .assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.delete_memo))
+            .assertDoesNotExist()
+    }
 
     @Test
     fun normalTitleInputAcceptsText() {
@@ -170,7 +248,8 @@ class MemoEditScreenComposeTest {
         onTitleChange: (String) -> Unit = {},
         onBodyChange: (String) -> Unit = {},
         onAttachImageRequest: () -> Unit = {},
-        onImageRemove: (String) -> Unit = {}
+        onImageRemove: (String) -> Unit = {},
+        onRetry: () -> Unit = {}
     ) {
         composeRule.setContent {
             TestScreenContent {
@@ -181,7 +260,7 @@ class MemoEditScreenComposeTest {
                     onTagToggle = {},
                     onDelete = {},
                     onBackRequest = {},
-                    onRetry = {},
+                    onRetry = onRetry,
                     onRetryTags = {},
                     onAttachImageRequest = onAttachImageRequest,
                     onImageRemove = onImageRemove,

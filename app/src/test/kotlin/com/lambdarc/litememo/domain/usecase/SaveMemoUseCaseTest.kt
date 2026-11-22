@@ -6,23 +6,29 @@ import com.lambdarc.litememo.domain.MutableTimeProvider
 import com.lambdarc.litememo.domain.QueueMemoIdProvider
 import com.lambdarc.litememo.domain.memoFixture
 import com.lambdarc.litememo.domain.memoImageFixture
+import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.SaveMemoCommand
 import com.lambdarc.litememo.domain.model.value.MemoBody
 import com.lambdarc.litememo.domain.model.value.MemoId
+import com.lambdarc.litememo.domain.model.value.MemoImageFileName
 import com.lambdarc.litememo.domain.model.value.MemoTitle
 import com.lambdarc.litememo.domain.model.value.TagId
 import com.lambdarc.litememo.domain.model.value.TimestampMillis
+import com.lambdarc.litememo.domain.repository.MemoRepository
 import com.lambdarc.litememo.domain.repository.TagRepository
 import com.lambdarc.litememo.domain.tagFixture
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.confirmVerified
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertAll
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 
 class SaveMemoUseCaseTest {
 
@@ -52,7 +58,7 @@ class SaveMemoUseCaseTest {
     }
 
     @Test
-    fun invokePreservesCreatedAtWhenUpdatingExistingMemo() = runTest {
+    fun normalUpdatePreservesCreatedAtAndAdvancesUpdatedAt() = runTest {
         // Arrange
         val existing = memoFixture(id = "memo-1", createdAt = 1000L, updatedAt = 1500L)
         val useCase = saveMemoUseCase(
@@ -61,6 +67,7 @@ class SaveMemoUseCaseTest {
         )
 
         // Act
+        // Normal: the update preserves creation time and applies the current edit.
         val memo =
             useCase(
                 SaveMemoCommand(
@@ -71,30 +78,10 @@ class SaveMemoUseCaseTest {
             )
 
         // Assert
-        assertEquals(TimestampMillis(1000L), memo.createdAt)
-    }
-
-    @Test
-    fun invokeUpdatesUpdatedAtWhenUpdatingExistingMemo() = runTest {
-        // Arrange
-        val existing = memoFixture(id = "memo-1", createdAt = 1000L, updatedAt = 1500L)
-        val useCase = saveMemoUseCase(
-            memoRepository = FakeMemoRepository(listOf(existing)),
-            timeProvider = MutableTimeProvider(TimestampMillis(3000L))
+        assertAll(
+            { assertEquals(TimestampMillis(1000L), memo.createdAt) },
+            { assertEquals(TimestampMillis(3000L), memo.updatedAt) }
         )
-
-        // Act
-        val memo =
-            useCase(
-                SaveMemoCommand(
-                    id = existing.id,
-                    title = MemoTitle("New"),
-                    body = MemoBody("Body")
-                )
-            )
-
-        // Assert
-        assertEquals(TimestampMillis(3000L), memo.updatedAt)
     }
 
     @Test
@@ -140,32 +127,21 @@ class SaveMemoUseCaseTest {
     }
 
     @Test
-    fun invokeThrowsWhenTitleAndBodyAreBlank() {
-        // Arrange
-        val useCase = saveMemoUseCase()
-
-        // Act & Assert
-        assertThrows(IllegalArgumentException::class.java) {
-            runTest {
-                useCase(SaveMemoCommand(title = MemoTitle(" "), body = MemoBody(" ")))
-            }
-        }
-    }
-
-    @Test
-    fun invokeDoesNotSaveMemoWhenTitleAndBodyAreBlank() = runTest {
+    fun errorBlankContentDoesNotSaveMemoOrGenerateId() = runTest {
         // Arrange
         val repository = FakeMemoRepository()
-        val useCase = saveMemoUseCase(memoRepository = repository)
+        val idProvider = QueueMemoIdProvider()
+        val useCase = saveMemoUseCase(memoRepository = repository, memoIdProvider = idProvider)
 
-        // Act
-        try {
+        // Act & Assert
+        // Error: blank content is rejected before persistence or id allocation.
+        assertThrows<IllegalArgumentException> {
             useCase(SaveMemoCommand(title = MemoTitle(" "), body = MemoBody(" ")))
-        } catch (_: IllegalArgumentException) {
         }
-
-        // Assert
-        assertEquals(emptyList<Any>(), repository.savedMemos)
+        assertAll(
+            { assertTrue(repository.savedMemos.isEmpty()) },
+            { assertTrue(idProvider.issuedIds.isEmpty()) }
+        )
     }
 
     @Test
@@ -211,18 +187,18 @@ class SaveMemoUseCaseTest {
     }
 
     @Test
-    fun normalInvokeSavesMemoWithDistinctImagesWhenDuplicateImageIdsAreProvided() = runTest {
+    fun boundaryDuplicateImageIdsKeepFirstImageFile() = runTest {
         // Arrange
         val image = memoImageFixture()
         val useCase = saveMemoUseCase()
 
         // Act
-        // Normal: duplicate image ids are normalized like duplicate tag ids.
+        // Boundary: the first file wins when different images share an id.
         val memo = useCase(
             SaveMemoCommand(
                 title = MemoTitle("Title"),
                 body = MemoBody("Body"),
-                images = listOf(image, image)
+                images = listOf(image, image.copy(fileName = MemoImageFileName("other.jpg")))
             )
         )
 
@@ -273,26 +249,6 @@ class SaveMemoUseCaseTest {
 
         // Assert
         assertEquals(listOf(tagId), memo.tagIds)
-    }
-
-    @Test
-    fun invokeThrowsWhenTagIdDoesNotExist() {
-        // Arrange
-        val repository = FakeMemoRepository()
-        val useCase = saveMemoUseCase(memoRepository = repository)
-
-        // Act & Assert
-        assertThrows(IllegalArgumentException::class.java) {
-            runTest {
-                useCase(
-                    SaveMemoCommand(
-                        title = MemoTitle("Title"),
-                        body = MemoBody("Body"),
-                        tagIds = listOf(TagId("missing"))
-                    )
-                )
-            }
-        }
     }
 
     @Test
@@ -375,28 +331,6 @@ class SaveMemoUseCaseTest {
     }
 
     @Test
-    fun invokeDoesNotSaveMemoWhenTagIdDoesNotExist() = runTest {
-        // Arrange
-        val repository = FakeMemoRepository()
-        val useCase = saveMemoUseCase(memoRepository = repository)
-
-        // Act
-        try {
-            useCase(
-                SaveMemoCommand(
-                    title = MemoTitle("Title"),
-                    body = MemoBody("Body"),
-                    tagIds = listOf(TagId("missing"))
-                )
-            )
-        } catch (_: IllegalArgumentException) {
-        }
-
-        // Assert
-        assertEquals(emptyList<Any>(), repository.savedMemos)
-    }
-
-    @Test
     fun interactionMissingTagDoesNotSaveMemoOrGenerateId() = runTest {
         // Arrange
         val missingTagId = TagId("missing")
@@ -411,8 +345,9 @@ class SaveMemoUseCaseTest {
             currentTimeProvider = MutableTimeProvider(TimestampMillis(1000L))
         )
 
-        // Act
-        val error = runCatching {
+        // Act & Assert
+        // Interaction: invalid tag references fail before persistence or id allocation.
+        assertThrows<IllegalArgumentException> {
             useCase(
                 SaveMemoCommand(
                     title = MemoTitle("Title"),
@@ -420,13 +355,10 @@ class SaveMemoUseCaseTest {
                     tagIds = listOf(missingTagId)
                 )
             )
-        }.exceptionOrNull()
-
-        // Assert
+        }
         assertAll(
-            { assertEquals(IllegalArgumentException::class.java, error?.javaClass) },
-            { assertEquals(emptyList<Any>(), memoRepository.savedMemos) },
-            { assertEquals(emptyList<MemoId>(), memoIdProvider.issuedIds) }
+            { assertTrue(memoRepository.savedMemos.isEmpty()) },
+            { assertTrue(memoIdProvider.issuedIds.isEmpty()) }
         )
         coVerify(exactly = 1) { tagRepository.getTagsByIds(listOf(missingTagId)) }
         confirmVerified(tagRepository)
@@ -515,47 +447,123 @@ class SaveMemoUseCaseTest {
     }
 
     @Test
-    fun invokeThrowsWhenOnlyTagIdsAreProvided() {
+    fun invokeThrowsWhenOnlyTagIdsAreProvided() = runTest {
         // Arrange
         val useCase =
             saveMemoUseCase(tagRepository = FakeTagRepository(listOf(tagFixture(id = "tag-1"))))
 
         // Act & Assert
-        assertThrows(IllegalArgumentException::class.java) {
-            runTest {
-                useCase(
-                    SaveMemoCommand(
-                        title = MemoTitle(""),
-                        body = MemoBody(""),
-                        tagIds = listOf(TagId("tag-1"))
-                    )
+        assertThrows<IllegalArgumentException> {
+            useCase(
+                SaveMemoCommand(
+                    title = MemoTitle(""),
+                    body = MemoBody(""),
+                    tagIds = listOf(TagId("tag-1"))
                 )
-            }
+            )
         }
     }
 
     @Test
-    fun invokeThrowsWhenOnlyIsFavoriteIsTrue() {
+    fun invokeThrowsWhenOnlyIsFavoriteIsTrue() = runTest {
         // Arrange
         val useCase = saveMemoUseCase()
 
         // Act & Assert
-        assertThrows(IllegalArgumentException::class.java) {
-            runTest {
-                useCase(
-                    SaveMemoCommand(
-                        title = MemoTitle(""),
-                        body = MemoBody(""),
-                        isFavorite = true
-                    )
+        assertThrows<IllegalArgumentException> {
+            useCase(
+                SaveMemoCommand(
+                    title = MemoTitle(""),
+                    body = MemoBody(""),
+                    isFavorite = true
                 )
-            }
+            )
         }
     }
 
+    @Test
+    fun errorPartiallyMissingTagsRejectSaveWithoutChangingExistingMemo() = runTest {
+        // Arrange
+        val existing = memoFixture()
+        val repository = FakeMemoRepository(listOf(existing))
+        val tag = tagFixture()
+        val useCase = saveMemoUseCase(
+            memoRepository = repository,
+            tagRepository = FakeTagRepository(listOf(tag))
+        )
+
+        // Act & Assert
+        // Error: one valid reference does not allow an update with another missing tag.
+        assertThrows<IllegalArgumentException> {
+            useCase(
+                SaveMemoCommand(
+                    id = existing.id,
+                    title = MemoTitle("Changed"),
+                    body = existing.body,
+                    tagIds = listOf(tag.id, TagId("missing"))
+                )
+            )
+        }
+        val stored = repository.getActiveMemo(existing.id)
+        assertAll(
+            { assertEquals(existing, stored) },
+            { assertTrue(repository.savedMemos.isEmpty()) }
+        )
+    }
+
+    @Test
+    fun errorSaveFailurePropagatesToCaller() = runTest {
+        // Arrange
+        val failure = IllegalStateException("Storage unavailable")
+        val repository = object : MemoRepository by FakeMemoRepository() {
+            override suspend fun saveMemo(memo: Memo) = throw failure
+        }
+        val useCase = saveMemoUseCase(memoRepository = repository)
+
+        // Act & Assert
+        // Error: a persistence failure must not be returned as a successful memo.
+        val thrown = assertThrows<IllegalStateException> {
+            useCase(SaveMemoCommand(title = MemoTitle("Title"), body = MemoBody("Body")))
+        }
+        assertSame(failure, thrown)
+    }
+
+    @Test
+    fun coroutineCancelledTagValidationDoesNotSaveOrGenerateId() = runTest {
+        // Arrange
+        val failure = CancellationException("Cancelled validation")
+        val repository = FakeMemoRepository()
+        val idProvider = QueueMemoIdProvider()
+        val tags = object : TagRepository by FakeTagRepository() {
+            override suspend fun getTagsByIds(ids: List<TagId>) = throw failure
+        }
+        val useCase = saveMemoUseCase(
+            memoRepository = repository,
+            tagRepository = tags,
+            memoIdProvider = idProvider
+        )
+
+        // Act & Assert
+        // Coroutine: cancelled validation exits before persistence and id allocation.
+        val thrown = assertThrows<CancellationException> {
+            useCase(
+                SaveMemoCommand(
+                    title = MemoTitle("Title"),
+                    body = MemoBody("Body"),
+                    tagIds = listOf(TagId("tag-1"))
+                )
+            )
+        }
+        assertAll(
+            { assertSame(failure, thrown) },
+            { assertTrue(repository.savedMemos.isEmpty()) },
+            { assertTrue(idProvider.issuedIds.isEmpty()) }
+        )
+    }
+
     private fun saveMemoUseCase(
-        memoRepository: FakeMemoRepository = FakeMemoRepository(),
-        tagRepository: FakeTagRepository = FakeTagRepository(),
+        memoRepository: MemoRepository = FakeMemoRepository(),
+        tagRepository: TagRepository = FakeTagRepository(),
         memoIdProvider: QueueMemoIdProvider = QueueMemoIdProvider(),
         timeProvider: MutableTimeProvider = MutableTimeProvider()
     ) = SaveMemoUseCase(

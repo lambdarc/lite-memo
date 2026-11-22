@@ -10,6 +10,7 @@ import java.io.FilterInputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.PushbackInputStream
+import java.util.zip.ZipEntry
 import java.util.zip.ZipException
 import java.util.zip.ZipInputStream
 
@@ -49,7 +50,7 @@ internal class MemoArchiveReader(private val json: Json, private val limits: Mem
 
         var entryCount = 1
         while (true) {
-            val entry = zip.nextEntry ?: break
+            val entry = nextEntry(zip) ?: break
 
             entryCount++
             requireEntryCount(entryCount)
@@ -76,7 +77,7 @@ internal class MemoArchiveReader(private val json: Json, private val limits: Mem
     }
 
     private fun readManifest(zip: ZipInputStream): LiteMemoExportDto {
-        val entry = zip.nextEntry ?: archiveFailure(
+        val entry = nextEntry(zip) ?: archiveFailure(
             MemoArchiveFailureReason.MALFORMED_ARCHIVE,
             "Archive contains no entries."
         )
@@ -122,6 +123,17 @@ internal class MemoArchiveReader(private val json: Json, private val limits: Mem
             output.write(buffer, 0, read)
         }
         return output.toByteArray()
+    }
+
+    private fun nextEntry(zip: ZipInputStream): ZipEntry? = try {
+        zip.nextEntry
+    } catch (e: IllegalArgumentException) {
+        // ZipInputStream before JDK 21 throws this instead of ZipException for an undecodable name.
+        archiveFailure(
+            MemoArchiveFailureReason.MALFORMED_ARCHIVE,
+            "Archive contains an entry name that is not valid UTF-8.",
+            e
+        )
     }
 
     private fun requireZipSignature(source: InputStream): InputStream {

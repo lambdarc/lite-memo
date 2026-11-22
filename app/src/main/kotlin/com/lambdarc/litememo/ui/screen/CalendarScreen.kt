@@ -104,12 +104,12 @@ fun CalendarScreen(
         modifier = modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        when {
-            uiState.isLoading -> LoadingContent()
+        when (uiState) {
+            CalendarUiState.Loading -> LoadingContent()
 
-            uiState.hasError -> ErrorContent(onRetry = onRetry)
+            is CalendarUiState.Error -> ErrorContent(onRetry = onRetry)
 
-            else -> Box(modifier = Modifier.fillMaxSize()) {
+            is CalendarUiState.Content -> Box(modifier = Modifier.fillMaxSize()) {
                 CalendarContent(
                     uiState = uiState,
                     onPreviousMonth = onPreviousMonth,
@@ -137,9 +137,9 @@ fun CalendarScreen(
             }
         }
 
-        if (uiState.isDatePickerVisible && uiState.selectedDate != null) {
+        uiState.datePickerDateOrNull()?.let { selectedDate ->
             CalendarDatePickerDialog(
-                selectedDate = uiState.selectedDate,
+                selectedDate = selectedDate,
                 onDatePick = onDatePick,
                 onDismiss = onDatePickerDismiss
             )
@@ -147,9 +147,15 @@ fun CalendarScreen(
     }
 }
 
+private fun CalendarUiState.datePickerDateOrNull(): LocalDate? = when (this) {
+    CalendarUiState.Loading -> null
+    is CalendarUiState.Error -> null
+    is CalendarUiState.Content -> selectedDate.takeIf { isDatePickerVisible }
+}
+
 @Composable
 private fun CalendarContent(
-    uiState: CalendarUiState,
+    uiState: CalendarUiState.Content,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onDateSelect: (LocalDate) -> Unit,
@@ -241,7 +247,7 @@ private fun CalendarContent(
 
 @Composable
 private fun CalendarMonthCard(
-    uiState: CalendarUiState,
+    uiState: CalendarUiState.Content,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onDateSelect: (LocalDate) -> Unit,
@@ -431,8 +437,7 @@ private fun monthTitle(month: YearMonth?): String {
 private fun CalendarScreenPreview() {
     val month = YearMonth.of(2026, 5)
     val selectedDate = LocalDate.of(2026, 5, 15)
-    val uiState = CalendarUiState(
-        isLoading = false,
+    val uiState = CalendarUiState.Content(
         selectedMonth = month,
         selectedDate = selectedDate,
         days = (1..month.lengthOfMonth()).map { dayOfMonth ->

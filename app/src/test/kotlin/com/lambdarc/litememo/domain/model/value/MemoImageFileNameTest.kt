@@ -3,6 +3,8 @@ package com.lambdarc.litememo.domain.model.value
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 
 class MemoImageFileNameTest {
 
@@ -89,6 +91,17 @@ class MemoImageFileNameTest {
         assertThrows(IllegalArgumentException::class.java) {
             MemoImageFileName(input)
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ["...", ".hidden", "a..b", "image.jpg."])
+    fun normalInvokeKeepsDotNamesThatAreNotDirectoryReferences(input: String) {
+        // Act
+        // Normal: names that only resemble "." or ".." are valid file names
+        val fileName = MemoImageFileName(input)
+
+        // Assert
+        assertEquals(input, fileName.value)
     }
 
 }

@@ -381,6 +381,143 @@ class MainViewModelTest {
     }
 
     @Test
+    fun stateTransitionEnablingAppLockAfterStartupKeepsAppUnlocked() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeUserSettingsRepository()
+        val viewModel = mainViewModel(repository)
+        advanceUntilIdle()
+
+        // Act
+        // StateTransition: enabling app lock in settings does not lock the current session
+        repository.setAppLockEnabled(true)
+        advanceUntilIdle()
+
+        // Assert
+        val state = viewModel.appLockUiState.value
+        assertAll(
+            { assertEquals(AppLockUiStatus.UNLOCKED, state.status) },
+            { assertEquals(null, state.message) }
+        )
+    }
+
+    @Test
+    fun flowEnablingAppLockAfterStartupDoesNotEmitAuthenticationRequest() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeUserSettingsRepository()
+        val viewModel = mainViewModel(repository)
+        advanceUntilIdle()
+
+        // Act & Assert
+        // Flow: the current session stays unlocked without an authentication prompt
+        viewModel.authenticationRequestEvent.test {
+            repository.setAppLockEnabled(true)
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun interactionEnablingAppLockAfterStartupDoesNotPurgeAgain() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeUserSettingsRepository()
+        val memoRepository = FakeMemoRepository()
+        mainViewModel(repository, memoRepository)
+        advanceUntilIdle()
+
+        // Act
+        // Interaction: expired trash is purged only once per process
+        repository.setAppLockEnabled(true)
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(1, memoRepository.purgeCutoffs.size)
+    }
+
+    @Test
+    fun interactionRepeatedAuthenticationSuccessPurgesExpiredTrashOnce() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeUserSettingsRepository()
+        repository.setAppLockEnabled(true)
+        val memoRepository = FakeMemoRepository()
+        val viewModel = mainViewModel(repository, memoRepository)
+        advanceUntilIdle()
+        viewModel.onAuthenticationResult(AppLockAuthenticationUiResult.SUCCEEDED)
+        advanceUntilIdle()
+        viewModel.onAppStopped()
+
+        // Act
+        // Interaction: a second unlock does not purge expired trash again
+        viewModel.onAuthenticationResult(AppLockAuthenticationUiResult.SUCCEEDED)
+        advanceUntilIdle()
+
+        // Assert
+        assertEquals(1, memoRepository.purgeCutoffs.size)
+    }
+
+    @Test
+    fun stateTransitionAppStartedRequestsUnlockWhenLocked() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeUserSettingsRepository()
+        repository.setAppLockEnabled(true)
+        val viewModel = mainViewModel(repository)
+        advanceUntilIdle()
+        viewModel.onAuthenticationResult(AppLockAuthenticationUiResult.FAILED)
+
+        // Act
+        // StateTransition: returning to a locked app starts authentication again
+        viewModel.onAppStarted()
+
+        // Assert
+        assertEquals(AppLockUiStatus.AUTHENTICATING, viewModel.appLockUiState.value.status)
+    }
+
+    @Test
+    fun boundaryAppStartedKeepsUnlockedStatusWhenAlreadyUnlocked() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeUserSettingsRepository()
+        repository.setAppLockEnabled(true)
+        val viewModel = mainViewModel(repository)
+        advanceUntilIdle()
+        viewModel.onAuthenticationResult(AppLockAuthenticationUiResult.SUCCEEDED)
+
+        // Act
+        // Boundary: an unlocked app is not asked to authenticate on start
+        viewModel.onAppStarted()
+
+        // Assert
+        assertEquals(AppLockUiStatus.UNLOCKED, viewModel.appLockUiState.value.status)
+    }
+
+    @Test
+    fun boundaryAppStartedDoesNothingWhenAppLockIsDisabled() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = mainViewModel(FakeUserSettingsRepository())
+        advanceUntilIdle()
+
+        // Act & Assert
+        // Boundary: start without app lock never requests authentication
+        viewModel.authenticationRequestEvent.test {
+            viewModel.onAppStarted()
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun boundaryRequestUnlockDoesNothingWhenAppLockIsDisabled() = runTest(dispatcher) {
+        // Arrange
+        val viewModel = mainViewModel(FakeUserSettingsRepository())
+        advanceUntilIdle()
+
+        // Act
+        // Boundary: an unlock request without app lock is ignored
+        viewModel.requestUnlock()
+
+        // Assert
+        assertEquals(AppLockUiStatus.UNLOCKED, viewModel.appLockUiState.value.status)
+    }
+
+    @Test
     fun flowRequestWidgetNavEmitsNavigationEvent() = runTest(dispatcher) {
         // Arrange
         val viewModel = mainViewModel(FakeUserSettingsRepository())

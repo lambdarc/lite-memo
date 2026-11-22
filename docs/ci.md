@@ -7,7 +7,7 @@
 
 - draft ではない Pull Request は、base branch にかかわらず `ci.yml` の対象とする
 - CodeQL は `develop` / `main` を base にする Pull Request だけを対象とする
-- `develop` / `main` を base にする Pull Request では、静的解析と JVM Unit Test に加えて release / R8 build を検証する
+- `develop` / `main` を base にする Pull Request と `main` への push では、静的解析と JVM Unit Test に加えて release / R8 build を検証する
 - `ci.yml` と CodeQL の push 検証は `main` だけを対象とし、`develop` への push では実行しない
 - coverage は draft ではない Pull Request と、`main` への push で生成する。PR コメントは同一リポジトリからの Pull Request にだけ追加する
 - draft の Pull Request は全 job を skip し、ready for review にした時点で CI を開始する。CodeQL は base が `develop` / `main` の場合だけ開始する
@@ -31,10 +31,15 @@ domain / data 層は `domain.model` / `domain.usecase` / `data.mapper` / `data.r
 ここで挙げたパッケージは代表例であり、正確な集計対象は `classes(...)` の設定を確認します。
 UI 層は `*ViewModel*` / `*UiState*` / `*UiResult*` / `*UiModel*` / `*UiDirection*` / `*UiMessage*` / `*UiStatus*` / `*UiType*` と、
 役割を表す接尾語のパターンで選びます。
-接尾語のパターンで選ぶため、UI 層はパッケージを移動しても集計対象は変わりません。
+パターンは `com.lambdarc.litememo.ui.*.*Suffix*` の形で、Kover は `*` を `.*` の正規表現にするためパッケージの区切りの `.` も越えます。
+そのため `ui` 配下のサブパッケージ間（深さを問わない）の移動では集計対象は変わりませんが、`ui` 直下へ移した型は外れます。
 
 役割の接尾語に合わない名前の型を追加すると、集計対象から外れます。
 外れても失敗しないため、集計したい型は既存の接尾語へ命名をそろえるか、`classes(...)` にパターンを追加します。
+
+集計対象のパッケージには Hilt が生成する `*_Factory` や `*_HiltModules*` も含まれます。
+これらは Unit Test から直接呼ばれず、未到達の行として全体の値を押し下げるため、`excludes` の `classes(...)` で除外します。
+Hilt の生成物に新しい命名パターンが増えた場合は、`excludes` に追加します。
 
 ## キャッシュ
 

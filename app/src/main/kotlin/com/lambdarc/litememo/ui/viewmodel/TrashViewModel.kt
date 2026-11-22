@@ -73,27 +73,21 @@ class TrashViewModel @Inject constructor(
         selection,
         showEmptyTrashDialog
     ) { observed, purgeError, activeSelection, showEmptyDialog ->
-        val hasError = observed.memos == null || observed.tags == null || purgeError
-        val uiMemos = if (!hasError) {
-            toUiModels(
-                memos = requireNotNull(observed.memos),
-                tags = requireNotNull(observed.tags)
-            )
+        if (observed.memos == null || observed.tags == null || purgeError) {
+            TrashUiState.Error(selection = activeSelection)
         } else {
-            emptyList()
+            val uiMemos = toUiModels(memos = observed.memos, tags = observed.tags)
+            val visibleMemoIds = uiMemos.map { it.id }.toSet()
+            TrashUiState.Content(
+                memos = uiMemos,
+                selection = activeSelection.retain(visibleMemoIds),
+                showEmptyTrashDialog = showEmptyDialog
+            )
         }
-        val visibleMemoIds = uiMemos.map { it.id }.toSet()
-        TrashUiState(
-            isLoading = false,
-            hasError = hasError,
-            memos = uiMemos,
-            selection = activeSelection.retain(visibleMemoIds),
-            showEmptyTrashDialog = showEmptyDialog
-        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-        initialValue = TrashUiState()
+        initialValue = TrashUiState.Loading
     )
 
     fun startSelection(id: MemoId) {
@@ -110,7 +104,7 @@ class TrashViewModel @Inject constructor(
     }
 
     fun restoreSelectedMemos() {
-        val memoIds = uiState.value.selection.selectedMemoIds.toList()
+        val memoIds = currentContent()?.selection?.selectedMemoIds.orEmpty().toList()
         if (memoIds.isEmpty()) return
         if (isActionInFlight) return
         isActionInFlight = true
@@ -130,7 +124,7 @@ class TrashViewModel @Inject constructor(
     }
 
     fun requestEmptyTrash() {
-        if (uiState.value.memos.isEmpty()) return
+        if (currentContent()?.memos.isNullOrEmpty()) return
         showEmptyTrashDialog.value = true
     }
 
@@ -139,7 +133,7 @@ class TrashViewModel @Inject constructor(
     }
 
     fun confirmEmptyTrash() {
-        val memoIds = uiState.value.memos.map { it.id }
+        val memoIds = currentContent()?.memos.orEmpty().map { it.id }
         if (memoIds.isEmpty()) {
             showEmptyTrashDialog.value = false
             return
@@ -163,10 +157,13 @@ class TrashViewModel @Inject constructor(
     }
 
     fun retry() {
+        showEmptyTrashDialog.value = false
         hasPurgeError.value = false
         purgeExpiredTrashedMemos()
         retryTrigger.update { !it }
     }
+
+    private fun currentContent(): TrashUiState.Content? = uiState.value as? TrashUiState.Content
 
     private fun purgeExpiredTrashedMemos() {
         viewModelScope.launch {
@@ -189,7 +186,9 @@ class TrashViewModel @Inject constructor(
                 title = memo.title.value,
                 body = memo.body.value,
                 tags = memo.tagIds.mapNotNull { id ->
-                    tagsById[id]?.let { TagUiModel.fromDomain(it) }
+                    tagsById[id]?.let {
+                        TagUiModel(id = it.id, name = it.name.value, colorArgb = it.color.argb)
+                    }
                 },
                 deletedAt = deletedAt
             )

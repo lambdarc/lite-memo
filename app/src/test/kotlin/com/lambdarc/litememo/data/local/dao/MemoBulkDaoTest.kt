@@ -82,6 +82,39 @@ class MemoBulkDaoTest {
         )
     }
 
+    @Test
+    fun boundaryRestoreMemosFromTrashKeepsSingleBatchAtBatchSize() = runTest {
+        // Arrange
+        val dao = RecordingMemoBulkDao()
+        val ids = List(900) { index -> "memo-$index" }
+
+        // Act
+        // Boundary: exactly one batch worth of ids is not split
+        dao.restoreMemosFromTrash(ids)
+
+        // Assert
+        assertAll(
+            { assertEquals(listOf(900), dao.trashedMemoIdBatchSizes) },
+            { assertEquals(listOf(900), dao.restoredMemoBatchSizes) }
+        )
+    }
+
+    @Test
+    fun boundaryRestoreMemosFromTrashSkipsReadsAndWritesForEmptyInput() = runTest {
+        // Arrange
+        val dao = RecordingMemoBulkDao(failOnWrite = true)
+
+        // Act
+        // Boundary: an empty restore reads nothing and writes nothing
+        dao.restoreMemosFromTrash(emptyList())
+
+        // Assert
+        assertAll(
+            { assertEquals(emptyList<Int>(), dao.trashedMemoIdBatchSizes) },
+            { assertEquals(emptyList<Int>(), dao.restoredMemoBatchSizes) }
+        )
+    }
+
     private fun memoWithRefs(id: String) = MemoWithRefs(
         memo = MemoEntity(
             id = id,

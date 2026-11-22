@@ -38,8 +38,7 @@ private val previewTrashScreenActions = object : TrashScreenActions {
 private fun TrashScreenPreview() {
     LiteMemoTheme {
         TrashScreen(
-            uiState = TrashUiState(
-                isLoading = false,
+            uiState = TrashUiState.Content(
                 memos = listOf(
                     TrashedMemoUiModel(
                         id = MemoId("memo-1"),
@@ -60,7 +59,7 @@ private fun TrashScreenPreview() {
 private fun TrashScreenEmptyPreview() {
     LiteMemoTheme {
         TrashScreen(
-            uiState = TrashUiState(isLoading = false),
+            uiState = TrashUiState.Content(),
             actions = previewTrashScreenActions
         )
     }
@@ -71,7 +70,7 @@ private fun TrashScreenEmptyPreview() {
 private fun TrashScreenLoadingPreview() {
     LiteMemoTheme {
         TrashScreen(
-            uiState = TrashUiState(isLoading = true),
+            uiState = TrashUiState.Loading,
             actions = previewTrashScreenActions
         )
     }
@@ -82,7 +81,7 @@ private fun TrashScreenLoadingPreview() {
 private fun TrashScreenErrorPreview() {
     LiteMemoTheme {
         TrashScreen(
-            uiState = TrashUiState(isLoading = false, hasError = true),
+            uiState = TrashUiState.Error(),
             actions = previewTrashScreenActions
         )
     }

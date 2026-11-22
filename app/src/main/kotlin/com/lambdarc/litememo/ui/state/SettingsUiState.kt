@@ -8,8 +8,6 @@ data class SettingsUiState(
     val memoSortOrder: MemoSortOrder = MemoSortOrder.UPDATED_NEWEST,
     val appLockEnabled: Boolean = false,
     val appVersion: String = "",
-    val themeDropdownExpanded: Boolean = false,
-    val sortOrderExpanded: Boolean = false,
     val isExporting: Boolean = false,
     val exportPickerRequestId: Long? = null,
     val isImporting: Boolean = false,
