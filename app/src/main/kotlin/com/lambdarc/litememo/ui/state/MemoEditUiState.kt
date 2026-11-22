@@ -19,6 +19,7 @@ data class MemoEditUiState(
     val isFavorite: Boolean = false,
     val isModified: Boolean = false,
     val isDeletePending: Boolean = false,
+    val hasSaveConflict: Boolean = false,
     val availableTags: List<TagUiModel> = emptyList(),
     val selectedTagIds: Set<TagId> = emptySet(),
     val images: List<MemoImageUiModel> = emptyList()

@@ -11,6 +11,7 @@ import com.lambdarc.litememo.data.mapper.toTagRefs
 import com.lambdarc.litememo.data.mapper.toTagRefsByMemoId
 import com.lambdarc.litememo.data.util.deleteImageFiles
 import com.lambdarc.litememo.data.util.requireNoDuplicateIds
+import com.lambdarc.litememo.domain.exception.MemoEditConflictException
 import com.lambdarc.litememo.domain.model.ActiveMemoBulkWrite
 import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.MemoSummary
@@ -82,12 +83,13 @@ class RoomMemoRepository @Inject constructor(
         return distinctIds.mapNotNull { id -> memoById[id.value]?.toDomain() }
     }
 
-    override suspend fun saveMemo(memo: Memo) {
-        val removedFileNames = memoDao.upsertMemoWithRefsAndCollectRemovedFileNames(
+    override suspend fun saveMemo(memo: Memo, expectedMemo: Memo?) {
+        val removedFileNames = memoDao.upsertMemoWithRefsIfUnchangedAndCollectRemovedFileNames(
+            expectedMemo = expectedMemo?.toMemoWithRefs(),
             memo = memo.toEntity(),
             tagRefs = memo.toTagRefs(),
             imageRefs = memo.toImageRefs()
-        )
+        ) ?: throw MemoEditConflictException(memo.id)
         withContext(NonCancellable) {
             memoImageStore.deleteImageFiles(removedFileNames)
         }

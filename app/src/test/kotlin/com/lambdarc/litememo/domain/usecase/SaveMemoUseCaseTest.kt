@@ -4,6 +4,7 @@ import com.lambdarc.litememo.domain.FakeMemoRepository
 import com.lambdarc.litememo.domain.FakeTagRepository
 import com.lambdarc.litememo.domain.MutableTimeProvider
 import com.lambdarc.litememo.domain.QueueMemoIdProvider
+import com.lambdarc.litememo.domain.exception.MemoEditConflictException
 import com.lambdarc.litememo.domain.memoFixture
 import com.lambdarc.litememo.domain.memoImageFixture
 import com.lambdarc.litememo.domain.model.Memo
@@ -72,6 +73,7 @@ class SaveMemoUseCaseTest {
             useCase(
                 SaveMemoCommand(
                     id = existing.id,
+                    expectedMemo = existing,
                     title = MemoTitle("New"),
                     body = MemoBody("Body")
                 )
@@ -98,6 +100,7 @@ class SaveMemoUseCaseTest {
             useCase(
                 SaveMemoCommand(
                     id = existing.id,
+                    expectedMemo = existing,
                     title = MemoTitle("New"),
                     body = MemoBody("Body")
                 )
@@ -220,6 +223,7 @@ class SaveMemoUseCaseTest {
         useCase(
             SaveMemoCommand(
                 id = existing.id,
+                expectedMemo = existing,
                 title = MemoTitle("Title"),
                 body = MemoBody("Body"),
                 images = listOf(newImage)
@@ -299,6 +303,7 @@ class SaveMemoUseCaseTest {
         val memo = useCase(
             SaveMemoCommand(
                 id = existing.id,
+                expectedMemo = existing,
                 title = MemoTitle("New"),
                 body = MemoBody("Body"),
                 createdAt = TimestampMillis(9000L)
@@ -401,6 +406,7 @@ class SaveMemoUseCaseTest {
         val memo = useCase(
             SaveMemoCommand(
                 id = existing.id,
+                expectedMemo = existing,
                 title = MemoTitle("Updated"),
                 body = MemoBody("Body")
             )
@@ -498,6 +504,7 @@ class SaveMemoUseCaseTest {
             useCase(
                 SaveMemoCommand(
                     id = existing.id,
+                    expectedMemo = existing,
                     title = MemoTitle("Changed"),
                     body = existing.body,
                     tagIds = listOf(tag.id, TagId("missing"))
@@ -512,11 +519,72 @@ class SaveMemoUseCaseTest {
     }
 
     @Test
+    fun errorChangedMemoRejectsSaveWithoutOverwritingCurrentMemo() = runTest {
+        // Arrange
+        val expected = memoFixture(id = "memo-1", title = "Before")
+        val current = expected.copy(title = MemoTitle("Imported"))
+        val repository = FakeMemoRepository(listOf(current))
+        val useCase = saveMemoUseCase(memoRepository = repository)
+
+        // Act & Assert
+        // Error: an edit based on an older snapshot cannot overwrite a newer write.
+        assertThrows<MemoEditConflictException> {
+            useCase(
+                SaveMemoCommand(
+                    id = expected.id,
+                    expectedMemo = expected,
+                    title = MemoTitle("Edited"),
+                    body = expected.body
+                )
+            )
+        }
+        assertAll(
+            { assertEquals(listOf(current), repository.currentMemos()) },
+            { assertTrue(repository.savedMemos.isEmpty()) }
+        )
+    }
+
+    @Test
+    fun errorMemoCreatedElsewhereRejectsSaveExpectingNoMemo() = runTest {
+        // Arrange
+        val current = memoFixture(id = "memo-1", title = "Imported")
+        val repository = FakeMemoRepository(listOf(current))
+        val useCase = saveMemoUseCase(memoRepository = repository)
+
+        // Act & Assert
+        // Error: a session expecting no memo cannot replace one written by another operation.
+        assertThrows<MemoEditConflictException> {
+            useCase(
+                SaveMemoCommand(
+                    id = current.id,
+                    title = MemoTitle("Edited"),
+                    body = MemoBody("Body")
+                )
+            )
+        }
+        assertTrue(repository.savedMemos.isEmpty())
+    }
+
+    @Test
+    fun errorExpectedMemoWithDifferentIdIsRejected() {
+        // Act & Assert
+        // Error: the expected snapshot must describe the memo being saved.
+        assertThrows<IllegalArgumentException> {
+            SaveMemoCommand(
+                id = MemoId("memo-1"),
+                expectedMemo = memoFixture(id = "memo-2"),
+                title = MemoTitle("Title"),
+                body = MemoBody("Body")
+            )
+        }
+    }
+
+    @Test
     fun errorSaveFailurePropagatesToCaller() = runTest {
         // Arrange
         val failure = IllegalStateException("Storage unavailable")
         val repository = object : MemoRepository by FakeMemoRepository() {
-            override suspend fun saveMemo(memo: Memo) = throw failure
+            override suspend fun saveMemo(memo: Memo, expectedMemo: Memo?) = throw failure
         }
         val useCase = saveMemoUseCase(memoRepository = repository)
 

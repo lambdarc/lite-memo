@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -62,17 +63,21 @@ class CalendarViewModel @Inject constructor(
             observeCalendarMonthSummaryUseCase(month)
                 .map<CalendarMonthSummary, CalendarMonthSummary?> { it }
                 .catch { emit(null) }
+                .map { summary -> month to summary }
         },
         selectedDate.flatMapLatest { date ->
             observeMemosByCalendarDateUseCase(date)
                 .map<List<Memo>, List<Memo>?> { it }
                 .catch { emit(null) }
+                .map { memos -> date to memos }
         },
         observeTagsUseCase()
             .map<List<Tag>, List<Tag>?> { it }
             .catch { emit(null) }
-    ) { monthSummary, memos, tags ->
+    ) { (month, monthSummary), (date, memos), tags ->
         ObservedCalendarData(
+            month = month,
+            date = date,
             monthSummary = monthSummary,
             memos = memos,
             tags = tags
@@ -95,6 +100,7 @@ class CalendarViewModel @Inject constructor(
             uiControls,
             searchResults
         ) { observed, month, date, controls, searchResult ->
+            if (observed.month != month || observed.date != date) return@combine null
             val tagsById = observed.tags?.associate { tag ->
                 tag.id to TagUiModel(id = tag.id, name = tag.name.value, colorArgb = tag.color.argb)
             }.orEmpty()
@@ -150,7 +156,7 @@ class CalendarViewModel @Inject constructor(
                     }
                 )
             }
-        }
+        }.filterNotNull()
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
@@ -244,6 +250,8 @@ private data class CalendarUiControls(
 )
 
 private data class ObservedCalendarData(
+    val month: CalendarMonth,
+    val date: CalendarDate,
     val monthSummary: CalendarMonthSummary?,
     val memos: List<Memo>?,
     val tags: List<Tag>?

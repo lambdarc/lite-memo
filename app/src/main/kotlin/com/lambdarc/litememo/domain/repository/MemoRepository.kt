@@ -26,7 +26,7 @@ interface MemoRepository {
 
     suspend fun getActiveMemos(ids: List<MemoId>): List<Memo>
 
-    suspend fun saveMemo(memo: Memo)
+    suspend fun saveMemo(memo: Memo, expectedMemo: Memo?)
 
     suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>)
 

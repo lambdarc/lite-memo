@@ -17,6 +17,8 @@ import com.lambdarc.litememo.domain.model.ExportData
 import com.lambdarc.litememo.domain.model.value.TagName
 import com.lambdarc.litememo.domain.repository.MemoImageStore
 import com.lambdarc.litememo.domain.repository.MemoImportRepository
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 class RoomMemoImportRepository @Inject constructor(
@@ -48,7 +50,9 @@ class RoomMemoImportRepository @Inject constructor(
                 imageRefsByMemoId
             )
         }
-        memoImageStore.deleteImageFiles(removedFileNames)
+        withContext(NonCancellable) {
+            memoImageStore.deleteImageFiles(removedFileNames)
+        }
     }
 
     private suspend fun findConflictingTagNames(data: ExportData): List<TagName> {

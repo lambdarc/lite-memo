@@ -2,8 +2,10 @@ package com.lambdarc.litememo.ui.screen
 
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -196,6 +198,42 @@ class CalendarScreenComposeTest {
         composeRule
             .onNodeWithText(context.getString(R.string.search_error_body))
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun normalConfirmedZeroSearchHitsShowNoResultsMessage() {
+        // Arrange
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+        // Act
+        // Normal: a completed search without hits explains the empty result
+        setCalendarScreen(
+            CalendarUiState.Content(search = SearchUiState(isActive = true, query = "missing"))
+        )
+
+        // Assert
+        composeRule
+            .onNodeWithText(context.getString(R.string.no_search_results_title))
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun boundaryAwaitingSearchResultsHideNoResultsMessage() {
+        // Arrange
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+        // Act
+        // Boundary: no zero-hit message is shown before the current query resolves
+        setCalendarScreen(
+            CalendarUiState.Content(
+                search = SearchUiState(isActive = true, query = "milk", isAwaitingResults = true)
+            )
+        )
+
+        // Assert
+        composeRule
+            .onAllNodesWithText(context.getString(R.string.no_search_results_title))
+            .assertCountEquals(0)
     }
 
     @Test

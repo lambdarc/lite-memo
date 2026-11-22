@@ -102,7 +102,9 @@ class HomeViewModel @Inject constructor(
     )
 
     fun selectFilter(filter: HomeFilterUiState) {
+        if (selectedFilter.value == filter) return
         selectedFilter.value = filter
+        clearSelection()
     }
 
     fun toggleSearch() {

@@ -3,6 +3,7 @@ package com.lambdarc.litememo.data.image
 import android.net.Uri
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.lambdarc.litememo.domain.exception.MemoImageTooLargeException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -39,7 +40,7 @@ class MemoImageFileDataSourceInstrumentedTest {
 
         // Act
         // Normal: selected file content is copied into app-managed storage.
-        dataSource.copyImage(Uri.fromFile(source).toString(), "image-1.img")
+        dataSource.copyImage(Uri.fromFile(source).toString(), "image-1.img", Long.MAX_VALUE)
 
         // Assert
         assertEquals("image-bytes", File(imagesDir(), "image-1.img").readText())
@@ -108,7 +109,7 @@ class MemoImageFileDataSourceInstrumentedTest {
         // Act
         // Error: failed copies do not leave a target file behind.
         runCatching {
-            dataSource.copyImage(Uri.fromFile(missing).toString(), "partial.img")
+            dataSource.copyImage(Uri.fromFile(missing).toString(), "partial.img", Long.MAX_VALUE)
         }
 
         // Assert
@@ -122,10 +123,39 @@ class MemoImageFileDataSourceInstrumentedTest {
 
         // Act
         // Normal: copy creates the memo image directory lazily.
-        dataSource.copyImage(Uri.fromFile(source).toString(), "image-1.img")
+        dataSource.copyImage(Uri.fromFile(source).toString(), "image-1.img", Long.MAX_VALUE)
 
         // Assert
         assertTrue(imagesDir().isDirectory)
+    }
+
+    @Test
+    fun boundaryCopyImageAcceptsImageAtSizeLimit() = runTest {
+        // Arrange
+        val source = sourceFile("source-limit.txt", "12345")
+
+        // Act
+        // Boundary: an image exactly at the limit is copied.
+        dataSource.copyImage(Uri.fromFile(source).toString(), "image-1.img", maxBytes = 5L)
+
+        // Assert
+        assertEquals("12345", File(imagesDir(), "image-1.img").readText())
+    }
+
+    @Test
+    fun boundaryCopyImageRejectsImageOverSizeLimitWithoutLeavingFile() = runTest {
+        // Arrange
+        val source = sourceFile("source-over-limit.txt", "123456")
+
+        // Act
+        // Boundary: one byte over the limit is rejected and the partial copy is removed.
+        val failure = runCatching {
+            dataSource.copyImage(Uri.fromFile(source).toString(), "image-1.img", maxBytes = 5L)
+        }.exceptionOrNull()
+
+        // Assert
+        assertEquals(MemoImageTooLargeException::class.java, failure?.javaClass)
+        assertFalse(File(imagesDir(), "image-1.img").exists())
     }
 
     private fun sourceFile(name: String, content: String): File =

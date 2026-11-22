@@ -10,4 +10,5 @@ sealed interface MemoEditUiResult {
     data class SaveFailed(override val id: Long) : MemoEditUiResult
     data class DeleteFailed(override val id: Long) : MemoEditUiResult
     data class ImageAttachFailed(override val id: Long) : MemoEditUiResult
+    data class ImageTooLarge(override val id: Long) : MemoEditUiResult
 }

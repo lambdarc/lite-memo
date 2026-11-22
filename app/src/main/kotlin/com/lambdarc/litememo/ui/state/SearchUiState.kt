@@ -6,6 +6,7 @@ data class SearchUiState(
     val isActive: Boolean = false,
     val query: String = "",
     val hasError: Boolean = false,
+    val isAwaitingResults: Boolean = false,
     val results: List<MemoUiModel> = emptyList()
 ) {
 
@@ -15,6 +16,9 @@ data class SearchUiState(
         }
         require(isActive || results.isEmpty()) {
             "SearchUiState results must be empty when search is inactive."
+        }
+        require(isActive || !isAwaitingResults) {
+            "SearchUiState cannot await results when search is inactive."
         }
     }
 

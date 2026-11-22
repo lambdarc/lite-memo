@@ -3,6 +3,7 @@ package com.lambdarc.litememo.ui.viewmodel
 import androidx.lifecycle.ViewModelStore
 import com.lambdarc.litememo.domain.FakeMemoImageStore
 import com.lambdarc.litememo.domain.FakeMemoRepository
+import com.lambdarc.litememo.domain.exception.MemoImageTooLargeException
 import com.lambdarc.litememo.domain.memoFixture
 import com.lambdarc.litememo.domain.memoImageFixture
 import com.lambdarc.litememo.domain.model.value.ImageSourceReference
@@ -316,6 +317,27 @@ class MemoEditViewModelImageTest {
         // Assert
         assertInstanceOf(
             MemoEditUiResult.ImageAttachFailed::class.java,
+            viewModel.uiResults.value.single()
+        )
+    }
+
+    @Test
+    fun errorAttachImagesReportsTooLargeImageSeparately() = runTest(dispatcher) {
+        // Arrange
+        val imageStore = FakeMemoImageStore().apply {
+            saveError = MemoImageTooLargeException(maxBytes = 32L)
+        }
+        val viewModel = memoEditViewModel(memoImageStore = imageStore)
+        advanceUntilIdle()
+
+        // Act
+        // Error/Flow: an oversized image is reported with its own reason, not as a copy failure.
+        viewModel.attachImages(listOf("content://images/1"))
+        advanceUntilIdle()
+
+        // Assert
+        assertInstanceOf(
+            MemoEditUiResult.ImageTooLarge::class.java,
             viewModel.uiResults.value.single()
         )
     }

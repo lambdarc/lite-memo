@@ -77,7 +77,7 @@ class MemoConcurrencyTest {
         replacement: Memo
     ): MemoRepository = object : MemoRepository by delegate {
         override suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>) {
-            delegate.saveMemo(replacement)
+            delegate.saveMemo(replacement, expectedMemo = delegate.getActiveMemo(replacement.id))
             delegate.saveActiveMemoBulkWrites(writes)
         }
     }

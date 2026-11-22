@@ -73,8 +73,15 @@ Repository 側の削除は `NonCancellable` で囲み、commit 後にキャン�
 - `ActiveMemoBulkWrite.expectedMemo` に読み出し時の内容を渡す。全対象が有効で内容も一致することを同一 transaction 内で確認し、不一致なら `IllegalStateException` を送出して全件中止する
 - 時計の巻き戻りなどで `updatedAt` が変わらなくても、本文や参照の変更を検出する。参照は相対的な順序を比較し、タグ削除で生じる position の欠番は無視する
 - 検出のため、対象メモの本体とタグ参照・画像参照を保存直前に読み直す。内容を変えない `CheckOnly` も同じ読み直しを伴うため、選択件数に比例して読み込み量が増える。正確な検出を優先してこのコストを許容する
-- ごみ箱への一括移動と単一メモの保存はこの経路を通らず、競合検出をしない
+- ごみ箱への一括移動はこの経路を通らず、競合検出をしない
 - 送出される例外は専用型ではないため、UI では他の失敗と区別していない
+
+編集画面の保存も、同じ比較で競合を検出します。
+
+- `SaveMemoCommand.expectedMemo` に、編集セッションが最後に読み込んだか保存したメモを渡す。新規メモは `null` で、まだ有効なメモが存在しないことを期待する
+- `MemoDao.upsertMemoWithRefsIfUnchangedAndCollectRemovedFileNames` が同一 transaction 内で現在の有効なメモと比較し、不一致なら書き込まない。`RoomMemoRepository` はこれを `MemoEditConflictException` として送出する
+- 比較の対象は一括操作と同じで、本体と、相対順序で見たタグ参照・画像参照
+- インポートは画像を新しいファイル名で取り込むため、編集中のメモがインポートで上書きされると必ず不一致になる。古いファイル名を書き戻して、取り込んだ画像を参照差分として削除することを防ぐ
 
 ## DAO の構成
 

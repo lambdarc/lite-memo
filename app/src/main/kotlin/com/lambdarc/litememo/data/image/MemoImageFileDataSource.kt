@@ -4,11 +4,14 @@ import android.content.Context
 import android.webkit.MimeTypeMap
 import androidx.core.net.toUri
 import com.lambdarc.litememo.data.di.IoDispatcher
+import com.lambdarc.litememo.domain.exception.MemoImageTooLargeException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import javax.inject.Inject
 
 class MemoImageFileDataSource @Inject constructor(
@@ -21,20 +24,17 @@ class MemoImageFileDataSource @Inject constructor(
         MimeTypeMap.getSingleton().getExtensionFromMimeType(type)
     }
 
-    suspend fun copyImage(sourceUri: String, fileName: String) {
+    suspend fun copyImage(sourceUri: String, fileName: String, maxBytes: Long) {
         withContext(ioDispatcher) {
             imagesDir().mkdirs()
             val target = File(imagesDir(), fileName)
-            try {
+            runCatching {
                 context.contentResolver.openInputStream(sourceUri.toUri())?.use { inputStream ->
                     target.outputStream().use { outputStream ->
-                        inputStream.copyTo(outputStream)
+                        inputStream.copyAtMostTo(outputStream, maxBytes)
                     }
                 } ?: throw IOException("Failed to open input stream for URI: $sourceUri")
-            } catch (e: IOException) {
-                target.delete()
-                throw e
-            }
+            }.onFailure { target.delete() }.getOrThrow()
         }
     }
 
@@ -76,6 +76,18 @@ class MemoImageFileDataSource @Inject constructor(
     fun imageFile(fileName: String): File = File(imagesDir(), fileName)
 
     private fun imagesDir(): File = File(context.filesDir, IMAGES_DIR)
+
+    private fun InputStream.copyAtMostTo(output: OutputStream, maxBytes: Long) {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var copiedBytes = 0L
+        while (true) {
+            val read = read(buffer)
+            if (read < 0) return
+            copiedBytes += read
+            if (copiedBytes > maxBytes) throw MemoImageTooLargeException(maxBytes)
+            output.write(buffer, 0, read)
+        }
+    }
 
     companion object {
         const val IMAGES_DIR = "memo_images"

@@ -13,5 +13,14 @@ data class SaveMemoCommand(
     val createdAt: TimestampMillis? = null,
     val tagIds: List<TagId> = emptyList(),
     val images: List<MemoImage> = emptyList(),
-    val isFavorite: Boolean = false
-)
+    val isFavorite: Boolean = false,
+    val expectedMemo: Memo? = null
+) {
+
+    init {
+        require(expectedMemo == null || expectedMemo.id == id) {
+            "Expected memo must have the same id as the saved memo."
+        }
+    }
+
+}

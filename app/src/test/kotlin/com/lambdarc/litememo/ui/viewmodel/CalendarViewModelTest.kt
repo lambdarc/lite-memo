@@ -30,7 +30,9 @@ import com.lambdarc.litememo.ui.state.SearchUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -810,6 +812,82 @@ class CalendarViewModelTest {
         assertEquals(listOf(15), state.days.filter { it.isSelected }.map { it.dayOfMonth })
     }
 
+    @Test
+    fun stateTransitionSelectDateKeepsPreviousDateUntilItsMemosArrive() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = HoldingCalendarMemoRepository(
+            FakeMemoRepository(
+                listOf(memoFixture(id = "memo-15", createdAt = epochMillis("2026-05-15T10:00:00Z")))
+            )
+        )
+        val viewModel = calendarViewModel(memoRepository = memoRepository)
+        collectUiState(viewModel)
+        runCurrent()
+        memoRepository.hold()
+
+        // Act
+        // StateTransition: the new date heading is not paired with the previous date's memos
+        viewModel.selectDate(LocalDate.of(2026, 5, 11))
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertAll(
+            { assertEquals(LocalDate.of(2026, 5, 15), state.selectedDate) },
+            { assertEquals(listOf("memo-15"), state.memos.map { it.id.value }) }
+        )
+    }
+
+    @Test
+    fun stateTransitionSelectDateShowsNewDateAfterItsMemosArrive() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = HoldingCalendarMemoRepository(
+            FakeMemoRepository(
+                listOf(memoFixture(id = "memo-15", createdAt = epochMillis("2026-05-15T10:00:00Z")))
+            )
+        )
+        val viewModel = calendarViewModel(memoRepository = memoRepository)
+        collectUiState(viewModel)
+        runCurrent()
+        memoRepository.hold()
+        viewModel.selectDate(LocalDate.of(2026, 5, 11))
+        runCurrent()
+
+        // Act
+        // StateTransition: the selected date is published together with its own memos
+        memoRepository.release()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertAll(
+            { assertEquals(LocalDate.of(2026, 5, 11), state.selectedDate) },
+            { assertEquals(emptyList<MemoUiModel>(), state.memos) }
+        )
+    }
+
+    @Test
+    fun stateTransitionNextMonthKeepsPreviousMonthUntilItsSummaryArrives() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = HoldingCalendarMemoRepository(FakeMemoRepository())
+        val viewModel = calendarViewModel(memoRepository = memoRepository)
+        collectUiState(viewModel)
+        runCurrent()
+        memoRepository.hold()
+
+        // Act
+        // StateTransition: the new month heading is not paired with the previous month's grid
+        viewModel.nextMonth()
+        runCurrent()
+
+        // Assert
+        val state = viewModel.uiState.value.asContent()
+        assertAll(
+            { assertEquals(YearMonth.of(2026, 5), state.selectedMonth) },
+            { assertTrue(state.days.all { YearMonth.from(it.date) == YearMonth.of(2026, 5) }) }
+        )
+    }
+
     private fun TestScope.collectUiState(viewModel: CalendarViewModel) {
         backgroundScope.launch { viewModel.uiState.collect {} }
     }
@@ -877,6 +955,26 @@ class CalendarViewModelTest {
                 flow { throw IllegalStateException("Search failed.") }
             } else {
                 delegate.observeActiveMemosBySearchQuery(query)
+            }
+    }
+
+    private class HoldingCalendarMemoRepository(private val delegate: FakeMemoRepository) :
+        MemoRepository by delegate {
+
+        private val released = MutableStateFlow(true)
+
+        fun hold() {
+            released.value = false
+        }
+
+        fun release() {
+            released.value = true
+        }
+
+        override fun observeActiveMemosCreatedBetween(range: TimestampRange): Flow<List<Memo>> =
+            flow {
+                released.first { it }
+                emitAll(delegate.observeActiveMemosCreatedBetween(range))
             }
     }
 

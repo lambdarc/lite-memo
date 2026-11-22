@@ -1,5 +1,6 @@
 package com.lambdarc.litememo.domain.usecase
 
+import com.lambdarc.litememo.domain.exception.MemoEditConflictException
 import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.SaveMemoCommand
 import com.lambdarc.litememo.domain.model.updatedAtFrom
@@ -27,7 +28,11 @@ class SaveMemoUseCase @Inject constructor(
             "Memo title, body, or images must not be empty."
         }
         val now = currentTimeProvider.now()
-        val existingMemo = command.id?.let { id -> memoRepository.getActiveMemo(id) }
+        val existingMemo = command.id?.let { id ->
+            memoRepository.getActiveMemo(id).also { current ->
+                if (current != command.expectedMemo) throw MemoEditConflictException(id)
+            }
+        }
         val tagIds = command.tagIds.distinct()
         val images = command.images.distinctBy { it.id }
         validateTagIds(tagIds)
@@ -45,7 +50,7 @@ class SaveMemoUseCase @Inject constructor(
             isFavorite = command.isFavorite
         )
 
-        memoRepository.saveMemo(memo)
+        memoRepository.saveMemo(memo, expectedMemo = command.expectedMemo)
         return memo
     }
 
