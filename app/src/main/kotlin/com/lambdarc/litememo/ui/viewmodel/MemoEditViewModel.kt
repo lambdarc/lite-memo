@@ -103,6 +103,7 @@ class MemoEditViewModel @Inject constructor(
     private var isFinishing = false
     private var activePersistImageIds: Set<String> = emptySet()
     private var persistedMemo: Memo? = null
+    private var editSessionId = 0L
     private var tagsJob: Job? = null
 
     init {
@@ -159,6 +160,7 @@ class MemoEditViewModel @Inject constructor(
         val state = _uiState.value
         if (!state.hasSaveConflict || isFinishing) return
         autosaveJob?.cancel()
+        editSessionId++
         clearSavedState()
         _uiState.update { it.copy(status = ScreenUiStatus.LOADING, hasSaveConflict = false) }
         viewModelScope.launch {
@@ -194,6 +196,7 @@ class MemoEditViewModel @Inject constructor(
     fun attachImages(sourceUris: List<String>) {
         if (sourceUris.isEmpty()) return
         if (!canEdit(_uiState.value)) return
+        val attachSessionId = editSessionId
         viewModelScope.launch {
             val attached = mutableListOf<MemoImageUiModel>()
             var hasFailure = false
@@ -224,7 +227,7 @@ class MemoEditViewModel @Inject constructor(
                 throw e
             }
 
-            if (isFinishing || _uiState.value.isDeletePending) {
+            if (attachSessionId != editSessionId || !canEdit(_uiState.value)) {
                 deleteCopiedImagesQuietly(attached)
                 return@launch
             }
@@ -404,20 +407,23 @@ class MemoEditViewModel @Inject constructor(
         }
         activePersistImageIds = savingImageIds
         try {
-            val memo = saveMemoUseCase(
-                SaveMemoCommand(
-                    id = memoId,
-                    title = MemoTitle(state.title),
-                    body = MemoBody(state.body),
-                    createdAt = createdAt,
-                    tagIds = state.selectedTagIds.toList(),
-                    images = savingImages,
-                    isFavorite = state.isFavorite,
-                    expectedMemo = persistedMemo
+            // コミット後の取消で基準を更新し損ねると、次の保存が自分の書き込みと競合するため取消不能にする。
+            withContext(NonCancellable) {
+                val memo = saveMemoUseCase(
+                    SaveMemoCommand(
+                        id = memoId,
+                        title = MemoTitle(state.title),
+                        body = MemoBody(state.body),
+                        createdAt = createdAt,
+                        tagIds = state.selectedTagIds.toList(),
+                        images = savingImages,
+                        isFavorite = state.isFavorite,
+                        expectedMemo = persistedMemo
+                    )
                 )
-            )
-            persistedMemo = memo
-            applySavedMemo(memo, savingImageIds)
+                persistedMemo = memo
+                applySavedMemo(memo, savingImageIds)
+            }
             true
         } catch (e: CancellationException) {
             throw e
@@ -440,6 +446,11 @@ class MemoEditViewModel @Inject constructor(
                     clearSavedState()
                     enqueueUiResult { MemoEditUiResult.NavigateBack(it) }
                 } else {
+                    if (hasConflictBeforeTrash()) {
+                        isFinishing = false
+                        _uiState.update { it.copy(hasSaveConflict = true) }
+                        return@withLock
+                    }
                     val deletedMemoId = moveMemoToTrashUseCase(memoId)
                     clearSavedState()
                     enqueueUiResult { MemoEditUiResult.MemoDeleted(it, deletedMemoId) }
@@ -452,6 +463,9 @@ class MemoEditViewModel @Inject constructor(
             }
         }
     }
+
+    private suspend fun hasConflictBeforeTrash(): Boolean =
+        _uiState.value.hasSaveConflict || getMemoUseCase(memoId) != persistedMemo
 
     private fun applySavedMemo(memo: Memo, savedImageIds: Set<String>) {
         memoId = memo.id

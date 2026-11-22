@@ -888,6 +888,45 @@ class CalendarViewModelTest {
         )
     }
 
+    @Test
+    fun stateTransitionDatePickerClosesWhileSelectedDateMemosAreLoading() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = HoldingCalendarMemoRepository(FakeMemoRepository())
+        val viewModel = calendarViewModel(memoRepository = memoRepository)
+        collectUiState(viewModel)
+        runCurrent()
+        viewModel.showDatePicker()
+        runCurrent()
+        memoRepository.hold()
+
+        // Act
+        // StateTransition: controls are published without waiting for the new date's memos
+        viewModel.selectDateFromPicker(epochMillis("2026-05-11T00:00:00Z"))
+        runCurrent()
+
+        // Assert
+        assertFalse(viewModel.uiState.value.asContent().isDatePickerVisible)
+    }
+
+    @Test
+    fun boundarySelectedDateMillisUsesDisplayedDateWhileMemosAreLoading() = runTest(dispatcher) {
+        // Arrange
+        val memoRepository = HoldingCalendarMemoRepository(FakeMemoRepository())
+        val viewModel = calendarViewModel(memoRepository = memoRepository)
+        collectUiState(viewModel)
+        runCurrent()
+        memoRepository.hold()
+        viewModel.selectDate(LocalDate.of(2026, 5, 11))
+        runCurrent()
+
+        // Act
+        // Boundary: a memo created before the new date resolves uses the date on screen
+        val millis = viewModel.selectedDateMillis()
+
+        // Assert
+        assertEquals(epochMillis("2026-05-15T00:00:00Z"), millis)
+    }
+
     private fun TestScope.collectUiState(viewModel: CalendarViewModel) {
         backgroundScope.launch { viewModel.uiState.collect {} }
     }

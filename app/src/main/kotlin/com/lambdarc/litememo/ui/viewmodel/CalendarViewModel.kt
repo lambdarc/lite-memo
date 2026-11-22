@@ -84,6 +84,14 @@ class CalendarViewModel @Inject constructor(
         )
     }
 
+    private val selectedCalendarData = combine(
+        observedCalendarData,
+        selectedMonth,
+        selectedDate
+    ) { observed, month, date ->
+        observed.takeIf { it.month == month && it.date == date }
+    }.filterNotNull()
+
     private val uiControls = combine(
         isCalendarExpanded,
         isDatePickerVisible,
@@ -94,13 +102,12 @@ class CalendarViewModel @Inject constructor(
 
     val uiState: StateFlow<CalendarUiState> = retryTrigger.flatMapLatest {
         combine(
-            observedCalendarData,
-            selectedMonth,
-            selectedDate,
+            selectedCalendarData,
             uiControls,
             searchResults
-        ) { observed, month, date, controls, searchResult ->
-            if (observed.month != month || observed.date != date) return@combine null
+        ) { observed, controls, searchResult ->
+            val month = observed.month
+            val date = observed.date
             val tagsById = observed.tags?.associate { tag ->
                 tag.id to TagUiModel(id = tag.id, name = tag.name.value, colorArgb = tag.color.argb)
             }.orEmpty()
@@ -156,7 +163,7 @@ class CalendarViewModel @Inject constructor(
                     }
                 )
             }
-        }.filterNotNull()
+        }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
@@ -206,7 +213,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun selectedDateMillis(): Long? {
-        val date = selectedDate.value.value
+        val date = displayedDate()
         val startOfDay = date.atStartOfDay(zoneId).toInstant().toEpochMilli()
         if (startOfDay >= 0L) return startOfDay
         return 0L.takeIf { Instant.EPOCH.atZone(zoneId).toLocalDate() == date }
@@ -217,6 +224,12 @@ class CalendarViewModel @Inject constructor(
         selectDate(date)
         dismissDatePicker()
     }
+
+    private fun displayedDate(): LocalDate = when (val state = uiState.value) {
+        is CalendarUiState.Content -> state.selectedDate
+        is CalendarUiState.Error -> state.selectedDate
+        CalendarUiState.Loading -> null
+    } ?: selectedDate.value.value
 
     private fun selectMonth(yearMonth: YearMonth) {
         selectedMonth.value = CalendarMonth(yearMonth)

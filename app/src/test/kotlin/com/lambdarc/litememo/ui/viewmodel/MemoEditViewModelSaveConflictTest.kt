@@ -5,17 +5,24 @@ import com.lambdarc.litememo.domain.FakeMemoRepository
 import com.lambdarc.litememo.domain.memoFixture
 import com.lambdarc.litememo.domain.memoImageFixture
 import com.lambdarc.litememo.domain.model.Memo
+import com.lambdarc.litememo.domain.model.MemoImage
+import com.lambdarc.litememo.domain.model.value.ImageSourceReference
 import com.lambdarc.litememo.domain.model.value.MemoImageFileName
 import com.lambdarc.litememo.domain.model.value.MemoTitle
+import com.lambdarc.litememo.domain.repository.MemoImageStore
+import com.lambdarc.litememo.domain.repository.MemoRepository
 import com.lambdarc.litememo.ui.state.MemoEditUiResult
 import com.lambdarc.litememo.ui.state.ScreenUiStatus
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
@@ -24,6 +31,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MemoEditViewModelSaveConflictTest {
@@ -181,6 +189,123 @@ class MemoEditViewModelSaveConflictTest {
         assertEquals(listOf(MemoImageFileName("image-1.jpg")), imageStore.deletedFileNames)
     }
 
+    @Test
+    fun coroutineAutosaveCancelledAfterCommitStillUpdatesBaseline() = runTest(dispatcher) {
+        // Arrange
+        val repository = CommitThenSuspendMemoRepository(FakeMemoRepository(listOf(original)))
+        val viewModel = memoEditViewModel(memo = original, memoRepository = repository)
+        advanceUntilIdle()
+        viewModel.updateTitle("First")
+        advanceTimeBy(1_001.milliseconds)
+        runCurrent()
+
+        // Act
+        // Coroutine: typing during a committed save does not make the next save conflict with it
+        viewModel.updateTitle("Second")
+        repository.releaseReturn.complete(Unit)
+        advanceUntilIdle()
+
+        // Assert
+        assertAll(
+            { assertEquals(false, viewModel.uiState.value.hasSaveConflict) },
+            { assertEquals("Second", repository.delegate.currentMemos().single().title.value) }
+        )
+    }
+
+    @Test
+    fun interactionImageCopiedDuringSaveConflictIsDiscarded() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeMemoRepository(listOf(original))
+        val imageStore = BlockingMemoImageStore()
+        val viewModel = memoEditViewModel(
+            memo = original,
+            memoRepository = repository,
+            memoImageStore = imageStore
+        )
+        advanceUntilIdle()
+        repository.replaceExternally(imported)
+        viewModel.attachImages(listOf("content://images/1"))
+        runCurrent()
+        viewModel.updateTitle("Edited")
+        advanceUntilIdle()
+
+        // Act
+        // Interaction: a copy finishing while the draft is frozen is removed instead of leaking
+        imageStore.releaseSave.complete(Unit)
+        advanceUntilIdle()
+
+        // Assert
+        assertAll(
+            { assertEquals(listOf(MemoImageFileName("copied.jpg")), imageStore.deletedFileNames) },
+            { assertTrue(viewModel.uiState.value.images.none { it.fileName == "copied.jpg" }) }
+        )
+    }
+
+    @Test
+    fun interactionImageCopiedAcrossConflictReloadIsNotAddedToReloadedMemo() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeMemoRepository(listOf(original))
+        val imageStore = BlockingMemoImageStore()
+        val viewModel = memoEditViewModel(
+            memo = original,
+            memoRepository = repository,
+            memoImageStore = imageStore
+        )
+        advanceUntilIdle()
+        repository.replaceExternally(imported)
+        viewModel.attachImages(listOf("content://images/1"))
+        runCurrent()
+        viewModel.updateTitle("Edited")
+        advanceUntilIdle()
+        viewModel.reloadAfterSaveConflict()
+        advanceUntilIdle()
+
+        // Act
+        // Interaction: a copy started for the discarded draft never joins the reloaded memo
+        imageStore.releaseSave.complete(Unit)
+        advanceUntilIdle()
+
+        // Assert
+        assertAll(
+            {
+                assertEquals(
+                    listOf("after-import.jpg"),
+                    viewModel.uiState.value.images.map { it.fileName }
+                )
+            },
+            {
+                assertEquals(
+                    listOf(MemoImageFileName("copied.jpg")),
+                    imageStore.deletedFileNames
+                )
+            }
+        )
+    }
+
+    @Test
+    fun errorBlankDraftOfExternallyUpdatedMemoRaisesConflictInsteadOfTrashing() =
+        runTest(dispatcher) {
+            // Arrange
+            val textOnly = memoFixture(id = "memo-1", title = "Original")
+            val repository = FakeMemoRepository(listOf(textOnly))
+            val viewModel = memoEditViewModel(memo = textOnly, memoRepository = repository)
+            advanceUntilIdle()
+            repository.replaceExternally(textOnly.copy(title = MemoTitle("Imported")))
+            viewModel.updateTitle("")
+            viewModel.updateBody("")
+
+            // Act
+            // Error: an emptied draft cannot trash a memo it has not seen in its latest form
+            viewModel.finishEditing()
+            advanceUntilIdle()
+
+            // Assert
+            assertAll(
+                { assertTrue(viewModel.uiState.value.hasSaveConflict) },
+                { assertEquals(null, repository.currentMemos().single().deletedAt) }
+            )
+        }
+
     private suspend fun TestScope.conflictedViewModel(
         repository: FakeMemoRepository
     ): MemoEditViewModel {
@@ -194,6 +319,35 @@ class MemoEditViewModelSaveConflictTest {
 
     private suspend fun FakeMemoRepository.replaceExternally(memo: Memo) {
         saveMemo(memo, expectedMemo = getActiveMemo(memo.id))
+    }
+
+    private class CommitThenSuspendMemoRepository(val delegate: FakeMemoRepository) :
+        MemoRepository by delegate {
+
+        val releaseReturn = CompletableDeferred<Unit>()
+
+        override suspend fun saveMemo(memo: Memo, expectedMemo: Memo?) {
+            delegate.saveMemo(memo, expectedMemo)
+            releaseReturn.await()
+        }
+    }
+
+    private class BlockingMemoImageStore : MemoImageStore {
+
+        val releaseSave = CompletableDeferred<Unit>()
+        val deletedFileNames = mutableListOf<MemoImageFileName>()
+
+        override suspend fun saveImage(source: ImageSourceReference): MemoImage {
+            releaseSave.await()
+            return memoImageFixture(id = "copied", fileName = "copied.jpg")
+        }
+
+        override suspend fun deleteImages(fileNames: List<MemoImageFileName>) {
+            deletedFileNames += fileNames
+        }
+
+        override fun resolveImagePath(fileName: MemoImageFileName): String =
+            "/images/${fileName.value}"
     }
 
 }
