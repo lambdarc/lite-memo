@@ -81,6 +81,7 @@ Repository 側の削除は `NonCancellable` で囲み、commit 後にキャン�
 - `SaveMemoCommand.expectedMemo` に、編集セッションが最後に読み込んだか保存したメモを渡す。新規メモは `null` で、まだ有効なメモが存在しないことを期待する
 - `MemoDao.upsertMemoWithRefsIfUnchangedAndCollectRemovedFileNames` が同一 transaction 内で現在の有効なメモと比較し、不一致なら書き込まない。`RoomMemoRepository` はこれを `MemoEditConflictException` として送出する
 - 比較の対象は一括操作と同じで、本体と、相対順序で見たタグ参照・画像参照
+- 空になった既存メモのごみ箱移動も、`MemoDao.moveMemoToTrashIfUnchanged` で同じ比較と移動を同一 transaction 内で行う。不一致なら移動せず、`MemoEditConflictException` を送出する
 - インポートは画像を新しいファイル名で取り込むため、編集中のメモがインポートで上書きされると必ず不一致になる。古いファイル名を書き戻して、取り込んだ画像を参照差分として削除することを防ぐ
 
 ## DAO の構成

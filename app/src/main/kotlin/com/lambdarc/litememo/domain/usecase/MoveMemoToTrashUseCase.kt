@@ -1,5 +1,6 @@
 package com.lambdarc.litememo.domain.usecase
 
+import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.updatedAtFrom
 import com.lambdarc.litememo.domain.model.value.MemoId
 import com.lambdarc.litememo.domain.provider.CurrentTimeProvider
@@ -19,6 +20,12 @@ class MoveMemoToTrashUseCase @Inject constructor(
         val deletedAt = memo.updatedAtFrom(now)
         memoRepository.moveMemoToTrash(id, deletedAt)
         return id
+    }
+
+    suspend operator fun invoke(expectedMemo: Memo): MemoId {
+        val deletedAt = expectedMemo.updatedAtFrom(currentTimeProvider.now())
+        memoRepository.moveMemoToTrashIfUnchanged(expectedMemo, deletedAt)
+        return expectedMemo.id
     }
 
 }

@@ -460,6 +460,42 @@ class RoomMemoRepositoryTest {
     }
 
     @Test
+    fun normalMoveMemoToTrashIfUnchangedMovesMatchingMemo() = runTest {
+        // Arrange
+        val expected = memoFixture(id = "memo-1")
+        val dao = FakeMemoDao(memosWithRefs = listOf(expected.toMemoWithRefs()))
+        val repository = createRepository(dao)
+
+        // Act
+        // Normal: an unchanged memo is moved with the given deletedAt.
+        repository.moveMemoToTrashIfUnchanged(expected, TimestampMillis(2_000L))
+
+        // Assert
+        assertEquals(MovedToTrashRecord(memoId = "memo-1", deletedAt = 2_000L), dao.movedToTrash)
+    }
+
+    @Test
+    fun errorMoveMemoToTrashIfUnchangedRejectsMemoUpdatedElsewhere() = runTest {
+        // Arrange
+        val expected = memoFixture(id = "memo-1")
+        val current = expected.copy(title = MemoTitle("Imported"))
+        val dao = FakeMemoDao(memosWithRefs = listOf(current.toMemoWithRefs()))
+        val repository = createRepository(dao)
+
+        // Act
+        // Error: a stale snapshot is reported as an edit conflict without moving the memo.
+        val error = runCatching {
+            repository.moveMemoToTrashIfUnchanged(expected, TimestampMillis(2_000L))
+        }.exceptionOrNull()
+
+        // Assert
+        assertAll(
+            { assertEquals(MemoEditConflictException::class.java, error?.javaClass) },
+            { assertNull(dao.movedToTrash) }
+        )
+    }
+
+    @Test
     fun restoreMemoFromTrashDelegatesMemoIdValueToDao() = runTest {
         // Arrange
         val dao = FakeMemoDao()

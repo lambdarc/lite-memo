@@ -119,6 +119,17 @@ class RoomMemoRepository @Inject constructor(
         check(affected > 0) { "Memo not found or already trashed: ${id.value}" }
     }
 
+    override suspend fun moveMemoToTrashIfUnchanged(
+        expectedMemo: Memo,
+        deletedAt: TimestampMillis
+    ) {
+        val moved = memoDao.moveMemoToTrashIfUnchanged(
+            expectedMemo = expectedMemo.toMemoWithRefs(),
+            deletedAt = deletedAt.value
+        )
+        if (!moved) throw MemoEditConflictException(expectedMemo.id)
+    }
+
     override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) {
         if (updates.isEmpty()) return
         updates.requireNoDuplicateIds(label = "memo") { it.memoId }

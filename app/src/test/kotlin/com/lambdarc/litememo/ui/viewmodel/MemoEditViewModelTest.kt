@@ -1168,6 +1168,11 @@ class MemoEditViewModelTest {
         MemoRepository by FakeMemoRepository(listOf(memo)) {
         override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis): Unit =
             error("Failed to move memo to trash.")
+
+        override suspend fun moveMemoToTrashIfUnchanged(
+            expectedMemo: Memo,
+            deletedAt: TimestampMillis
+        ): Unit = error("Failed to move memo to trash.")
     }
 
     private class RetryableMemoRepository(
@@ -1185,6 +1190,14 @@ class MemoEditViewModelTest {
         override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) {
             if (failDelete) error("Failed to move memo to trash.")
             delegate.moveMemoToTrash(id, deletedAt)
+        }
+
+        override suspend fun moveMemoToTrashIfUnchanged(
+            expectedMemo: Memo,
+            deletedAt: TimestampMillis
+        ) {
+            if (failDelete) error("Failed to move memo to trash.")
+            delegate.moveMemoToTrashIfUnchanged(expectedMemo, deletedAt)
         }
     }
 }

@@ -12,6 +12,8 @@ import com.lambdarc.litememo.data.local.model.MemoSummaryProjection
 import com.lambdarc.litememo.data.local.model.MemoWithRefs
 import kotlinx.coroutines.flow.Flow
 
+// 照合と書き込みを同一 transaction で行うため、単一メモの操作は分割せずこの DAO にまとめる。
+@Suppress("TooManyFunctions")
 @Dao
 interface MemoDao {
 
@@ -190,6 +192,13 @@ interface MemoDao {
     ): List<String>? {
         if (!getActiveMemoWithRefs(memo.id).isSameSnapshotAs(expectedMemo)) return null
         return upsertMemoWithRefsAndCollectRemovedFileNames(memo, tagRefs, imageRefs)
+    }
+
+    @Transaction
+    suspend fun moveMemoToTrashIfUnchanged(expectedMemo: MemoWithRefs, deletedAt: Long): Boolean {
+        val id = expectedMemo.memo.id
+        if (!getActiveMemoWithRefs(id).isSameSnapshotAs(expectedMemo)) return false
+        return moveMemoToTrash(id, deletedAt) > 0
     }
 
     @Transaction
