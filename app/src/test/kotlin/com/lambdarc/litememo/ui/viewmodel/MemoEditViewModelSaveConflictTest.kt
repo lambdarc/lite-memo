@@ -308,6 +308,33 @@ class MemoEditViewModelSaveConflictTest {
         }
 
     @Test
+    fun errorImportLandingAsBlankDraftIsTrashedRaisesConflictInsteadOfTrashing() =
+        runTest(dispatcher) {
+            // Arrange
+            val textOnly = memoFixture(id = "memo-1", title = "Original")
+            val importedText = textOnly.copy(title = MemoTitle("Imported"))
+            val repository = UpdateBeforeTrashMemoRepository(
+                delegate = FakeMemoRepository(listOf(textOnly)),
+                externalUpdate = importedText
+            )
+            val viewModel = memoEditViewModel(memo = textOnly, memoRepository = repository)
+            advanceUntilIdle()
+            viewModel.updateTitle("")
+            viewModel.updateBody("")
+
+            // Act
+            // Error: an import landing right before the move keeps the memo out of the trash
+            viewModel.finishEditing()
+            advanceUntilIdle()
+
+            // Assert
+            assertAll(
+                { assertTrue(viewModel.uiState.value.hasSaveConflict) },
+                { assertEquals(listOf(importedText), repository.delegate.currentMemos()) }
+            )
+        }
+
+    @Test
     fun errorFlushAfterReloadFindsMemoTrashedKeepsDiscardedDraftOut() = runTest(dispatcher) {
         // Arrange
         val repository = FakeMemoRepository(listOf(original))
@@ -417,6 +444,20 @@ class MemoEditViewModelSaveConflictTest {
         override suspend fun saveMemo(memo: Memo, expectedMemo: Memo?) {
             delegate.saveMemo(memo, expectedMemo)
             releaseReturn.await()
+        }
+    }
+
+    private class UpdateBeforeTrashMemoRepository(
+        val delegate: FakeMemoRepository,
+        private val externalUpdate: Memo
+    ) : MemoRepository by delegate {
+
+        override suspend fun moveMemoToTrashIfUnchanged(
+            expectedMemo: Memo,
+            deletedAt: TimestampMillis
+        ) {
+            delegate.saveMemo(externalUpdate, delegate.getActiveMemo(externalUpdate.id))
+            delegate.moveMemoToTrashIfUnchanged(expectedMemo, deletedAt)
         }
     }
 

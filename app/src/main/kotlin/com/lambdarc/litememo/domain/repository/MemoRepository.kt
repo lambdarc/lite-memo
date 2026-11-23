@@ -32,6 +32,8 @@ interface MemoRepository {
 
     suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis)
 
+    suspend fun moveMemoToTrashIfUnchanged(expectedMemo: Memo, deletedAt: TimestampMillis)
+
     suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>)
 
     suspend fun restoreMemoFromTrash(id: MemoId)

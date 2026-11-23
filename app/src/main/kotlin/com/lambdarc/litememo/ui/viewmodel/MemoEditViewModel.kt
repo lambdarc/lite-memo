@@ -453,17 +453,19 @@ class MemoEditViewModel @Inject constructor(
                     clearSavedState()
                     enqueueUiResult { MemoEditUiResult.NavigateBack(it) }
                 } else {
-                    if (hasConflictBeforeTrash()) {
-                        isFinishing = false
-                        _uiState.update { it.copy(hasSaveConflict = true) }
+                    val expectedMemo = persistedMemo
+                    if (_uiState.value.hasSaveConflict || expectedMemo == null) {
+                        raiseSaveConflictWhileFinishing()
                         return@withLock
                     }
-                    val deletedMemoId = moveMemoToTrashUseCase(memoId)
+                    val deletedMemoId = moveMemoToTrashUseCase(expectedMemo)
                     clearSavedState()
                     enqueueUiResult { MemoEditUiResult.MemoDeleted(it, deletedMemoId) }
                 }
             } catch (e: CancellationException) {
                 throw e
+            } catch (_: MemoEditConflictException) {
+                raiseSaveConflictWhileFinishing()
             } catch (_: Throwable) {
                 isFinishing = false
                 enqueueUiResult { MemoEditUiResult.DeleteFailed(it) }
@@ -471,8 +473,10 @@ class MemoEditViewModel @Inject constructor(
         }
     }
 
-    private suspend fun hasConflictBeforeTrash(): Boolean =
-        _uiState.value.hasSaveConflict || getMemoUseCase(memoId) != persistedMemo
+    private fun raiseSaveConflictWhileFinishing() {
+        isFinishing = false
+        _uiState.update { it.copy(hasSaveConflict = true) }
+    }
 
     private fun applySavedMemo(memo: Memo, savedImageIds: Set<String>) {
         memoId = memo.id

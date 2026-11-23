@@ -40,6 +40,7 @@ class RoomMemoRepositoryInstrumentedTest {
         repository = RoomMemoRepository(
             memoDao = database.memoDao(),
             memoBulkDao = database.memoBulkDao(),
+            memoTrashDao = database.memoTrashDao(),
             memoImageStore = imageStore
         )
     }
@@ -91,6 +92,47 @@ class RoomMemoRepositoryInstrumentedTest {
             repository.getActiveMemo(original.id)?.images?.map { it.fileName.value }
         )
         assertEquals(emptyList<MemoImageFileName>(), imageStore.deletedFileNames)
+    }
+
+    @Test
+    fun normalSavedMemoIsAcceptedAsExpectedSnapshotForTrashMove() = runTest {
+        // Arrange
+        database.tagDao().insertOrUpdateAllTags(listOf(tagEntity("tag-b"), tagEntity("tag-a")))
+        val saved = memo(tagIds = listOf(TagId("tag-b"), TagId("tag-a")), fileName = "saved.jpg")
+        repository.saveMemo(saved, expectedMemo = null)
+
+        // Act
+        // Normal: the memo written by a save round-trips through Room as the trash baseline
+        repository.moveMemoToTrashIfUnchanged(saved, TimestampMillis(3_000L))
+
+        // Assert
+        assertEquals(null, repository.getActiveMemo(saved.id))
+    }
+
+    @Test
+    fun errorTrashMoveBasedOnSnapshotBeforeImportKeepsImportedMemo() = runTest {
+        // Arrange
+        val original = memo(fileName = "before-import.jpg")
+        repository.saveMemo(original, expectedMemo = null)
+        RoomMemoImportRepository(
+            memoDao = database.memoDao(),
+            tagDao = database.tagDao(),
+            database = database,
+            memoImageStore = imageStore
+        ).import(exportData(original.copy(images = listOf(image("after-import.jpg")))))
+
+        // Act
+        // Error: a trash move based on the pre-import snapshot leaves the imported memo active
+        val failure = runCatching {
+            repository.moveMemoToTrashIfUnchanged(original, TimestampMillis(3_000L))
+        }.exceptionOrNull()
+
+        // Assert
+        assertEquals(MemoEditConflictException::class.java, failure?.javaClass)
+        assertEquals(
+            listOf("after-import.jpg"),
+            repository.getActiveMemo(original.id)?.images?.map { it.fileName.value }
+        )
     }
 
     private fun memo(tagIds: List<TagId> = emptyList(), fileName: String) = Memo(

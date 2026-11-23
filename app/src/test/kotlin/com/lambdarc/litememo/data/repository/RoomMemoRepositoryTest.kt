@@ -1,6 +1,7 @@
 package com.lambdarc.litememo.data.repository
 
 import com.lambdarc.litememo.data.local.dao.MemoBulkDao
+import com.lambdarc.litememo.data.local.dao.MemoTrashDao
 import com.lambdarc.litememo.data.local.entity.MemoEntity
 import com.lambdarc.litememo.data.local.entity.MemoImageEntity
 import com.lambdarc.litememo.data.local.entity.MemoTagRefEntity
@@ -460,6 +461,42 @@ class RoomMemoRepositoryTest {
     }
 
     @Test
+    fun normalMoveMemoToTrashIfUnchangedMovesMatchingMemo() = runTest {
+        // Arrange
+        val expected = memoFixture(id = "memo-1")
+        val dao = FakeMemoDao(memosWithRefs = listOf(expected.toMemoWithRefs()))
+        val repository = createRepository(dao)
+
+        // Act
+        // Normal: an unchanged memo is moved with the given deletedAt.
+        repository.moveMemoToTrashIfUnchanged(expected, TimestampMillis(2_000L))
+
+        // Assert
+        assertEquals(MovedToTrashRecord(memoId = "memo-1", deletedAt = 2_000L), dao.movedToTrash)
+    }
+
+    @Test
+    fun errorMoveMemoToTrashIfUnchangedRejectsMemoUpdatedElsewhere() = runTest {
+        // Arrange
+        val expected = memoFixture(id = "memo-1")
+        val current = expected.copy(title = MemoTitle("Imported"))
+        val dao = FakeMemoDao(memosWithRefs = listOf(current.toMemoWithRefs()))
+        val repository = createRepository(dao)
+
+        // Act
+        // Error: a stale snapshot is reported as an edit conflict without moving the memo.
+        val error = runCatching {
+            repository.moveMemoToTrashIfUnchanged(expected, TimestampMillis(2_000L))
+        }.exceptionOrNull()
+
+        // Assert
+        assertAll(
+            { assertEquals(MemoEditConflictException::class.java, error?.javaClass) },
+            { assertNull(dao.movedToTrash) }
+        )
+    }
+
+    @Test
     fun restoreMemoFromTrashDelegatesMemoIdValueToDao() = runTest {
         // Arrange
         val dao = FakeMemoDao()
@@ -879,7 +916,7 @@ class RoomMemoRepositoryTest {
     private fun createRepository(
         dao: FakeMemoDao,
         imageStore: FakeMemoImageStore = FakeMemoImageStore()
-    ): RoomMemoRepository = RoomMemoRepository(dao, dao, imageStore)
+    ): RoomMemoRepository = RoomMemoRepository(dao, dao, dao, imageStore)
 
     private fun memoWithRefs(
         memoId: String,
@@ -917,7 +954,8 @@ class RoomMemoRepositoryTest {
         private val movedToTrashCount: Int = 1,
         private val restoredCount: Int = 1,
         private val deletedPermanentlyCount: Int = 1
-    ) : MemoBulkDao {
+    ) : MemoBulkDao,
+        MemoTrashDao {
 
         private val memosWithRefs = MutableStateFlow(memosWithRefs)
         var savedMemo: MemoEntity? = null

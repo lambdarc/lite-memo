@@ -213,6 +213,16 @@ class FakeMemoRepository(
         }
     }
 
+    override suspend fun moveMemoToTrashIfUnchanged(
+        expectedMemo: Memo,
+        deletedAt: TimestampMillis
+    ) {
+        if (getActiveMemo(expectedMemo.id) != expectedMemo) {
+            throw MemoEditConflictException(expectedMemo.id)
+        }
+        moveMemoToTrash(expectedMemo.id, deletedAt)
+    }
+
     override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) {
         require(updates.map { it.memoId }.toSet().size == updates.size) {
             "Duplicate memo IDs are not allowed."

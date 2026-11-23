@@ -3,6 +3,7 @@ package com.lambdarc.litememo.data.di
 import com.lambdarc.litememo.data.local.LiteMemoDatabase
 import com.lambdarc.litememo.data.local.dao.MemoBulkDao
 import com.lambdarc.litememo.data.local.dao.MemoDao
+import com.lambdarc.litememo.data.local.dao.MemoTrashDao
 import com.lambdarc.litememo.data.local.dao.TagDao
 import dagger.Module
 import dagger.Provides
@@ -18,6 +19,9 @@ object DaoModule {
 
     @Provides
     fun provideMemoBulkDao(database: LiteMemoDatabase): MemoBulkDao = database.memoBulkDao()
+
+    @Provides
+    fun provideMemoTrashDao(database: LiteMemoDatabase): MemoTrashDao = database.memoTrashDao()
 
     @Provides
     fun provideTagDao(database: LiteMemoDatabase): TagDao = database.tagDao()
