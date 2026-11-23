@@ -6,9 +6,8 @@ Data 層の方針とメモ画像の扱いは [`docs/architecture.md`](architectu
 
 ## データベース
 
-- 実体は `LiteMemoDatabase`、ファイル名は `lite_memo.db`、現在の version は 1
-- entity は `memos` / `tags` / `memo_tag_refs` / `memo_images` の 4 つ
-- DAO は `MemoDao` / `MemoBulkDao` / `MemoTrashDao` / `TagDao` の 4 つ
+- 実体は `LiteMemoDatabase`、ファイル名は `lite_memo.db`（schema version は `LiteMemoDatabase` を正本とする）
+- entity は `data/local/entity/`、DAO は `data/local/dao/` に配置する
 - 構築は `data/di/DatabaseModule` が行う。journal mode や PRAGMA を明示設定していないため、外部キー制約の有効化は Room の既定動作に依存する
 
 ## テーブル構成
@@ -16,7 +15,7 @@ Data 層の方針とメモ画像の扱いは [`docs/architecture.md`](architectu
 メモを中心に、タグと画像が参照で紐づきます。
 
 - `memos`: メモ本体。`id` が主キー。`createdAt` と `deletedAt` に index を持つ
-- `tags`: タグ。`id` が主キー。`name` に unique index を持ち、同名タグを DB 層で拒否する。`(createdAt, id)` の index を持ち、タグ一覧はこの順で返す。取り込みでタグ間の名前の移動や入れ替えが起きるため、`TagDao.insertOrUpdateAllTags` は名前が変わる行を一時名へ退避してから追加・更新する
+- `tags`: タグ。`id` が主キー。`name` に unique index を持ち、SQLite の既定（BINARY collation）で大文字・小文字を区別したうえで同名タグを DB 層で拒否する。`(createdAt, id)` の index を持ち、タグ一覧はこの順で返す。取り込みでタグ間の名前の移動や入れ替えが起きるため、`TagDao.insertOrUpdateAllTags` は名前が変わる行を一時名へ退避してから追加・更新する
 - `memo_tag_refs`: メモとタグの多対多。`(memoId, tagId)` が複合主キー。`(memoId, position)` の unique index でメモ内のタグ順を保ち、`tagId` の index でタグ側からの参照を引く
 - `memo_images`: 添付画像のメタデータ。`id` が主キー。`(memoId, position)` の unique index で表示順を保つ。実ファイルは Room の外にあり、`fileName` だけを持つ
 
@@ -30,15 +29,14 @@ Data 層の方針とメモ画像の扱いは [`docs/architecture.md`](architectu
 - `deletedAt IS NULL` が通常のメモ、`IS NOT NULL` がごみ箱内のメモ
 - ほぼ全てのクエリがこの述語で分岐する。新しいクエリを足すときも、どちらを対象にするか必ず決める
 - `deletedAt` に index があるのはこの分岐のため
-- 単体のごみ箱移動と復元（`MemoTrashDao.moveMemoToTrash` / `restoreMemoFromTrash`）は `deletedAt` の UPDATE で、更新行数を返す。対象がすでにその状態なら 0 行になり、`RoomMemoRepository` は `check` でこれを失敗（例外）として扱う
+- 単体のごみ箱移動・復元（`MemoTrashDao.moveMemoToTrash` / `restoreMemoFromTrash`）と単体の完全削除（`MemoTrashDao.deleteMemoPermanently` / `deleteMemoPermanentlyAndCollectImageFileNames`）は、対象が想定状態に無ければ更新行数が 0 になり、`check` で失敗（例外）として扱う
 - 一括のごみ箱移動は、`ApplyMemoBulkActionUseCase` が先に `getActiveMemos` で対象を取得し、通常のメモでないものがあれば `requireNotNull` で例外にする。`MemoBulkDao.moveMemosToTrash` が読み飛ばすのは、その確認の後に通常のメモでなくなったもの（並行変更）だけ
 - 一括の復元と一括の完全削除（`MemoBulkDao.restoreMemosFromTrash` / `deleteMemosPermanentlyAndCollectImageFileNames`）は事前確認が無い。ごみ箱に無いメモと存在しない id は読み飛ばして成功する
 - ごみ箱へ移す UPDATE は `deletedAt` に保存時点の `updatedAt` 以上の値を書く。呼び出し側が時刻を決めてから書き込むまでに別の更新が入っても、domain の `deletedAt >= updatedAt` を満たす行だけが残る
-- 物理削除は原則として、ごみ箱内メモの完全削除と 30 日経過分の一括削除に限る
+- 物理削除は原則として、ごみ箱内メモの完全削除と期限切れ分の一括削除（`deletedAt <= :cutoff` の閉区間判定）に限る
 
 この原則の例外がひとつあります。`MemoDao.discardMemo` は `deletedAt` を問わず物理削除する唯一のクエリです。
-新規メモの編集セッションが内容を持たないまま終了したときだけ使い、自動保存が作った空行をごみ箱へ出さないためのものです。
-既存メモを空にして戻った場合はごみ箱へ移動し、この経路は通りません。
+どの条件で呼ぶかは [`docs/memo-edit-lifecycle.md`](memo-edit-lifecycle.md) を正本とし、通常の削除経路からは使いません。
 
 ## 画像ファイルと Room の整合
 
@@ -51,17 +49,17 @@ Data 層の方針とメモ画像の扱いは [`docs/architecture.md`](architectu
 `...AndCollectRemovedFileNames` / `...AndCollectImageFileNames` という名前の DAO メソッドはこの用途です。
 Repository 側の削除は `NonCancellable` で囲み、commit 後にキャンセルされて参照だけが消えた状態を作らないようにします。
 
-現状の例外を 2 つ記録します。
-
-- import 経路（`RoomMemoImportRepository`）だけは commit 後の削除を `NonCancellable` で囲んでいない。commit とファイル削除の間でキャンセルされると未参照ファイルが残る
-- 未参照ファイルの回収は `StagingMemoImportArchiveRepository` が起動時に行うが、対象は中断した import セッションの接頭辞を持つファイルに限られる。全ファイルを走査して Room と突き合わせる汎用の回収処理は無い
+未参照ファイルの起動時回収は `StagingMemoImportArchiveRepository` が担当しますが、対象は中断した import セッションの接頭辞を持つファイルに限られます。
+全ファイルを走査して Room と突き合わせる汎用の回収処理は持たず、通常経路の整合は上記の transaction 後削除に依存します。
 
 ## クエリを書くときの制約
 
-- `IN (:ids)` を使うクエリは、呼び出し側で 900 件ずつ chunk する。SQLite の変数上限を超えないための措置で、`SQLITE_QUERY_PARAMETER_BATCH_SIZE` を使う
+- `IN (...)` を使うクエリ（id のほか、タグ名や画像ファイル名の照合を含む）は、呼び出し側で 900 件ずつ chunk する。SQLite の変数上限を超えないための措置で、`SQLITE_QUERY_PARAMETER_BATCH_SIZE` を使う
 - 期間で絞るクエリは `createdAt >= :from AND createdAt < :to` の半開区間にする。終端と同じ時刻のメモは含めない
-- SQL で一覧の順序を確定するクエリは、同じ優先キーの行順も契約に含める場合、`id` を最後の並び順に加える。現状では `observeRecentActiveMemos` と、`TagDao` の `observeTags` / `getAllTags`（`createdAt ASC, id ASC`）がこの tie-break を持つ。その他のメモ一覧は Domain 層で並べ替えるか、ごみ箱のように同一時刻内の順序を規定していない
+- SQL で一覧の順序を確定するクエリは、同じ優先キーの行順も契約に含める場合、`id` を最後の並び順に加える（例: `observeRecentActiveMemos`、`TagDao.observeTags` / `getAllTags` の `createdAt ASC, id ASC`）。その他のメモ一覧は Domain 層で並べ替えるか、ごみ箱のように同一時刻内の順序を規定していない
 - 検索は `LIKE :pattern ESCAPE '\'` を使う。ユーザー入力の `%` `_` `\` は `RoomMemoRepository` の `toEscapedLikePattern` でエスケープしてから渡す
+- 検索やカレンダーなどの絞り込み条件は、DAO と UseCase で二重定義しない
+- DAO メソッドの戻り値は、継続監視する Flow 観測系と単発の suspend 実行系を用途で分ける
 
 半開区間の境界、`observeRecentActiveMemos` の `id` tie-break、タグ一覧の `createdAt` → `id` 順は instrumented test で固定しています。挙動を変えるとテストが落ちます。
 
@@ -69,7 +67,7 @@ Repository 側の削除は `NonCancellable` で囲み、commit 後にキャン�
 
 読み出し時のメモ本体・タグ参照・画像参照を保存時に比較して競合を検出します。
 
-- 対象は選択メモへの一括操作で、お気に入り切り替えとタグ付け / タグ外しがある。単一メモのお気に入り変更も編集画面の保存を除きこの一括操作を通る
+- 対象は選択メモへの一括操作で、お気に入り切り替えとタグ付け / タグ外しがある。編集画面にお気に入り変更操作は無く（既存値の引き継ぎのみ）、単一メモのお気に入り変更もこの一括操作を通る
 - `ActiveMemoBulkWrite.expectedMemo` に読み出し時の内容を渡す。全対象が有効で内容も一致することを同一 transaction 内で確認し、不一致なら `IllegalStateException` を送出して全件中止する
 - 時計の巻き戻りなどで `updatedAt` が変わらなくても、本文や参照の変更を検出する。参照は相対的な順序を比較し、タグ削除で生じる position の欠番は無視する
 - 検出のため、対象メモの本体とタグ参照・画像参照を保存直前に読み直す。内容を変えない `CheckOnly` も同じ読み直しを伴うため、選択件数に比例して読み込み量が増える。正確な検出を優先してこのコストを許容する
@@ -97,6 +95,7 @@ Repository 側の削除は `NonCancellable` で囲み、commit 後にキャン�
 
 ## schema export と migration
 
-- schema は `app/schemas/` へ export し、変更した version の JSON を同じ commit に含める
-- `LiteMemoMigrations.ALL` は空。version 1 から上げたことがないため
-- migration の instrumented test は version 1 のスキーマ生成と unique 制約の確認のみで、version 間の遷移はまだ検証対象に無い
+- schema は `app/schemas/` へ export し、変更した version の JSON を同じ commit に含める。過去 version の schema JSON は変更しない
+- schema を変更するときは `LiteMemoDatabase` の version を上げ、`LiteMemoMigrations.ALL` へ migration を追加する（追加漏れは起動時クラッシュになる）
+- migration では既存データの保持、default 値、index、外部キー、論理削除済みデータの扱いを明示し、破壊的 migration（fallback）に安易に頼らない
+- migration と schema 制約は `MigrationTestHelper` を使った instrumented test で検証する（詳細は [`docs/instrumented-test.md`](instrumented-test.md) を参照）
