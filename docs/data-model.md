@@ -34,6 +34,7 @@ Data 層の方針とメモ画像の扱いは [`docs/architecture.md`](architectu
 - 一括の復元と一括の完全削除（`MemoBulkDao.restoreMemosFromTrash` / `deleteMemosPermanentlyAndCollectImageFileNames`）は事前確認が無い。ごみ箱に無いメモと存在しない id は読み飛ばして成功する
 - ごみ箱へ移す UPDATE は `deletedAt` に保存時点の `updatedAt` 以上の値を書く。呼び出し側が時刻を決めてから書き込むまでに別の更新が入っても、domain の `deletedAt >= updatedAt` を満たす行だけが残る
 - 物理削除は原則として、ごみ箱内メモの完全削除と期限切れ分の一括削除（`deletedAt <= :cutoff` の閉区間判定）に限る
+- ごみ箱の保持期間（30 日）は `PurgeExpiredTrashedMemosUseCase.RETENTION_MILLIS` を正本とする
 
 この原則の例外がひとつあります。`MemoDao.discardMemo` は `deletedAt` を問わず物理削除する唯一のクエリです。
 どの条件で呼ぶかは [`docs/memo-edit-lifecycle.md`](memo-edit-lifecycle.md) を正本とし、通常の削除経路からは使いません。

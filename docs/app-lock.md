@@ -14,8 +14,9 @@
 - 起動直後は、設定値の最初の読み出しで有効だった場合に認証を要求する
 
 「一定時間バックグラウンドにいたらロック」ではなく、離れたらロックです。
-画像ピッカー、ファイル選択、共有シートなどの外部 Activity を起動した場合も、`MainActivity.onStop()` で例外なくロックが掛かります。
-ただし構成変更と認証中の 2 つは除外されるため、あらゆる停止でロックが掛かるわけではありません。
+画像ピッカー、ファイル選択、共有シートなどの外部 Activity を起動した場合も、`MainActivity` が停止すれば同じくロックが掛かります。
+写真ピッカーのボトムシートや共有シートのように半透明で重なる画面では、`onPause()` だけで `onStop()` が呼ばれない場合があり、その間はロックが掛かりません。
+また構成変更と認証中の 2 つは除外されるため、あらゆる停止でロックが掛かるわけではありません。
 画面消灯そのものは条件ではありません。Activity が停止しない限りロックは掛かりません。
 
 ## ロック状態の置き場所
@@ -105,13 +106,15 @@ API 30 未満の生体認証のみの経路では、利用者にロックアウ�
 ## 実装上の制約
 
 - `BiometricPrompt` が `FragmentActivity` を、`KeyguardManager` のデバイス認証確認画面が `ActivityResultLauncher` を要求するため、`AppLockAuthenticator` は ViewModel ではなく `ui/auth` に置く。ViewModel からは要求イベントを送り、Activity 側が受けて認証を実行する
-- `AppLockAuthenticator` は `onCreate` で作り直すが、`BiometricPrompt` 経路では認証シートと結果の受け渡しを androidx 側が Activity 再生成をまたいで保つ
+- `AppLockAuthenticator` は `onCreate` で作り直すが、API 30 以上の `BiometricPrompt` 経路では認証シートと結果の受け渡しを androidx 側が Activity 再生成をまたいで保つ
 - ごみ箱の期限切れ削除は、解錠の成功時と、アプリロックが無効だと分かった時点が入口になる。画面の描画完了とは連動しない
 - この削除の 1 回制限は `MainViewModel` のフィールドで持つ。保証されるのは ViewModel インスタンス単位であり、プロセス単位ではない
 - `TrashViewModel` の生成時と再試行時にも同じ削除を実行する。こちらに 1 回制限は無い
 - `MainActivity` は `singleTop` のため、既存 `MainActivity` がタスクのトップにある状態でのウィジェット起動では `onNewIntent` が呼ばれる（コールドスタート時は `onCreate`）。ロックの状態機械は Activity ではなく `MainViewModel` の生存期間に紐づくため、`onNewIntent` 経路では初期化されない
 
-`BiometricPrompt` 経路では、認証中に Activity が再生成されても認証はやり直しになりません。
+API 30 以上の `BiometricPrompt` 経路では、認証中に Activity が再生成されても認証はやり直しになりません。
+API 30 未満の経路（`BIOMETRIC_WEAK` の negative button からデバイス認証へ切り替える場合と、`KeyguardManager` の確認画面）は、
+再生成前の `AppLockAuthenticator` が登録した `ActivityResultLauncher` を経由するため、再生成をまたいだ挙動を確認していません。
 
 `AppLockAuthenticator` は `BiometricPrompt` を `authenticate()` の中で生成するため、
 再生成後の新しいインスタンスには前の認証の情報が残りません。
@@ -119,10 +122,10 @@ API 30 未満の生体認証のみの経路では、利用者にロックアウ�
 結果は再生成前に登録されたコールバックへ届きます。
 `MainViewModel` は再生成をまたいで生きているため、そこから状態も更新されます。
 
-画面回転で確認しています。`BiometricPrompt` の認証シートを表示した状態で回転させると、
+API 30 以上の端末で、画面回転により確認しています。`BiometricPrompt` の認証シートを表示した状態で回転させると、
 横画面向けのシートへ切り替わったうえで解錠まで進みます。
 この経路では認証中の状態が取り残されて解錠できなくなることはありません。
 
 コードだけを読むと、`AppLockAuthenticator` が認証中の情報を持たないまま作り直されるため、
 `onAppStarted()` も `requestUnlock()` も認証中は何もしないことと合わせて、
-解錠できなくなるように見えます。`BiometricPrompt` 経路では実際には androidx 側が復元するため、その状態にはなりません。
+解錠できなくなるように見えます。API 30 以上の `BiometricPrompt` 経路では実際には androidx 側が復元するため、その状態にはなりません。

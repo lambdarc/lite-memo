@@ -29,8 +29,8 @@ Gradle Wrapper Validation、GitHub Actions Validation、CodeQL などの workflo
 
 Kover の集計対象は [`app/build.gradle.kts`](../app/build.gradle.kts) の `kover` ブロックで指定しています。
 domain / data 層は `domain.model` / `domain.usecase` / `data.mapper` / `data.repository` などをパッケージ単位で選びます。
-UI 層は `*ViewModel*` / `*UiState*` / `*UiResult*` など役割を表す接尾語のパターンで選びます。
-ここで挙げたパッケージ・接尾語は代表例であり、正確な集計対象は `kover` の `includes`（`classes(...)`）を確認します。
+UI 層は `*ViewModel*` / `*UiState*` / `*UiResult*` / `*UiModel*` / `*UiDirection*` / `*UiMessage*` / `*UiStatus*` / `*UiType*` と、役割を表す接尾語のパターンで選びます。
+ここで挙げたパッケージは代表例であり、正確な集計対象は `kover` の `includes`（`classes(...)`）を確認します。
 UI のパターンは `com.lambdarc.litememo.ui.*.*Suffix*` の形で、Kover は `*` を `.*` の正規表現にするためパッケージの区切りの `.` も越えます。
 そのため `ui` 配下のサブパッケージ間（深さを問わない）の移動では集計対象は変わりませんが、`ui` 直下へ移した型は外れます。
 

@@ -9,7 +9,7 @@ Lite Memo は Android 向けの軽量メモアプリです。
 - パッケージ名: `com.lambdarc.litememo`
 - ルートプロジェクト名: `Lite Memo`
 - メインモジュール: `:app`
-- ビルドフレーバー: `dev` / `prod`（開発・動作確認は `dev` を使う）
+- ビルドフレーバー: `dev` / `prod`（端末での手動の動作確認は `dev` を使う。検証コマンドの variant は [`docs/development-setup.md`](development-setup.md) に従う）
 - 構造方針: Clean Architecture + MVVM（詳細は [`docs/architecture.md`](architecture.md)）
 
 ## 採用方針と重要な制約

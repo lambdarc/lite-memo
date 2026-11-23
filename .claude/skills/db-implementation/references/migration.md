@@ -12,7 +12,7 @@
 
 - DB version を上げたら対応する `Migration` を `LiteMemoMigrations.ALL` へ必ず登録する（登録漏れは起動時 crash になる）。
 - 既存データの保持、NOT NULL カラムの `DEFAULT` 値（entity の `@ColumnInfo(defaultValue = ...)` と一致させる）、index、外部キー、論理削除済み行（`deletedAt IS NOT NULL`）の扱いを明示する。
-- 破壊的 migration（`fallbackToDestructiveMigration`）に頼らない。
+- 破壊的 migration（`fallbackToDestructiveMigration`）に安易に頼らない（方針は [`docs/data-model.md`](../../../../docs/data-model.md) を正本とする）。
 
 ## テスト判断
 

@@ -42,7 +42,8 @@ instrumented test は JUnit 4 と AndroidX Test を使い、`AndroidJUnitRunner`
 ## Room DAO と Migration のテスト
 
 - Room DAO のテストは DAO ごとに分割せず、`RoomDaoInstrumentedTest` 1 クラスへ集約する
-- Migration テストは `MigrationTestHelper` を使い、`app/schemas/` の schema JSON と `LiteMemoMigrations.ALL` を通した移行・制約を検証する
+- Migration テストは `MigrationTestHelper` を使い、`app/schemas/` の schema JSON に対する schema 生成と制約を検証する
+- version 間の移行は、DB version を上げて `LiteMemoMigrations.ALL` へ migration を追加するたびに、旧 version で作成した DB を新 version へ `runMigrationsAndValidate` するテストを追加して検証する。同じ version 同士で `runMigrationsAndValidate` するテストは移行を検証しない
 
 ## Compose UI Test
 

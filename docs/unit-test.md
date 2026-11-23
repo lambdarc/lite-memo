@@ -97,6 +97,7 @@ fun normalUiStateRestoresSavedEdits() {
 ## AAA Comments
 
 テストコードに書く基本のコメントは、AAA ラベルと検証観点の2種類です。
+この節と次の「テスト観点（命名とコメント）」のコメント規約は、`src/androidTest` の instrumented test にも適用します。
 
 - テストは Arrange / Act / Assert の流れで書く
 - 基本は `// Arrange`、`// Act`、`// Assert` コメントを入れる
@@ -189,6 +190,7 @@ fun errorConstructorThrowsWhenValueIsBlank(input: String) {
 
 ```kotlin
 import com.lambdarc.litememo.text
+import com.lambdarc.litememo.ui.navigation.encodeNavigationArgument
 import io.kotest.property.Arb
 import io.kotest.property.PropTestConfig
 import io.kotest.property.checkAll

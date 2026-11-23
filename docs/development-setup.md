@@ -8,7 +8,7 @@ CI の実行条件、job 構成、カバレッジ計測、キャッシュ戦略�
 - JDK 17（Gradle の `jvmToolchain` と、`gradle/gradle-daemon-jvm.properties` が指定する Gradle daemon の JDK）
 - Android SDK（`compileSdk` / `minSdk` / `targetSdk` の正確な値は [`app/build.gradle.kts`](../app/build.gradle.kts) を参照）
 - fastlane を使う場合は、[`.ruby-version`](../.ruby-version) に合う Ruby と Bundler
-- ビルドフレーバーは `dev` / `prod`。開発・動作確認は `dev` を使う
+- ビルドフレーバーは `dev` / `prod`。端末での手動の動作確認は `dev` を使う。静的解析・Unit Test・カバレッジは CI と同じ `prod` の variant、instrumented test と schema 生成は `dev` の variant を使う（コマンドは「ローカルでの検証」を参照）
 
 ## Ruby / Bundler
 
