@@ -17,6 +17,7 @@
 ## job 構成
 
 - Static Analysis、Unit Test、Android Test を別 job で並列実行する
+- Coverage Comment を Unit Test の後続 job として分離し、artifact で受け取ったレポートを PR コメントへ投稿する。PR への書き込み権限（`pull-requests: write`）を Unit Test から分離するため別 job にしている
 - Gradle Wrapper Validation で wrapper の改ざんを検知する
 - GitHub Actions Validation で actionlint によるワークフロー検査を行う
 - CodeQL と Dependabot は CI とは別に構成する
@@ -26,26 +27,27 @@ Gradle Wrapper Validation、GitHub Actions Validation、CodeQL などの workflo
 
 ## カバレッジ計測（Kover）
 
-Kover の集計対象は `app/build.gradle.kts` の `kover` ブロックで指定しています。
+Kover の集計対象は [`app/build.gradle.kts`](../app/build.gradle.kts) の `kover` ブロックで指定しています。
 domain / data 層は `domain.model` / `domain.usecase` / `data.mapper` / `data.repository` などをパッケージ単位で選びます。
-ここで挙げたパッケージは代表例であり、正確な集計対象は `classes(...)` の設定を確認します。
-UI 層は `*ViewModel*` / `*UiState*` / `*UiResult*` / `*UiModel*` / `*UiDirection*` / `*UiMessage*` / `*UiStatus*` / `*UiType*` と、
-役割を表す接尾語のパターンで選びます。
-パターンは `com.lambdarc.litememo.ui.*.*Suffix*` の形で、Kover は `*` を `.*` の正規表現にするためパッケージの区切りの `.` も越えます。
+UI 層は `*ViewModel*` / `*UiState*` / `*UiResult*` など役割を表す接尾語のパターンで選びます。
+ここで挙げたパッケージ・接尾語は代表例であり、正確な集計対象は `kover` の `includes`（`classes(...)`）を確認します。
+UI のパターンは `com.lambdarc.litememo.ui.*.*Suffix*` の形で、Kover は `*` を `.*` の正規表現にするためパッケージの区切りの `.` も越えます。
 そのため `ui` 配下のサブパッケージ間（深さを問わない）の移動では集計対象は変わりませんが、`ui` 直下へ移した型は外れます。
 
 役割の接尾語に合わない名前の型を追加すると、集計対象から外れます。
 外れても失敗しないため、集計したい型は既存の接尾語へ命名をそろえるか、`classes(...)` にパターンを追加します。
 
-集計対象のパッケージには Hilt が生成する `*_Factory` や `*_HiltModules*` も含まれます。
-これらは Unit Test から直接呼ばれず、未到達の行として全体の値を押し下げるため、`excludes` の `classes(...)` で除外します。
-Hilt の生成物に新しい命名パターンが増えた場合は、`excludes` に追加します。
+集計対象のパッケージには Hilt が生成するクラスも含まれます。
+これらは Unit Test から直接呼ばれず、未到達の行としてカバレッジを押し下げるため、
+[`app/build.gradle.kts`](../app/build.gradle.kts) の `kover` の `excludes` で除外しています。
+Hilt の生成物に新しい命名パターンが増えた場合は、同じく `excludes` に追加します。
 
 ## キャッシュ
 
 GitHub Actions の Gradle / AVD キャッシュは、長期運用する `main` の push で作成します。
 `main` では通常の CI が未作成のキャッシュを作成します。
 Pull Request では base branch 側の既存キャッシュを復元するだけとし、PR 固有の `refs/pull/.../merge` にはキャッシュを作成しません。
+なお、[`.github/actions/setup-android/action.yml`](../.github/actions/setup-android/action.yml) の `ruby/setup-ruby`（`bundler-cache: true`）が管理する Bundler キャッシュは、この read-only 制御の対象外です。
 通常の CI と CodeQL の Gradle キャッシュは Enhanced Caching を使い、job ごとの build state を別々に保存します。
 job と commit を区別した cache key と共有 artifact により、並列 job が同じ不変 key への保存を競合しないようにします。
 AVD キャッシュの key には API level、target、architecture、設定版を含めます。

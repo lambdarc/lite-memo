@@ -10,25 +10,25 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 - Domain 層は Android Framework に依存しない
 - UseCase は UI entry point から domain の操作へ到達する唯一の窓口とし、単純委譲であっても境界として置く
 - Android UI と密接な SDK や OS API は UI / app entry 側に閉じ、データ源に関わる Android 依存は domain の抽象を data が実装する
-- 依存注入は Hilt で行い、`LiteMemoApplication` と app 直下の `di` / `data.di` を composition boundary とする。app 直下の `di` はアプリ全体の binding、`data.di` は data 層の binding を担う
+- 依存注入は Hilt で行い、`LiteMemoApplication` と app 直下の `di` / `data.di` を composition boundary とする。app 直下の `di` はアプリ全体の構成・binding、data 層の `data.di` は database・DAO・Repository・provider・dispatcher の binding を担う。利用可能な Qualifier は `di/` と `data/di/` を直接確認する
 - Glance ウィジェットのように `@AndroidEntryPoint` を使えない UI entry point は、`ui.widget.di` の `@EntryPoint` から `SingletonComponent` の依存を取得する
 
 ## レイヤー構成
 
 プレゼンテーション層は `ui` パッケージとして実装します。機能コードの依存方向は `ui -> domain <- data` を守ります。app entry と DI module は依存を組み立てる composition root のため、配線に必要な具象型を参照できます。
 
-以下は主な既存パッケージの代表です。網羅的な固定一覧ではなく、新しいファイルは責務が最も近い既存パッケージへ追加します。`ui` は機能別に分けず、主要な役割別パッケージを保ちます。型の接尾語だけを根拠に `data` / `type` / `event` などの補助パッケージを増やしません。
+以下は主な既存パッケージの代表です。網羅的な固定一覧ではなく、新しいファイルは責務が最も近い既存パッケージへ追加します。`ui` は機能別に分けず、主要な役割別パッケージを保ちます。型の接尾語だけを根拠に `action` / `data` / `event` / `testtag` / `type` などの補助パッケージを増やしません。
 
 - `ui`: Compose 画面、ViewModel、UI state
   - `screen`: state と callback を受け取る `XxxScreen`。メニュー開閉など短命な UI element state は保持してよい
   - `route`: ViewModel と画面を接続し、Android 画面では `collectAsStateWithLifecycle()` で state を収集する `XxxRoute`
   - `viewmodel`: 画面ごとの `XxxViewModel`
-  - `state`: UI state（`XxxUiState`）とUI処理結果（`XxxUiResult`）
+  - `state`: UI state（`XxxUiState`）と UI 処理結果（`XxxUiResult`）
   - `model`: 表示用モデル（`XxxUiModel`）
-  - `auth`: 認証など Android Framework と連携する UI ヘルパー（例: `AppLockAuthenticator`）
-  - `util`: 画面から呼ぶユーティリティ（例: `launchShareMemo`）
+  - `auth`: 認証など Android Framework と連携する UI ヘルパー
+  - `util`: 画面から呼ぶユーティリティ
   - `component`: 再利用する Compose 部品
-  - `navigation`: 画面遷移先の定義（`LiteMemoDestination`）と NavHost 配線
+  - `navigation`: 画面遷移先の定義と NavHost 配線
   - `theme`: Compose / Material 3 テーマ
   - `widget`: ViewModel / Route とは別の UI entry point である Glance ウィジェット。機能内では `common` / `data` / `di` とウィジェット別パッケージに分けてよい
 
@@ -42,11 +42,11 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
   - `model` / `model/value`: ドメインモデルと値オブジェクト
   - `usecase`: ビジネス上の操作を表す UseCase
   - `repository`: Repository interface
-  - `provider`: 時刻・ID 生成など外部依存の抽象（例: `CurrentTimeProvider`、`MemoIdProvider`）
+  - `provider`: 時刻・ID 生成など外部依存の抽象
   - `exception`: domain rule の違反を表す例外
 - `data`: domain の interface を実装し、データ源を扱う
   - `local`: Room database と `entity` / `dao` / `migration` / query result 用 `model`
-  - `repository`: Repository 実装（例: `RoomMemoRepository`、`DataStoreUserSettingsRepository`）
+  - `repository`: Repository 実装
   - `mapper`: data model ↔ domain model 変換
   - `model`: DTO など data 層固有のモデル
   - `image`: メモ画像ファイルの入出力
@@ -61,40 +61,40 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 ## MVVM
 
 - ViewModel は画面全体の状態とビジネス処理に由来する state を `StateFlow` で公開する
-- 読み込みと失敗がある画面の UiState は `Loading` / `Error` / `Content` の sealed class で排他的に表し、各状態はその状態で意味を持つ値だけを持つ。一覧やダイアログなどの表示データは `Content` だけに持たせ、選択・フィルタ・検索などエラーをまたいで残す操作状態は `Error` と `Content` の両方に持たせる。空の一覧は `Content` に含める。検索エラー、タグ読込エラー、選択、変更有無、削除中など独立した状態軸は統合しない
-- フォームのように読み込み中も値を残す画面は、画面本体を `ScreenUiStatus` の `LOADING` / `ERROR` / `CONTENT` で表す。新規の空メモは `CONTENT` に含める。メモ編集の下書きと画像の所有状態は保存・復元・cleanup に必要なセッション状態として保持し、画面本体では `CONTENT` のときだけ表示する（[`docs/memo-edit-lifecycle.md`](memo-edit-lifecycle.md)）
+- 読み込みと失敗がある画面の UiState は `Loading` / `Error` / `Content` の `sealed class` で排他的に表し、各状態はその状態で意味を持つ値だけを持つ。一覧やダイアログなどの表示データは `Content` だけに持たせ、選択・フィルタ・検索などエラーをまたいで残す操作状態は `Error` と `Content` の両方に持たせる。空の一覧は `Content` に含める。検索エラー、タグ読込エラー、選択、変更有無、削除中など独立した状態軸は統合しない
+- フォームのように読み込み中も入力値を残す画面は、画面本体を `ScreenUiStatus` の `LOADING` / `ERROR` / `CONTENT` で表し、新規の空状態も `CONTENT` に含める。メモ編集の下書き・保存・画像 cleanup の詳細は [`docs/memo-edit-lifecycle.md`](memo-edit-lifecycle.md) を正本とする
 - データ取得の失敗は例外のまま流さず state の値へ変換し、エラー中も選択・フィルタ・検索などの操作状態を更新し続ける。表示用の変換が失敗しても、操作状態の観測は終了させない
 - Android の Route は `StateFlow` を `collectAsStateWithLifecycle()` で収集し、state と callback を Screen に渡す
+- 業務状態やドメイン操作を持たない静的アセット表示画面は、ViewModel を設けず Route 内で直接読み込んで Screen へ渡してよい
+- 表示固有の整形・複数モデルの結合・UI 専用情報（サムネイルパスなど）がない限り `XxxUiModel` を増やさず、domain model をそのまま使う。ドメインに属さない静的表示専用の軽量データ型は `UiModel` 接尾語を付けずに `ui/model` へ置いてよい
 - プロセス再生成後に復元する最小限の状態は、ViewModel 側では `SavedStateHandle`、UI 側では `rememberSaveable` を使う
 - メニューの開閉、focus など再生成後の復元が不要な UI element state は、必要な Composable の近くで `remember` により保持する
 - Glance は Android Compose の Route / Lifecycle とは実行モデルが異なるため、ウィジェット固有の state 更新方法を使う
 - ViewModel に Android View や Context 依存を直接持ち込まない
 - 画面固有の状態とドメインモデルを混ぜすぎない
-- 新規実装または event delivery を実質的に変更する場合、保存結果など失ってはいけない処理結果は UI state に保持し、UI から確認済み callback を受けて消費済みにする
-- UI 操作だけで完結する画面遷移は UI callback として Navigation へ渡し、ViewModel の Channel を必須経路にしない
+- UI 処理結果の保持と消費、および一回限り event（Channel の扱い）は [`docs/implementation-guidelines.md`](implementation-guidelines.md) の UI Event / Error を正本とする
 - ダイアログなど画面本体に重なる UI は、loading / error / content を切り替える分岐の content 側でだけ描画する。画面全体のエラーではオーバーレイを表示せず、再試行は閉じた状態から始める。選択・フィルタ・検索など画面本体の状態はエラーをまたいで保持する
 
 ## UseCase
 
 - 画面から直接 Repository implementation を呼ばない
 - ViewModel や Glance などの UI entry point は常に UseCase に依存し、domain の Repository interface / provider へ直接依存しない
-- UseCase は、できるだけ1つの明確な操作を表す
+- UseCase は、できるだけ 1 つの明確な操作を表す
 - ビジネスルールも調停も持たない単純委譲でも、UI と domain の依存を切る境界として UseCase を置く
 - 認証、Navigation、Activity Result など UI と密接な Android API は UI / app entry 側で扱い、結果だけを ViewModel や domain の操作へ渡す
 
 ## Value Object
 
-- Domain の意味を持つ値は、必要に応じて値オブジェクトで表す
-- 例: `MemoTitle`、`MemoId`、`TagName`、`TagColor`、`TimestampMillis` など
-- 値オブジェクトは生成時に制約を満たすようにし、不正な状態を後段へ流さない
+- Domain の意味を持つ値は、必要に応じて値オブジェクトで表す（例: `TagName`、`TagColor`、`MemoId`、`TimestampMillis` など）
+- 不変条件を持つ値オブジェクトは生成時に制約を満たすようにし、不正な状態を後段へ流さない（正規化や型安全な区別のみを担うラッパー型は別途許容する）
 - Room entity や DTO へ変換するときは、data 層で mapper を使う
 
 ## Data
 
 - Room はメモ・タグ・メモ画像メタデータなどの構造化データの source of truth とする。スキーマは `app/schemas/` にエクスポートし、変更時は migration を追加する
-- DataStore はテーマ、表示設定などの軽量な設定値を扱う
+- DataStore はテーマ、並び替えなどの表示設定、アプリロック設定、チュートリアル完了状態といった軽量な設定値を扱う
 - メモ画像ファイルはアプリ専用領域に保存し、Room には画像 ID・ファイル名などの参照情報を保持する
-- ZIP export/import は manifest のメモ・タグ・画像metadataと画像ファイル本体を対象とする
+- ZIP export/import は manifest のメモ・タグ・画像 metadata と画像ファイル本体を対象とする
 - 時刻・ID 生成やデータ源に関わる外部サービスは domain の provider / repository interface 経由で扱い、実装は data 層に閉じる。UI と密接な SDK は前述の UI / app entry 方針に従う
 - data 層の model と domain model がずれる場合は mapper を置く
 
@@ -105,4 +105,4 @@ Lite Memo は Clean Architecture をベースに、UI 層は MVVM で構成し�
 - 画像追加はアプリ専用領域への copy 成功後に Room の参照を保存し、存在しないファイルを DB から参照させない
 - 参照を削除するときは、Room transaction 内で参照更新と削除対象の収集を行い、commit 後に対象ファイルを削除する
 - commit 後のファイル削除は冪等かつ best-effort にし、削除失敗を理由に Room の参照を復元しない
-- 未保存画像は保存処理とは別に cleanup する。現行の後続 cleanup は、中断した import セッションの接頭辞を持つ未参照ファイルだけを回収する。全画像ファイルを走査して Room と突き合わせる汎用の orphan cleanup は実装していない
+- 未保存画像は保存処理とは別に cleanup する。起動時などの後続 cleanup の対象は、中断した import セッションの接頭辞を持つ未参照ファイルに限られ、全画像ファイルを走査して Room と突き合わせる汎用 orphan cleanup は行わない

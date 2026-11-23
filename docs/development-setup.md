@@ -6,7 +6,7 @@ CI の実行条件、job 構成、カバレッジ計測、キャッシュ戦略�
 ## 前提
 
 - JDK 17（Gradle の `jvmToolchain` と、`gradle/gradle-daemon-jvm.properties` が指定する Gradle daemon の JDK）
-- Android SDK（compileSdk 36.1）
+- Android SDK（`compileSdk` / `minSdk` / `targetSdk` の正確な値は [`app/build.gradle.kts`](../app/build.gradle.kts) を参照）
 - fastlane を使う場合は、[`.ruby-version`](../.ruby-version) に合う Ruby と Bundler
 - ビルドフレーバーは `dev` / `prod`。開発・動作確認は `dev` を使う
 
@@ -31,6 +31,14 @@ Firebase 設定ファイルは flavor ごとに配置します。
 `app/google-services.json` は全 variant の fallback になるため、flavor 固有の設定ファイルは `src/<flavor>/` 配下に置きます。
 release ビルドは R8 対象で、Crashlytics Gradle Plugin が release variant の mapping file upload task を生成します。
 
+## リリース署名
+
+リリース署名は [`keystore.properties.example`](../keystore.properties.example) を参照して、プロジェクトルートに `keystore.properties` を配置して設定します。
+`keystore.properties` と鍵ファイル（`*.jks` / `*.keystore`）は `.gitignore` 対象であり、リポジトリにコミットしません。
+
+- `keystore.properties` が未配置の環境でも `release` ビルドは未署名で成功します（配置している場合、必須キーが不足するとビルドエラーになります）
+- `dev` フレーバーは `buildType` にかかわらず、[`app/build.gradle.kts`](../app/build.gradle.kts) の variant 設定により常に `debug` 署名を使用します
+
 ## Git フックの有効化
 
 pre-commit フックとして KtLint 整形 + detekt 検査が設定されています。
@@ -40,7 +48,7 @@ pre-commit フックとして KtLint 整形 + detekt 検査が設定されてい
 git config core.hooksPath .githooks
 ```
 
-これにより、`git commit` 時にステージ済みの Kotlin ファイルがある場合だけ、**そのステージ済みファイルに対して** KtLint 整形（`ktlintFormatPreCommit`）と detekt 検査（`detektPreCommit`）が実行されます。フックは Gradle デーモンとビルドキャッシュ（`org.gradle.caching=true`）を利用するため、2 回目以降は高速化されます。
+これにより、`git commit` 時にステージ済みの Kotlin ファイル（`.kt` / `.kts`）がある場合だけ、**そのステージ済みファイルに対して** KtLint 整形（`ktlintFormatPreCommit`）と detekt 検査（`detektPreCommit`）が実行されます。フックは Gradle デーモンとビルドキャッシュ（`org.gradle.caching=true`）を利用するため、2 回目以降は高速化されます。
 
 - Kotlin ファイルを含むコミットで未ステージの tracked 変更がある場合は、意図しない整形や混入を避けるためコミットが中断されます。
 - 整形後は、コミット開始時点でステージされていたファイルだけを再ステージします。KtLint がステージ外のファイルも変更した場合は、内容を確認してから再度コミットしてください。
@@ -48,11 +56,11 @@ git config core.hooksPath .githooks
 
 ## 静的解析（ktlint / detekt / Android Lint）
 
-役割分担は次のとおりです。
+役割分担と設定の正本は次のとおりです。
 
-- **ktlint**: コード整形（フォーマット）
-- **detekt**: 書き方・複雑度・アンチパターン（+ Compose 特化ルール）
-- **Android Lint**: Android 特有のバグ・非推奨 API・リソース・アクセシビリティ
+- **ktlint**: コード整形（フォーマット）。設定の正本は [`.editorconfig`](../.editorconfig) と [`app/build.gradle.kts`](../app/build.gradle.kts) の `ktlint` ブロック
+- **detekt**: 書き方・複雑度・アンチパターン（+ Compose 特化ルール）。設定の正本は [`config/detekt/detekt.yml`](../config/detekt/detekt.yml)
+- **Android Lint**: Android 特有のバグ・非推奨 API・リソース・アクセシビリティ。設定の正本は [`app/build.gradle.kts`](../app/build.gradle.kts) の `lint` ブロック
 
 Kotlin の行長上限は ktlint の 100 文字です（`.editorconfig` の `ktlint_code_style = android_studio` による）。detekt 既定の 120 文字ではありません。
 
