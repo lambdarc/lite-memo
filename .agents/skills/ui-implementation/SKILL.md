@@ -1,6 +1,6 @@
 ---
 name: ui-implementation
-description: 画面の表示、操作、遷移、表示文言を変える依頼で使う。Lite Memo の UI 層の Compose screen、Route、ViewModel、UI state、UI event、Navigation Compose、strings.xml を担当する。
+description: 画面の表示、操作、遷移、表示文言、アプリロック UI、ホーム画面ウィジェット（Glance）を変える依頼で使う。Lite Memo の UI 層の Compose screen、Route、ViewModel、UI state、UI event、Navigation Compose、Glance ウィジェット、strings.xml を担当する。
 ---
 
 # 目的
@@ -11,13 +11,13 @@ Lite Memo の UI 層を、既存の Compose / MVVM 構成に沿って変更す�
 
 - [`docs/architecture.md`](../../../docs/architecture.md)
 - [`docs/implementation-guidelines.md`](../../../docs/implementation-guidelines.md)
-- [`docs/unit-test.md`](../../../docs/unit-test.md)
+- [`app/src/main/kotlin/com/lambdarc/litememo/ui/`](../../../app/src/main/kotlin/com/lambdarc/litememo/ui/)（変更対象周辺のコード）
+- [`app/src/main/res/values/strings.xml`](../../../app/src/main/res/values/strings.xml)（日本語・デフォルト）と [`app/src/main/res/values-en/strings.xml`](../../../app/src/main/res/values-en/strings.xml)（英語）
+- テストを追加・修正する場合は [`docs/unit-test.md`](../../../docs/unit-test.md)（JVM Unit Test）または [`docs/instrumented-test.md`](../../../docs/instrumented-test.md)（Compose UI Test / instrumented test）
 - メモ編集画面を変える場合は [`docs/memo-edit-lifecycle.md`](../../../docs/memo-edit-lifecycle.md)
 - アプリロックを変える場合は [`docs/app-lock.md`](../../../docs/app-lock.md)
 - ホーム画面ウィジェットを変える場合は [`docs/widget.md`](../../../docs/widget.md)
-- [`app/src/main/kotlin/com/lambdarc/litememo/ui/`](../../../app/src/main/kotlin/com/lambdarc/litememo/ui/)
-- [`app/src/main/res/values/strings.xml`](../../../app/src/main/res/values/strings.xml)
-- 必要に応じて [`app/src/androidTest/kotlin/com/lambdarc/litememo/ui/`](../../../app/src/androidTest/kotlin/com/lambdarc/litememo/ui/)
+- 必要に応じて [`app/src/test/kotlin/com/lambdarc/litememo/ui/`](../../../app/src/test/kotlin/com/lambdarc/litememo/ui/) または [`app/src/androidTest/kotlin/com/lambdarc/litememo/ui/`](../../../app/src/androidTest/kotlin/com/lambdarc/litememo/ui/)
 
 # 役割クラスと参照先
 
@@ -26,13 +26,13 @@ Lite Memo の UI 層を、既存の Compose / MVVM 構成に沿って変更す�
 
 | 役割クラス | 参照 |
 | --- | --- |
-| screen（`XxxRoute` / `XxxScreen`） | [`references/screen.md`](references/screen.md) |
+| screen / component（`XxxRoute` / `XxxScreen` / 再利用部品） | [`references/screen.md`](references/screen.md) |
 | viewmodel | [`references/viewmodel.md`](references/viewmodel.md) |
 | UI state / UI model | [`references/ui-state.md`](references/ui-state.md) |
 | UI event（UI state / UI callback / Channel の使い分け） | [`references/one-shot-event.md`](references/one-shot-event.md) |
 | navigation | [`references/navigation.md`](references/navigation.md) |
 | Compose UI Test | [`references/compose-ui-test.md`](references/compose-ui-test.md) |
-| Preview / strings | reference なし。`docs/implementation-guidelines.md` の UI / Localization 方針に従う（`XxxRoute` の配線は screen 行を参照） |
+| Preview / strings / theme / util | reference なし。`docs/implementation-guidelines.md` の UI / Localization 方針と `docs/architecture.md` の `ui` 構成に従う（`XxxRoute` の配線は screen 行を参照） |
 
 # 手順
 
@@ -49,4 +49,5 @@ Lite Memo の UI 層を、既存の Compose / MVVM 構成に沿って変更す�
 - UI 変更が Domain、Data、DB へ波及するときは、変更対象に対応する Skill を併用する。
 - ViewModel に Android View や Context 依存を直接持ち込まない。
 - 固定色の直書きを避け、Material 3 theme とライト / ダーク対応を優先する。
+- 表示文言を追加・変更するときは日本語（`values/strings.xml`）と英語（`values-en/strings.xml`）の双方を更新する。
 - Navigation 追加時は route 名、引数、戻る挙動を明確にする。

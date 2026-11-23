@@ -1,8 +1,9 @@
 # コメント
 
-このルールはリポジトリ全体へ適用する。
+このルールは本番コードと設定ファイルへ適用する。
 `app/src/main` の Kotlin だけでなく、`.github/` の workflow と composite action、
-`fastlane/`、`scripts/`、Gradle スクリプト、その他の設定ファイルも対象とする。
+`.githooks/`、`config/`、`fastlane/`、Gradle スクリプト、その他の設定ファイルも対象とする。
+`app/src/test` と `app/src/androidTest` のテストコメントは [`docs/unit-test.md`](../../docs/unit-test.md) を正本とする。
 
 ## 本番コードと設定ファイル
 
@@ -23,31 +24,6 @@ Kotlin では名前、値オブジェクト、早期リターン、関数の分�
 CI の実行条件、キャッシュ戦略、命名規約といった運用方針も同じ扱いとし、
 [`docs/ci.md`](../../docs/ci.md) を正本とする。
 ワークフローの `if` 式やキャッシュ key の意図は、そこへ書いてコードには重ねない。
-
-## テストコード
-
-`app/src/test` と `app/src/androidTest` に書く基本のコメントは次の 2 種類。
-
-1. AAA ラベル: `// Arrange` / `// Act` / `// Assert` / `// Act & Assert`
-2. 検証観点: `// Act` または `// Act & Assert` の直下に 1 行
-
-検証観点は **英語** で書く。
-
-```kotlin
-// Act
-// Boundary: blank input is rejected
-```
-
-これに加えて、テスト対象の仕様や外部要因に由来する前提だけ書いてよい。
-タイムゾーンの扱い、SQLite の collation、Room の行順が保証されないことなど、
-テストコードを読んでも導けない根拠が対象になる。前提も英語で書く。
-
-検証観点は `// 観点: Normal - ...` のような別形式で書かず、上記の `// <観点>: <意図>` に統一する。
-AAA ラベルへ説明を足した `// Assert: ...` も使わない。
-
-値の意図はテスト関数名と検証観点で表し、fixture の説明やヘルパー関数の KDoc は書かない。
-
-観点の種類と命名規則は [`docs/unit-test.md`](../../docs/unit-test.md) を正本とする。
 
 ## 適用範囲
 

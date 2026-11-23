@@ -14,7 +14,9 @@
 - 起動直後は、設定値の最初の読み出しで有効だった場合に認証を要求する
 
 「一定時間バックグラウンドにいたらロック」ではなく、離れたらロックです。
-ただし構成変更と認証中の 2 つは除外されるため、あらゆる停止でロックが掛かるわけではありません。
+画像ピッカー、ファイル選択、共有シートなどの外部 Activity を起動した場合も、`MainActivity` が停止すれば同じくロックが掛かります。
+写真ピッカーのボトムシートや共有シートのように半透明で重なる画面では、`onPause()` だけで `onStop()` が呼ばれない場合があり、その間はロックが掛かりません。
+また構成変更と認証中の 2 つは除外されるため、あらゆる停止でロックが掛かるわけではありません。
 画面消灯そのものは条件ではありません。Activity が停止しない限りロックは掛かりません。
 
 ## ロック状態の置き場所
@@ -51,10 +53,9 @@ composition から外す前に、`LiteMemoApp` の保存可能な状態を `Save
 - それ以外: `KeyguardManager` の確認画面を直接開く
 
 生体認証を登録していなくても、端末に PIN / パターン / パスワードが設定されていれば解錠できます。
-端末に認証情報が一切無い場合だけ利用不可となり、再試行ではなくセキュリティ設定を開くボタンを出します。
 
-利用可否の判定は `canAuthenticate` が成功を返すかどうかだけを見ています。
-未登録、ハードウェア非搭載、一時的に使用不可といった理由は区別していません。
+事前判定 `canAuthenticate()` は、API 30 以上では `BiometricManager.canAuthenticate(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)` が成功するか、API 30 未満では `BiometricManager.canAuthenticate(BIOMETRIC_WEAK)` の成功または `KeyguardManager.isDeviceSecure` を満たすかを見ます。
+失敗理由は区別しておらず、未登録・ハードウェア非搭載・一時的な利用不可を含めて判定に失敗した場合はすべて認証情報なし（`NO_DEVICE_CREDENTIAL`）扱いとなり、再試行ではなくセキュリティ設定を開くボタンを出します。
 
 ## 守れる範囲
 
@@ -78,7 +79,7 @@ CodeQL の `java/android/insecure-local-authentication` はこの理由で dismi
 
 ## 失敗の扱い
 
-認証結果は成功 / 失敗 / キャンセル / 認証情報なし / 利用不可の 5 つです。
+認証結果は成功 / 失敗 / キャンセル / 認証情報なし / 利用不可に分かれます。
 
 - 失敗とキャンセルはロック状態のまま、文言を変えて再試行ボタンを出す
 - 認証情報なしのときだけ、再試行ではなくセキュリティ設定への導線を出す
@@ -94,6 +95,7 @@ API 30 未満の生体認証のみの経路では、利用者にロックアウ�
 有効化と無効化で扱いが違います。
 
 - 有効化は認証の成功が要る。成功以外の結果では設定値を書き換えない
+- 有効化に成功した直後は、現在のセッションを即座にロックせず `UNLOCKED` のまま維持する。`FLAG_SECURE` は即座に切り替わり、ウィジェットは秘匿表示への更新を即座に要求する（ランチャーへの反映時刻は OS のウィジェット更新処理に依存し、即時とは限らない）。ただし、アプリロック設定の購読が `IOException` で終了したプロセスでは更新要求が発生せず、次回のプロセス起動まで表示に反映されない（[`docs/widget.md`](widget.md) の「更新の契機」）。ロックが掛かるのは次回の `onStop()` から
 - 無効化は認証を要求せず、トグル操作だけで即座に反映する
 
 結果として、端末が解錠されていて設定画面まで開ける状態なら、アプリロックは確認なしで外せます。
@@ -103,14 +105,16 @@ API 30 未満の生体認証のみの経路では、利用者にロックアウ�
 
 ## 実装上の制約
 
-- `BiometricPrompt` は `FragmentActivity` と `ActivityResultLauncher` を要求するため、`AppLockAuthenticator` は ViewModel ではなく `ui/auth` に置く。ViewModel からは要求イベントを送り、Activity 側が受けて認証を実行する
-- `AppLockAuthenticator` は `onCreate` で作り直すが、認証シートと結果の受け渡しは androidx 側が Activity 再生成をまたいで保つ
+- `BiometricPrompt` が `FragmentActivity` を、`KeyguardManager` のデバイス認証確認画面が `ActivityResultLauncher` を要求するため、`AppLockAuthenticator` は ViewModel ではなく `ui/auth` に置く。ViewModel からは要求イベントを送り、Activity 側が受けて認証を実行する
+- `AppLockAuthenticator` は `onCreate` で作り直すが、API 30 以上の `BiometricPrompt` 経路では認証シートと結果の受け渡しを androidx 側が Activity 再生成をまたいで保つ
 - ごみ箱の期限切れ削除は、解錠の成功時と、アプリロックが無効だと分かった時点が入口になる。画面の描画完了とは連動しない
 - この削除の 1 回制限は `MainViewModel` のフィールドで持つ。保証されるのは ViewModel インスタンス単位であり、プロセス単位ではない
 - `TrashViewModel` の生成時と再試行時にも同じ削除を実行する。こちらに 1 回制限は無い
-- `MainActivity` は `singleTop` のため、ウィジェットからの起動では `onNewIntent` が呼ばれる。ロックの状態機械は Activity の生存期間に紐づくため、この経路では初期化されない
+- `MainActivity` は `singleTop` のため、既存 `MainActivity` がタスクのトップにある状態でのウィジェット起動では `onNewIntent` が呼ばれる（コールドスタート時は `onCreate`）。ロックの状態機械は Activity ではなく `MainViewModel` の生存期間に紐づくため、`onNewIntent` 経路では初期化されない
 
-認証中に Activity が再生成されても、認証はやり直しになりません。
+API 30 以上の `BiometricPrompt` 経路では、認証中に Activity が再生成されても認証はやり直しになりません。
+API 30 未満の経路（`BIOMETRIC_WEAK` の negative button からデバイス認証へ切り替える場合と、`KeyguardManager` の確認画面）は、
+再生成前の `AppLockAuthenticator` が登録した `ActivityResultLauncher` を経由するため、再生成をまたいだ挙動を確認していません。
 
 `AppLockAuthenticator` は `BiometricPrompt` を `authenticate()` の中で生成するため、
 再生成後の新しいインスタンスには前の認証の情報が残りません。
@@ -118,10 +122,10 @@ API 30 未満の生体認証のみの経路では、利用者にロックアウ�
 結果は再生成前に登録されたコールバックへ届きます。
 `MainViewModel` は再生成をまたいで生きているため、そこから状態も更新されます。
 
-画面回転で確認しています。認証シートを表示した状態で回転させると、
+API 30 以上の端末で、画面回転により確認しています。`BiometricPrompt` の認証シートを表示した状態で回転させると、
 横画面向けのシートへ切り替わったうえで解錠まで進みます。
-認証中の状態が取り残されて解錠できなくなることはありません。
+この経路では認証中の状態が取り残されて解錠できなくなることはありません。
 
 コードだけを読むと、`AppLockAuthenticator` が認証中の情報を持たないまま作り直されるため、
 `onAppStarted()` も `requestUnlock()` も認証中は何もしないことと合わせて、
-解錠できなくなるように見えます。実際には androidx 側が復元するため、その状態にはなりません。
+解錠できなくなるように見えます。API 30 以上の `BiometricPrompt` 経路では実際には androidx 側が復元するため、その状態にはなりません。
