@@ -193,7 +193,7 @@ private fun CalendarContent(
                         body = stringResource(R.string.search_hint_body)
                     )
                 }
-            } else if (uiState.search.results.isEmpty()) {
+            } else if (!uiState.search.isAwaitingResults && uiState.search.results.isEmpty()) {
                 item {
                     MessageContent(
                         title = stringResource(R.string.no_search_results_title),

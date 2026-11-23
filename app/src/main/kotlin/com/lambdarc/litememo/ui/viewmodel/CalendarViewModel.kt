@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -62,22 +63,34 @@ class CalendarViewModel @Inject constructor(
             observeCalendarMonthSummaryUseCase(month)
                 .map<CalendarMonthSummary, CalendarMonthSummary?> { it }
                 .catch { emit(null) }
+                .map { summary -> month to summary }
         },
         selectedDate.flatMapLatest { date ->
             observeMemosByCalendarDateUseCase(date)
                 .map<List<Memo>, List<Memo>?> { it }
                 .catch { emit(null) }
+                .map { memos -> date to memos }
         },
         observeTagsUseCase()
             .map<List<Tag>, List<Tag>?> { it }
             .catch { emit(null) }
-    ) { monthSummary, memos, tags ->
+    ) { (month, monthSummary), (date, memos), tags ->
         ObservedCalendarData(
+            month = month,
+            date = date,
             monthSummary = monthSummary,
             memos = memos,
             tags = tags
         )
     }
+
+    private val selectedCalendarData = combine(
+        observedCalendarData,
+        selectedMonth,
+        selectedDate
+    ) { observed, month, date ->
+        observed.takeIf { it.month == month && it.date == date }
+    }.filterNotNull()
 
     private val uiControls = combine(
         isCalendarExpanded,
@@ -89,12 +102,12 @@ class CalendarViewModel @Inject constructor(
 
     val uiState: StateFlow<CalendarUiState> = retryTrigger.flatMapLatest {
         combine(
-            observedCalendarData,
-            selectedMonth,
-            selectedDate,
+            selectedCalendarData,
             uiControls,
             searchResults
-        ) { observed, month, date, controls, searchResult ->
+        ) { observed, controls, searchResult ->
+            val month = observed.month
+            val date = observed.date
             val tagsById = observed.tags?.associate { tag ->
                 tag.id to TagUiModel(id = tag.id, name = tag.name.value, colorArgb = tag.color.argb)
             }.orEmpty()
@@ -200,7 +213,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun selectedDateMillis(): Long? {
-        val date = selectedDate.value.value
+        val date = displayedDate()
         val startOfDay = date.atStartOfDay(zoneId).toInstant().toEpochMilli()
         if (startOfDay >= 0L) return startOfDay
         return 0L.takeIf { Instant.EPOCH.atZone(zoneId).toLocalDate() == date }
@@ -211,6 +224,12 @@ class CalendarViewModel @Inject constructor(
         selectDate(date)
         dismissDatePicker()
     }
+
+    private fun displayedDate(): LocalDate = when (val state = uiState.value) {
+        is CalendarUiState.Content -> state.selectedDate
+        is CalendarUiState.Error -> state.selectedDate
+        CalendarUiState.Loading -> null
+    } ?: selectedDate.value.value
 
     private fun selectMonth(yearMonth: YearMonth) {
         selectedMonth.value = CalendarMonth(yearMonth)
@@ -244,6 +263,8 @@ private data class CalendarUiControls(
 )
 
 private data class ObservedCalendarData(
+    val month: CalendarMonth,
+    val date: CalendarDate,
     val monthSummary: CalendarMonthSummary?,
     val memos: List<Memo>?,
     val tags: List<Tag>?

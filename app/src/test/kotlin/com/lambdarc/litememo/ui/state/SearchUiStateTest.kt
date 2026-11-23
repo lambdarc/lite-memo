@@ -59,6 +59,15 @@ class SearchUiStateTest {
     }
 
     @Test
+    fun errorConstructorThrowsWhenInactiveSearchAwaitsResults() {
+        // Act & Assert
+        // Error: inactive search cannot wait for results.
+        assertThrows(IllegalArgumentException::class.java) {
+            SearchUiState(isAwaitingResults = true)
+        }
+    }
+
+    @Test
     fun stateTransitionOpenActivatesBlankSearch() {
         // Arrange
         val search = SearchUiState()

@@ -1130,7 +1130,8 @@ class MemoEditViewModelTest {
     }
 
     private class SaveFailingMemoRepository : MemoRepository by FakeMemoRepository() {
-        override suspend fun saveMemo(memo: Memo): Unit = error("Failed to save memo.")
+        override suspend fun saveMemo(memo: Memo, expectedMemo: Memo?): Unit =
+            error("Failed to save memo.")
     }
 
     private class GetFailingMemoRepository(
@@ -1176,9 +1177,9 @@ class MemoEditViewModelTest {
         var failSave = false
         var failDelete = false
 
-        override suspend fun saveMemo(memo: Memo) {
+        override suspend fun saveMemo(memo: Memo, expectedMemo: Memo?) {
             if (failSave) error("Failed to save memo.")
-            delegate.saveMemo(memo)
+            delegate.saveMemo(memo, expectedMemo)
         }
 
         override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) {

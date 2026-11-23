@@ -101,7 +101,8 @@ internal class FailableMemoRepository(
 internal class SaveFailingMemoRepository(memo: Memo) :
     MemoRepository by FakeMemoRepository(listOf(memo)) {
 
-    override suspend fun saveMemo(memo: Memo): Unit = error("Failed to save memo.")
+    override suspend fun saveMemo(memo: Memo, expectedMemo: Memo?): Unit =
+        error("Failed to save memo.")
 
     override suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>): Unit =
         error("Failed to save active memos.")

@@ -73,8 +73,7 @@ interface MemoBulkDao : MemoDao {
         }
         check(
             expectedById.all { (id, expected) ->
-                val current = currentById.getValue(id)
-                current.withNormalizedPositions() == expected.withNormalizedPositions()
+                currentById.getValue(id).isSameSnapshotAs(expected)
             }
         ) {
             "Some memos were modified since they were read."
@@ -169,15 +168,5 @@ interface MemoBulkDao : MemoDao {
         current: List<MemoImageEntity>,
         incoming: List<MemoImageEntity>
     ): Boolean = current.sortedBy { it.position } == incoming.sortedBy { it.position }
-
-    // Deleting a tag can leave gaps in positions; only the relative order is meaningful.
-    private fun MemoWithRefs.withNormalizedPositions(): MemoWithRefs = copy(
-        tagRefs = tagRefs.sortedBy { it.position }.mapIndexed { index, ref ->
-            ref.copy(position = index)
-        },
-        imageRefs = imageRefs.sortedBy { it.position }.mapIndexed { index, ref ->
-            ref.copy(position = index)
-        }
-    )
 
 }

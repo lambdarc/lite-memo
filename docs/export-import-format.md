@@ -89,6 +89,10 @@ LiteMemo 独自のマジックバイトはありません。アーカイブの�
 宣言値の合計を `maxTotalImageBytes` と照合します。コピー時は `MemoArchiveImageCopier.copyVerified` が
 実際の展開後バイト数を画像ごとの宣言値と照合します。エントリ数は `maxEntryCount` で別に制限します。
 
+メモへ画像を添付するときも、`FileSystemMemoImageStore` が同じ `maxImageBytes` を上限としてコピーします。
+上限を超えた時点でコピーを打ち切り、`MemoImageTooLargeException` を送出します。
+合計サイズとエントリ数は添付時には制限していないため、画像の多いメモを貯めるとエクスポートが失敗することがあります。
+
 ## 読み込み時の検証順序
 
 読み込みは次の順で検証し、いずれかで失敗した時点で中断します。

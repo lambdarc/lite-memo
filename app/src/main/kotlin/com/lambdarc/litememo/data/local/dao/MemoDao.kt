@@ -182,6 +182,17 @@ interface MemoDao {
     }
 
     @Transaction
+    suspend fun upsertMemoWithRefsIfUnchangedAndCollectRemovedFileNames(
+        expectedMemo: MemoWithRefs?,
+        memo: MemoEntity,
+        tagRefs: List<MemoTagRefEntity>,
+        imageRefs: List<MemoImageEntity>
+    ): List<String>? {
+        if (!getActiveMemoWithRefs(memo.id).isSameSnapshotAs(expectedMemo)) return null
+        return upsertMemoWithRefsAndCollectRemovedFileNames(memo, tagRefs, imageRefs)
+    }
+
+    @Transaction
     suspend fun deleteMemoPermanentlyAndCollectImageFileNames(id: String): List<String> {
         val fileNames = getImageFileNamesForMemo(id)
         val affected = deleteMemoPermanently(id)

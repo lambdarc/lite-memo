@@ -14,6 +14,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
@@ -120,6 +121,7 @@ class MainActivity : FragmentActivity() {
             .collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
         val appLockUiState by mainViewModel.appLockUiState.collectAsStateWithLifecycle()
         val tutorialUiState by mainViewModel.tutorialUiState.collectAsStateWithLifecycle()
+        val appContentStateHolder = rememberSaveableStateHolder()
         val darkTheme = when (themeMode) {
             ThemeMode.SYSTEM -> isSystemInDarkTheme()
             ThemeMode.LIGHT -> false
@@ -152,12 +154,14 @@ class MainActivity : FragmentActivity() {
                     }
 
                     TutorialUiStatus.HIDDEN -> {
-                        LiteMemoApp(
-                            onRequestAppLockAuthentication = { onResult ->
-                                appLockAuthenticator.authenticate(onResult)
-                            },
-                            widgetNavEvents = mainViewModel.widgetNavEvent
-                        )
+                        appContentStateHolder.SaveableStateProvider(APP_CONTENT_STATE_KEY) {
+                            LiteMemoApp(
+                                onRequestAppLockAuthentication = { onResult ->
+                                    appLockAuthenticator.authenticate(onResult)
+                                },
+                                widgetNavEvents = mainViewModel.widgetNavEvent
+                            )
+                        }
                     }
                 }
             } else {
@@ -168,6 +172,10 @@ class MainActivity : FragmentActivity() {
                 )
             }
         }
+    }
+
+    private companion object {
+        const val APP_CONTENT_STATE_KEY = "app_content"
     }
 
 }

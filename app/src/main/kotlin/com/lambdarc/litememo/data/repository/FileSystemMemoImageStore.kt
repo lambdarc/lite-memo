@@ -1,6 +1,8 @@
 package com.lambdarc.litememo.data.repository
 
+import com.lambdarc.litememo.data.export.MemoArchiveLimits
 import com.lambdarc.litememo.data.image.MemoImageFileDataSource
+import com.lambdarc.litememo.di.ArchiveLimits
 import com.lambdarc.litememo.domain.model.MemoImage
 import com.lambdarc.litememo.domain.model.value.ImageSourceReference
 import com.lambdarc.litememo.domain.model.value.MemoImageFileName
@@ -10,14 +12,15 @@ import javax.inject.Inject
 
 class FileSystemMemoImageStore @Inject constructor(
     private val dataSource: MemoImageFileDataSource,
-    private val memoImageIdProvider: MemoImageIdProvider
+    private val memoImageIdProvider: MemoImageIdProvider,
+    @param:ArchiveLimits private val archiveLimits: MemoArchiveLimits
 ) : MemoImageStore {
 
     override suspend fun saveImage(source: ImageSourceReference): MemoImage {
         val id = memoImageIdProvider.newMemoImageId()
         val extension = dataSource.detectExtension(source.value) ?: FALLBACK_EXTENSION
         val fileName = MemoImageFileName("${id.value}.$extension")
-        dataSource.copyImage(source.value, fileName.value)
+        dataSource.copyImage(source.value, fileName.value, archiveLimits.maxImageBytes)
         return MemoImage(id = id, fileName = fileName)
     }
 

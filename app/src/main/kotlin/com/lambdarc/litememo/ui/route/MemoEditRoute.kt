@@ -34,6 +34,7 @@ fun MemoEditRoute(
     onDeleteError: () -> Unit,
     onShareError: () -> Unit,
     onImageAttachError: () -> Unit,
+    onImageTooLarge: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: MemoEditViewModel = hiltViewModel()
 ) {
@@ -54,6 +55,7 @@ fun MemoEditRoute(
                 is MemoEditUiResult.SaveFailed -> onSaveError()
                 is MemoEditUiResult.DeleteFailed -> onDeleteError()
                 is MemoEditUiResult.ImageAttachFailed -> onImageAttachError()
+                is MemoEditUiResult.ImageTooLarge -> onImageTooLarge()
             }
         },
         onConsumeResult = viewModel::onUiResultConsumed
@@ -90,6 +92,7 @@ fun MemoEditRoute(
                 onError = onShareError
             )
         },
+        onReloadAfterSaveConflict = viewModel::reloadAfterSaveConflict,
         modifier = modifier
     )
 }

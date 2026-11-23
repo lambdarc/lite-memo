@@ -85,7 +85,11 @@
     <string name="memo_edit_attach_image">Attach image</string>
     <string name="memo_edit_remove_image">Remove image</string>
     <string name="memo_edit_image_attach_error">Couldn\'t attach the image</string>
+    <string name="memo_edit_image_too_large">Couldn\'t attach the image because it\'s too large</string>
     <string name="memo_edit_tag_load_error">Couldn\'t load tags. Your memo remains unchanged.</string>
+    <string name="memo_edit_conflict_title">Memo was updated</string>
+    <string name="memo_edit_conflict_message">This memo was updated by another operation while you were editing, so your changes could not be saved. The latest content will be loaded.</string>
+    <string name="memo_edit_conflict_reload">Reload</string>
     <string name="attached_image_description">Attached image</string>
     <string name="delete_memo">Delete</string>
     <string name="navigate_back">Back</string>
