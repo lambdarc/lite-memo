@@ -347,7 +347,7 @@ class MemoEditViewModel @Inject constructor(
                 return@launch
             }
 
-            val currentMemoId = initialMemoId ?: run {
+            val currentMemoId = savedStateHandle.get<String>("memoId") ?: run {
                 _uiState.update { it.copy(status = ScreenUiStatus.CONTENT) }
                 return@launch
             }

@@ -363,6 +363,37 @@ class MemoEditViewModelSaveConflictTest {
         )
     }
 
+    @Test
+    fun flowNewMemoSessionRetryAfterReloadFindsNothingKeepsTrashedMemo() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeMemoRepository()
+        val viewModel = memoEditViewModel(memoRepository = repository)
+        advanceUntilIdle()
+        viewModel.updateTitle("Draft")
+        advanceUntilIdle()
+        val generatedId = repository.currentMemos().single().id
+        repository.moveMemoToTrash(generatedId, TimestampMillis(3_000L))
+        viewModel.updateTitle("Edited")
+        advanceUntilIdle()
+        viewModel.reloadAfterSaveConflict()
+        advanceUntilIdle()
+        viewModel.reload()
+        advanceUntilIdle()
+
+        // Act
+        // Flow: retrying looks up the saved memo instead of starting an empty draft to discard
+        viewModel.finishEditing()
+        advanceUntilIdle()
+
+        // Assert
+        val stored = repository.currentMemos().single()
+        assertAll(
+            { assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status) },
+            { assertEquals("Draft", stored.title.value) },
+            { assertEquals(TimestampMillis(3_000L), stored.deletedAt) }
+        )
+    }
+
     private suspend fun TestScope.conflictedViewModel(
         repository: FakeMemoRepository
     ): MemoEditViewModel {
