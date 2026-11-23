@@ -11,7 +11,7 @@ Room entity を `data/local/entity/` に定義し、schema export と整合さ�
 ## 実装時の注意
 
 - カラム追加・変更は null 許容、既定値、index、外部キー（`ON DELETE CASCADE` 等）を明確にし、mapper / migration / schema export と一体で計画する。
-- 既存テーブルへ NOT NULL カラムを追加する場合は、entity 側の `@ColumnInfo(defaultValue = ...)` と migration SQL の `DEFAULT` 値を一致させる（不一致だと `MigrationTestHelper` や実行時の schema 検証で失敗する）。
+- 既存テーブルへ `ALTER TABLE ... ADD COLUMN` で NOT NULL カラムを追加する場合は SQLite の制約で `DEFAULT` が必要になる。entity 側に `@ColumnInfo(defaultValue = ...)` を書く場合は migration SQL の `DEFAULT` 値と一致させる（不一致だと `MigrationTestHelper` や実行時の schema 検証で失敗する）。テーブルを作り直して旧行をコピーする migration では、`DEFAULT` を設けずに値を埋めてもよい。
 - 新規 entity を追加する場合は `LiteMemoDatabase` の `@Database(entities = [...])` へ登録する。
 - DB 詳細を domain / UI に漏らさない。
 

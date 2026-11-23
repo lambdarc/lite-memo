@@ -36,7 +36,8 @@ release ビルドは R8 対象で、Crashlytics Gradle Plugin が release varian
 リリース署名は [`keystore.properties.example`](../keystore.properties.example) を参照して、プロジェクトルートに `keystore.properties` を配置して設定します。
 `keystore.properties` と鍵ファイル（`*.jks` / `*.keystore`）は `.gitignore` 対象であり、リポジトリにコミットしません。
 
-- `keystore.properties` が未配置の環境でも `release` ビルドは未署名で成功します（配置している場合、必須キーが不足するとビルドエラーになります）
+- `keystore.properties` が未配置の環境でも `prodRelease` ビルドは未署名で成功します（配置している場合、必須キーが不足するとビルドエラーになります）
+- `keystore.properties` の `storeFile` は `:app` の `file()` で解決されるため、`app/` ディレクトリからの相対パス（または絶対パス）で指定します
 - `dev` フレーバーは `buildType` にかかわらず、[`app/build.gradle.kts`](../app/build.gradle.kts) の variant 設定により常に `debug` 署名を使用します
 
 ## Git フックの有効化
