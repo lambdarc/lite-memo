@@ -9,6 +9,7 @@ import com.lambdarc.litememo.domain.model.MemoImage
 import com.lambdarc.litememo.domain.model.value.ImageSourceReference
 import com.lambdarc.litememo.domain.model.value.MemoImageFileName
 import com.lambdarc.litememo.domain.model.value.MemoTitle
+import com.lambdarc.litememo.domain.model.value.TimestampMillis
 import com.lambdarc.litememo.domain.repository.MemoImageStore
 import com.lambdarc.litememo.domain.repository.MemoRepository
 import com.lambdarc.litememo.ui.state.MemoEditUiResult
@@ -305,6 +306,62 @@ class MemoEditViewModelSaveConflictTest {
                 { assertEquals(null, repository.currentMemos().single().deletedAt) }
             )
         }
+
+    @Test
+    fun errorFlushAfterReloadFindsMemoTrashedKeepsDiscardedDraftOut() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeMemoRepository(listOf(original))
+        val viewModel = conflictedViewModel(repository)
+        repository.moveMemoToTrash(original.id, TimestampMillis(3_000L))
+        viewModel.reloadAfterSaveConflict()
+        advanceUntilIdle()
+
+        // Act
+        // Error: a memo trashed elsewhere is not rewritten from the discarded draft
+        viewModel.flushEdits()
+        advanceUntilIdle()
+
+        // Assert
+        val stored = repository.currentMemos().single()
+        assertAll(
+            { assertEquals(ScreenUiStatus.ERROR, viewModel.uiState.value.status) },
+            { assertEquals("Imported", stored.title.value) },
+            { assertEquals(TimestampMillis(3_000L), stored.deletedAt) }
+        )
+    }
+
+    @Test
+    fun flowNewMemoSessionLeavesTrashedMemoAfterReloadFindsNothing() = runTest(dispatcher) {
+        // Arrange
+        val repository = FakeMemoRepository()
+        val viewModel = memoEditViewModel(memoRepository = repository)
+        advanceUntilIdle()
+        viewModel.updateTitle("Draft")
+        advanceUntilIdle()
+        val generatedId = repository.currentMemos().single().id
+        repository.moveMemoToTrash(generatedId, TimestampMillis(3_000L))
+        viewModel.updateTitle("Edited")
+        advanceUntilIdle()
+        viewModel.reloadAfterSaveConflict()
+        advanceUntilIdle()
+
+        // Act
+        // Flow: leaving neither saves nor discards a memo trashed elsewhere
+        viewModel.finishEditing()
+        advanceUntilIdle()
+
+        // Assert
+        val stored = repository.currentMemos().single()
+        assertAll(
+            {
+                assertTrue(
+                    viewModel.uiResults.value.single() is MemoEditUiResult.NavigateBack
+                )
+            },
+            { assertEquals("Draft", stored.title.value) },
+            { assertEquals(TimestampMillis(3_000L), stored.deletedAt) }
+        )
+    }
 
     private suspend fun TestScope.conflictedViewModel(
         repository: FakeMemoRepository

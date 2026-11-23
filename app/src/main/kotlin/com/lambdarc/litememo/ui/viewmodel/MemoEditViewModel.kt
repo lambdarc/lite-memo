@@ -162,7 +162,14 @@ class MemoEditViewModel @Inject constructor(
         autosaveJob?.cancel()
         editSessionId++
         clearSavedState()
-        _uiState.update { it.copy(status = ScreenUiStatus.LOADING, hasSaveConflict = false) }
+        _uiState.update { current ->
+            MemoEditUiState(
+                status = ScreenUiStatus.LOADING,
+                memoId = current.memoId,
+                availableTags = current.availableTags,
+                hasTagError = current.hasTagError
+            )
+        }
         viewModelScope.launch {
             persistMutex.withLock { loadPersistedMemo(memoId) }
             deleteCopiedImagesQuietly(state.images.filterNot { it.isPersisted })
@@ -298,7 +305,7 @@ class MemoEditViewModel @Inject constructor(
         isFinishing = true
         autosaveJob?.cancel()
         val initialState = _uiState.value
-        if (initialMemoId != null && initialState.status != ScreenUiStatus.CONTENT) {
+        if (initialState.status != ScreenUiStatus.CONTENT) {
             clearSavedState()
             enqueueUiResult { MemoEditUiResult.NavigateBack(it) }
             return
