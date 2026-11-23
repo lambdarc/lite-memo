@@ -5,27 +5,39 @@ Lite Memo で Claude Code が最初に読む入口です。
 
 ## 技術文書
 
-- [`docs/project-overview.md`](docs/project-overview.md): プロジェクト概要 / 主要な確認先 / 技術スタック
+### 全体・基本方針
+
+- [`docs/project-overview.md`](docs/project-overview.md): プロジェクト概要 / 採用方針と制約 / 主要設定ファイルの地図
 - [`docs/architecture.md`](docs/architecture.md): Clean Architecture / MVVM の構造方針
+- [`docs/implementation-guidelines.md`](docs/implementation-guidelines.md): 実装時の基本方針
+
+### ドメイン仕様
+
 - [`docs/data-model.md`](docs/data-model.md): Room のテーブル構成 / 論理削除 / クエリの制約
 - [`docs/export-import-format.md`](docs/export-import-format.md): ZIP アーカイブの形式 / version / 検証と衝突解決
 - [`docs/memo-edit-lifecycle.md`](docs/memo-edit-lifecycle.md): 編集セッション / autosave / 終了と画像 cleanup
 - [`docs/app-lock.md`](docs/app-lock.md): アプリロックの発動条件 / 認証経路 / 設定の切り替え
 - [`docs/widget.md`](docs/widget.md): Glance ウィジェットの構成 / データ取得 / 更新の契機
-- [`docs/implementation-guidelines.md`](docs/implementation-guidelines.md): 実装時の基本方針
-- [`docs/development-setup.md`](docs/development-setup.md): 開発環境セットアップ / Git フック / 静的解析 / ローカル検証
-- [`docs/ci.md`](docs/ci.md): CI の実行条件 / job 構成 / カバレッジ / キャッシュ / 命名規約
-- [`docs/unit-test.md`](docs/unit-test.md): Unit Test の方針
+
+### テスト・レビュー
+
+- [`docs/unit-test.md`](docs/unit-test.md): JVM Unit Test の方針（`src/test`）
+- [`docs/instrumented-test.md`](docs/instrumented-test.md): Instrumented Test / Compose UI Test / E2E の方針（`src/androidTest`）
 - [`docs/review.md`](docs/review.md): コードレビューの形式
+
+### 環境・CI
+
+- [`docs/development-setup.md`](docs/development-setup.md): 開発環境セットアップ / 署名 / Git フック / 静的解析 / ローカル検証
+- [`docs/ci.md`](docs/ci.md): CI の実行条件 / job 構成 / カバレッジ / キャッシュ / 命名規約
 
 ## AI作業用 Skill
 
 作業の種類に応じて、必要な Skill を最初に確認します。
 Claude Code 向け skill は `.claude/skills/` で管理する。Codex 向けの `.agents/skills/` とは自動同期しない。
 
-- `ui-implementation`: 画面まわりの実装をするときに使う（Compose / ViewModel / UI state / 画面テスト）
+- `ui-implementation`: 画面まわりの実装をするときに使う（Compose / ViewModel / UI state / ウィジェット / アプリロック / 画面テスト）
   - [`.claude/skills/ui-implementation/SKILL.md`](.claude/skills/ui-implementation/SKILL.md)
-- `domain-implementation`: 業務ルールまわりの実装をするときに使う（model / value object / UseCase / Repository interface）
+- `domain-implementation`: 業務ルールまわりの実装をするときに使う（model / value object / UseCase / Repository interface / provider / domain exception）
   - [`.claude/skills/domain-implementation/SKILL.md`](.claude/skills/domain-implementation/SKILL.md)
 - `data-implementation`: データ入出力の実装をするときに使う（Repository 実装 / mapper / DataStore / export-import）
   - [`.claude/skills/data-implementation/SKILL.md`](.claude/skills/data-implementation/SKILL.md)
@@ -40,7 +52,7 @@ Claude Code 向け skill は `.claude/skills/` で管理する。Codex 向けの
 
 実装前に、対象へ該当する規約を確認します。
 
-- [`.claude/rules/comments.md`](.claude/rules/comments.md): コメントの方針（本番コードは読み取れない制約のみ / テストは AAA ラベルと検証観点）
+- [`.claude/rules/comments.md`](.claude/rules/comments.md): コメントの方針（本番コード・設定ファイルは読み取れない制約のみ）
 
 ## 最低限の前提
 
