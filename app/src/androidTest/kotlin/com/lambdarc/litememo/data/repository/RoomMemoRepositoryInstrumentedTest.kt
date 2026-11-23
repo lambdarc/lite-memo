@@ -40,6 +40,7 @@ class RoomMemoRepositoryInstrumentedTest {
         repository = RoomMemoRepository(
             memoDao = database.memoDao(),
             memoBulkDao = database.memoBulkDao(),
+            memoTrashDao = database.memoTrashDao(),
             memoImageStore = imageStore
         )
     }

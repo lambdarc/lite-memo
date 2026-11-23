@@ -4,6 +4,7 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.lambdarc.litememo.data.local.dao.MemoBulkDao
 import com.lambdarc.litememo.data.local.dao.MemoDao
+import com.lambdarc.litememo.data.local.dao.MemoTrashDao
 import com.lambdarc.litememo.data.local.dao.TagDao
 import com.lambdarc.litememo.data.local.entity.MemoEntity
 import com.lambdarc.litememo.data.local.entity.MemoImageEntity
@@ -24,6 +25,8 @@ abstract class LiteMemoDatabase : RoomDatabase() {
     abstract fun memoDao(): MemoDao
 
     abstract fun memoBulkDao(): MemoBulkDao
+
+    abstract fun memoTrashDao(): MemoTrashDao
 
     abstract fun tagDao(): TagDao
 

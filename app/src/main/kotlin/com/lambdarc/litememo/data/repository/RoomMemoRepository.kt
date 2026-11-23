@@ -2,6 +2,7 @@ package com.lambdarc.litememo.data.repository
 
 import com.lambdarc.litememo.data.local.dao.MemoBulkDao
 import com.lambdarc.litememo.data.local.dao.MemoDao
+import com.lambdarc.litememo.data.local.dao.MemoTrashDao
 import com.lambdarc.litememo.data.mapper.toDomain
 import com.lambdarc.litememo.data.mapper.toEntity
 import com.lambdarc.litememo.data.mapper.toImageRefs
@@ -32,6 +33,7 @@ import javax.inject.Inject
 class RoomMemoRepository @Inject constructor(
     private val memoDao: MemoDao,
     private val memoBulkDao: MemoBulkDao,
+    private val memoTrashDao: MemoTrashDao,
     private val memoImageStore: MemoImageStore
 ) : MemoRepository {
 
@@ -65,7 +67,7 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override fun observeTrashedMemos(): Flow<List<Memo>> =
-        memoDao.observeTrashedMemosWithRefs().map { memos ->
+        memoTrashDao.observeTrashedMemosWithRefs().map { memos ->
             memos.map { memo -> memo.toDomain() }
         }
 
@@ -115,7 +117,7 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) {
-        val affected = memoDao.moveMemoToTrash(id.value, deletedAt.value)
+        val affected = memoTrashDao.moveMemoToTrash(id.value, deletedAt.value)
         check(affected > 0) { "Memo not found or already trashed: ${id.value}" }
     }
 
@@ -123,7 +125,7 @@ class RoomMemoRepository @Inject constructor(
         expectedMemo: Memo,
         deletedAt: TimestampMillis
     ) {
-        val moved = memoDao.moveMemoToTrashIfUnchanged(
+        val moved = memoTrashDao.moveMemoToTrashIfUnchanged(
             expectedMemo = expectedMemo.toMemoWithRefs(),
             deletedAt = deletedAt.value
         )
@@ -142,7 +144,7 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override suspend fun restoreMemoFromTrash(id: MemoId) {
-        val affected = memoDao.restoreMemoFromTrash(id.value)
+        val affected = memoTrashDao.restoreMemoFromTrash(id.value)
         check(affected > 0) { "Memo not found or not in trash: ${id.value}" }
     }
 
@@ -153,7 +155,7 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override suspend fun deleteMemoPermanently(id: MemoId) {
-        val fileNames = memoDao.deleteMemoPermanentlyAndCollectImageFileNames(id.value)
+        val fileNames = memoTrashDao.deleteMemoPermanentlyAndCollectImageFileNames(id.value)
         withContext(NonCancellable) {
             memoImageStore.deleteImageFiles(fileNames)
         }
@@ -179,7 +181,7 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override suspend fun deleteTrashedMemosDeletedAtOrBefore(cutoff: TimestampMillis) {
-        val fileNames = memoDao.deleteTrashedMemosDeletedAtOrBeforeAndCollectImageFileNames(
+        val fileNames = memoTrashDao.deleteTrashedMemosDeletedAtOrBeforeAndCollectImageFileNames(
             cutoff.value
         )
         withContext(NonCancellable) {

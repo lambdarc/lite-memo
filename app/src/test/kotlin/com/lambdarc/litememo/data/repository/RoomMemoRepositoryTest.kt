@@ -1,6 +1,7 @@
 package com.lambdarc.litememo.data.repository
 
 import com.lambdarc.litememo.data.local.dao.MemoBulkDao
+import com.lambdarc.litememo.data.local.dao.MemoTrashDao
 import com.lambdarc.litememo.data.local.entity.MemoEntity
 import com.lambdarc.litememo.data.local.entity.MemoImageEntity
 import com.lambdarc.litememo.data.local.entity.MemoTagRefEntity
@@ -915,7 +916,7 @@ class RoomMemoRepositoryTest {
     private fun createRepository(
         dao: FakeMemoDao,
         imageStore: FakeMemoImageStore = FakeMemoImageStore()
-    ): RoomMemoRepository = RoomMemoRepository(dao, dao, imageStore)
+    ): RoomMemoRepository = RoomMemoRepository(dao, dao, dao, imageStore)
 
     private fun memoWithRefs(
         memoId: String,
@@ -953,7 +954,8 @@ class RoomMemoRepositoryTest {
         private val movedToTrashCount: Int = 1,
         private val restoredCount: Int = 1,
         private val deletedPermanentlyCount: Int = 1
-    ) : MemoBulkDao {
+    ) : MemoBulkDao,
+        MemoTrashDao {
 
         private val memosWithRefs = MutableStateFlow(memosWithRefs)
         var savedMemo: MemoEntity? = null

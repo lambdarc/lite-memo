@@ -14,7 +14,8 @@ internal class RecordingMemoBulkDao(
     private val trashedMemoIds: Set<String>? = null,
     private val activeMemosById: Map<String, MemoWithRefs> = emptyMap(),
     private val reverseActiveMemoQueryResults: Boolean = false
-) : MemoBulkDao {
+) : MemoBulkDao,
+    MemoTrashDao {
 
     val calls = mutableListOf<String>()
     val activeMemoIdReads = mutableListOf<List<String>>()
