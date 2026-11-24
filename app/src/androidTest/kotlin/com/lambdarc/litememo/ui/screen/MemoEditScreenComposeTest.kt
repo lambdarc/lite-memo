@@ -243,13 +243,52 @@ class MemoEditScreenComposeTest {
         composeRule.onNodeWithTag(MemoEditTestTags.removeImageButton(image.id)).assertIsEnabled()
     }
 
+    @Test
+    fun normalSaveConflictShowsReloadDialogAndDisablesEditor() {
+        // Act
+        // Normal: a held-back draft explains the conflict and cannot be edited further
+        setMemoEditScreen(
+            uiState = {
+                MemoEditUiState(memoId = "memo-1", title = "Draft", hasSaveConflict = true)
+            }
+        )
+
+        // Assert
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        composeRule
+            .onNodeWithText(context.getString(R.string.memo_edit_conflict_title))
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag(MemoEditTestTags.TITLE_INPUT).assertIsNotEnabled()
+    }
+
+    @Test
+    fun interactionSaveConflictReloadInvokesCallback() {
+        // Arrange
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        var reloadRequested = false
+        setMemoEditScreen(
+            uiState = { MemoEditUiState(memoId = "memo-1", hasSaveConflict = true) },
+            onReloadAfterSaveConflict = { reloadRequested = true }
+        )
+
+        // Act
+        // Interaction: the dialog action asks the screen owner to reload the stored memo
+        composeRule
+            .onNodeWithText(context.getString(R.string.memo_edit_conflict_reload))
+            .performClick()
+
+        // Assert
+        composeRule.runOnIdle { assertEquals(true, reloadRequested) }
+    }
+
     private fun setMemoEditScreen(
         uiState: () -> MemoEditUiState = { MemoEditUiState() },
         onTitleChange: (String) -> Unit = {},
         onBodyChange: (String) -> Unit = {},
         onAttachImageRequest: () -> Unit = {},
         onImageRemove: (String) -> Unit = {},
-        onRetry: () -> Unit = {}
+        onRetry: () -> Unit = {},
+        onReloadAfterSaveConflict: () -> Unit = {}
     ) {
         composeRule.setContent {
             TestScreenContent {
@@ -264,7 +303,8 @@ class MemoEditScreenComposeTest {
                     onRetryTags = {},
                     onAttachImageRequest = onAttachImageRequest,
                     onImageRemove = onImageRemove,
-                    onShareMemo = {}
+                    onShareMemo = {},
+                    onReloadAfterSaveConflict = onReloadAfterSaveConflict
                 )
             }
         }

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -80,9 +81,15 @@ fun MemoEditScreen(
     onAttachImageRequest: () -> Unit,
     onImageRemove: (String) -> Unit,
     onShareMemo: () -> Unit,
+    onReloadAfterSaveConflict: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val canEdit = uiState.status == ScreenUiStatus.CONTENT && !uiState.isDeletePending
+    val canEdit = uiState.status == ScreenUiStatus.CONTENT &&
+        !uiState.isDeletePending &&
+        !uiState.hasSaveConflict
+    if (uiState.hasSaveConflict) {
+        SaveConflictDialog(onReload = onReloadAfterSaveConflict)
+    }
     Scaffold(
         modifier = modifier,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -253,6 +260,20 @@ fun MemoEditScreen(
     }
 }
 
+@Composable
+private fun SaveConflictDialog(onReload: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text(text = stringResource(R.string.memo_edit_conflict_title)) },
+        text = { Text(text = stringResource(R.string.memo_edit_conflict_message)) },
+        confirmButton = {
+            TextButton(onClick = onReload) {
+                Text(text = stringResource(R.string.memo_edit_conflict_reload))
+            }
+        }
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MemoEditTopBar(
@@ -339,7 +360,8 @@ private fun MemoEditScreenPreview() {
             onRetryTags = {},
             onAttachImageRequest = {},
             onImageRemove = {},
-            onShareMemo = {}
+            onShareMemo = {},
+            onReloadAfterSaveConflict = {}
         )
     }
 }

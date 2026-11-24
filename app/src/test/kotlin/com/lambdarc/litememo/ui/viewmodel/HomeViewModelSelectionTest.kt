@@ -246,28 +246,67 @@ class HomeViewModelSelectionTest {
     }
 
     @Test
-    fun uiStateKeepsMixedFavoriteSelectionWhenNonFavoriteMemoIsFilteredOut() = runTest(dispatcher) {
-        // Arrange
-        val viewModel = homeViewModel(
-            memos = listOf(
-                memoFixture(id = "favorite", isFavorite = true),
-                memoFixture(id = "normal", isFavorite = false)
+    fun uiStateKeepsMixedFavoriteSelectionWhenNonFavoriteMemoIsSelectedFromSearch() =
+        runTest(dispatcher) {
+            // Arrange
+            val viewModel = homeViewModel(
+                memos = listOf(
+                    memoFixture(id = "favorite", title = "Note", isFavorite = true),
+                    memoFixture(id = "normal", title = "Note", isFavorite = false)
+                )
             )
-        )
-        advanceUntilIdle()
-        viewModel.startSelection(MemoId("favorite"))
-        viewModel.toggleMemoSelection(MemoId("normal"))
+            collectUiState(viewModel)
+            viewModel.selectFilter(HomeFilterUiState.Favorite)
+            viewModel.toggleSearch()
+            viewModel.updateSearchQuery("Note")
+            advanceUntilIdle()
 
-        // Act
-        viewModel.selectFilter(HomeFilterUiState.Favorite)
-        advanceUntilIdle()
-        val state = viewModel.firstContent {
-            it.selectedFilter == HomeFilterUiState.Favorite &&
-                it.selection.selectedMemoIds == setOf(MemoId("favorite"), MemoId("normal"))
+            // Act
+            // Normal: a selected memo hidden by the filter still counts toward the favorite state
+            viewModel.startSelection(MemoId("favorite"))
+            viewModel.toggleMemoSelection(MemoId("normal"))
+            advanceUntilIdle()
+
+            // Assert
+            assertEquals(false, viewModel.uiState.value.asContent().allSelectedFavorite)
         }
 
+    @Test
+    fun stateTransitionSelectFilterClearsSelectionAndClosesBulkTagDialog() = runTest(dispatcher) {
+        // Arrange
+        val memoId = MemoId("memo-1")
+        val viewModel = homeViewModel(memos = listOf(memoFixture(id = memoId.value)))
+        openBulkTagDialog(viewModel, memoId)
+
+        // Act
+        // StateTransition: changing the filter drops a selection that may become hidden
+        viewModel.selectFilter(HomeFilterUiState.Favorite)
+        runCurrent()
+
         // Assert
-        assertEquals(false, state.allSelectedFavorite)
+        val state = viewModel.uiState.value.asContent()
+        assertAll(
+            { assertEquals(emptySet<MemoId>(), state.selection.selectedMemoIds) },
+            { assertFalse(state.bulkTagDialog.isVisible) }
+        )
+    }
+
+    @Test
+    fun boundarySelectFilterKeepsSelectionWhenFilterIsUnchanged() = runTest(dispatcher) {
+        // Arrange
+        val memoId = MemoId("memo-1")
+        val viewModel = homeViewModel(memos = listOf(memoFixture(id = memoId.value)))
+        collectUiState(viewModel)
+        runCurrent()
+        viewModel.startSelection(memoId)
+
+        // Act
+        // Boundary: tapping the active filter again keeps the current selection
+        viewModel.selectFilter(HomeFilterUiState.All)
+        runCurrent()
+
+        // Assert
+        assertEquals(setOf(memoId), viewModel.uiState.value.asContent().selection.selectedMemoIds)
     }
 
     @Test

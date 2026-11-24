@@ -257,6 +257,40 @@ class HomeScreenComposeTest {
     }
 
     @Test
+    fun normalConfirmedZeroSearchHitsShowNoResultsMessage() {
+        // Arrange
+        val uiState = HomeUiState.Content(
+            search = SearchUiState(isActive = true, query = "missing")
+        )
+
+        // Act
+        // Normal: a completed search without hits explains the empty result
+        setHomeScreen(uiState = { uiState })
+
+        // Assert
+        composeRule
+            .onNodeWithText(string(R.string.no_search_results_title))
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun boundaryAwaitingSearchResultsHideNoResultsMessage() {
+        // Arrange
+        val uiState = HomeUiState.Content(
+            search = SearchUiState(isActive = true, query = "milk", isAwaitingResults = true)
+        )
+
+        // Act
+        // Boundary: no zero-hit message is shown before the current query resolves
+        setHomeScreen(uiState = { uiState })
+
+        // Assert
+        composeRule
+            .onAllNodesWithText(string(R.string.no_search_results_title))
+            .assertCountEquals(0)
+    }
+
+    @Test
     fun normalInitialStatusShowsLoading() {
         // Act
         // Normal: the loading state shows progress before any content is loaded.

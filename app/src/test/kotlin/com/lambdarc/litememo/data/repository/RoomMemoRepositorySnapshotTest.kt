@@ -25,7 +25,7 @@ class RoomMemoRepositorySnapshotTest {
             tagRefs = listOf(MemoTagRefEntity(memoId = "memo-1", tagId = "tag-1", position = 2))
         )
         val dao = RecordingMemoBulkDao(activeMemosById = mapOf("memo-1" to current))
-        val repository = RoomMemoRepository(dao, dao, FakeMemoImageStore())
+        val repository = RoomMemoRepository(dao, dao, dao, FakeMemoImageStore())
 
         // Act
         // Boundary: normalized positions preserve the logical order and pass the check.
@@ -43,7 +43,7 @@ class RoomMemoRepositorySnapshotTest {
         val original = memoFixture().toMemoWithRefs()
         val current = original.copy(memo = original.memo.copy(body = "Concurrent edit"))
         val dao = RecordingMemoBulkDao(activeMemosById = mapOf("memo-1" to current))
-        val repository = RoomMemoRepository(dao, dao, FakeMemoImageStore())
+        val repository = RoomMemoRepository(dao, dao, dao, FakeMemoImageStore())
 
         // Act
         // Error: equal timestamps do not make different content safe to overwrite.
@@ -73,7 +73,7 @@ class RoomMemoRepositorySnapshotTest {
             tagRefs = listOf(MemoTagRefEntity(memoId = "memo-1", tagId = "tag-1", position = 0))
         )
         val dao = RecordingMemoBulkDao(activeMemosById = mapOf("memo-1" to current))
-        val repository = RoomMemoRepository(dao, dao, FakeMemoImageStore())
+        val repository = RoomMemoRepository(dao, dao, dao, FakeMemoImageStore())
 
         // Act
         // Error: unchanged members must also retain the observed tag references.
@@ -103,7 +103,7 @@ class RoomMemoRepositorySnapshotTest {
         )
         val dao = RecordingMemoBulkDao(activeMemosById = mapOf("memo-1" to current))
         val store = FakeMemoImageStore()
-        val repository = RoomMemoRepository(dao, dao, store)
+        val repository = RoomMemoRepository(dao, dao, dao, store)
 
         // Act
         // Error: image references participate in the snapshot check before any cleanup.
@@ -134,7 +134,7 @@ class RoomMemoRepositorySnapshotTest {
             tagRefs = original.tagRefs.map { it.copy(position = 1 - it.position) }
         )
         val dao = RecordingMemoBulkDao(activeMemosById = mapOf("memo-1" to current))
-        val repository = RoomMemoRepository(dao, dao, FakeMemoImageStore())
+        val repository = RoomMemoRepository(dao, dao, dao, FakeMemoImageStore())
 
         // Act
         // Error: normalizing gaps must not hide a reordering of the same tag set.
@@ -162,7 +162,7 @@ class RoomMemoRepositorySnapshotTest {
         )
         val dao = RecordingMemoBulkDao(activeMemosById = mapOf("memo-1" to current))
         val store = FakeMemoImageStore()
-        val repository = RoomMemoRepository(dao, dao, store)
+        val repository = RoomMemoRepository(dao, dao, dao, store)
 
         // Act
         // Error: image order carries meaning, so a swap is a conflict, not a gap.

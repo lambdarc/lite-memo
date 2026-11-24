@@ -47,18 +47,23 @@ internal fun SearchUiState.applySearchResult(
     if (!isActive) return SearchUiState()
 
     return when (result) {
-        MemoSearchUiResult.Inactive -> copy(hasError = false, results = emptyList())
+        MemoSearchUiResult.Inactive -> awaitingResults()
 
-        is MemoSearchUiResult.Success -> copy(
-            hasError = false,
-            results = if (result.query == query) mapMemos(result.memos) else emptyList()
-        )
+        is MemoSearchUiResult.Success -> if (result.query == query) {
+            copy(hasError = false, isAwaitingResults = false, results = mapMemos(result.memos))
+        } else {
+            awaitingResults()
+        }
 
-        is MemoSearchUiResult.Failure -> copy(
-            hasError = result.query == query,
-            results = emptyList()
-        )
+        is MemoSearchUiResult.Failure -> if (result.query == query) {
+            copy(hasError = true, isAwaitingResults = false, results = emptyList())
+        } else {
+            awaitingResults()
+        }
     }
 }
+
+private fun SearchUiState.awaitingResults(): SearchUiState =
+    copy(hasError = false, isAwaitingResults = query.isNotBlank(), results = emptyList())
 
 private const val SEARCH_DEBOUNCE_MILLIS = 250L

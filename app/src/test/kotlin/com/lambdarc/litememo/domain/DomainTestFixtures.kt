@@ -1,5 +1,6 @@
 package com.lambdarc.litememo.domain
 
+import com.lambdarc.litememo.domain.exception.MemoEditConflictException
 import com.lambdarc.litememo.domain.model.ActiveMemoBulkWrite
 import com.lambdarc.litememo.domain.model.ExportData
 import com.lambdarc.litememo.domain.model.Memo
@@ -171,7 +172,8 @@ class FakeMemoRepository(
         return ids.distinct().mapNotNull(activeMemosById::get)
     }
 
-    override suspend fun saveMemo(memo: Memo) {
+    override suspend fun saveMemo(memo: Memo, expectedMemo: Memo?) {
+        if (getActiveMemo(memo.id) != expectedMemo) throw MemoEditConflictException(memo.id)
         savedMemos += memo
         memos.value = memos.value.filterNot { it.id == memo.id } + memo
     }
@@ -209,6 +211,16 @@ class FakeMemoRepository(
         memos.value = memos.value.map { memo ->
             if (memo.id == id && memo.deletedAt == null) memo.copy(deletedAt = deletedAt) else memo
         }
+    }
+
+    override suspend fun moveMemoToTrashIfUnchanged(
+        expectedMemo: Memo,
+        deletedAt: TimestampMillis
+    ) {
+        if (getActiveMemo(expectedMemo.id) != expectedMemo) {
+            throw MemoEditConflictException(expectedMemo.id)
+        }
+        moveMemoToTrash(expectedMemo.id, deletedAt)
     }
 
     override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) {

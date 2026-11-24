@@ -1130,7 +1130,8 @@ class MemoEditViewModelTest {
     }
 
     private class SaveFailingMemoRepository : MemoRepository by FakeMemoRepository() {
-        override suspend fun saveMemo(memo: Memo): Unit = error("Failed to save memo.")
+        override suspend fun saveMemo(memo: Memo, expectedMemo: Memo?): Unit =
+            error("Failed to save memo.")
     }
 
     private class GetFailingMemoRepository(
@@ -1167,6 +1168,11 @@ class MemoEditViewModelTest {
         MemoRepository by FakeMemoRepository(listOf(memo)) {
         override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis): Unit =
             error("Failed to move memo to trash.")
+
+        override suspend fun moveMemoToTrashIfUnchanged(
+            expectedMemo: Memo,
+            deletedAt: TimestampMillis
+        ): Unit = error("Failed to move memo to trash.")
     }
 
     private class RetryableMemoRepository(
@@ -1176,14 +1182,22 @@ class MemoEditViewModelTest {
         var failSave = false
         var failDelete = false
 
-        override suspend fun saveMemo(memo: Memo) {
+        override suspend fun saveMemo(memo: Memo, expectedMemo: Memo?) {
             if (failSave) error("Failed to save memo.")
-            delegate.saveMemo(memo)
+            delegate.saveMemo(memo, expectedMemo)
         }
 
         override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) {
             if (failDelete) error("Failed to move memo to trash.")
             delegate.moveMemoToTrash(id, deletedAt)
+        }
+
+        override suspend fun moveMemoToTrashIfUnchanged(
+            expectedMemo: Memo,
+            deletedAt: TimestampMillis
+        ) {
+            if (failDelete) error("Failed to move memo to trash.")
+            delegate.moveMemoToTrashIfUnchanged(expectedMemo, deletedAt)
         }
     }
 }

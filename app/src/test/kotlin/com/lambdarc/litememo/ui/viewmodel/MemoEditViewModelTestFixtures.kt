@@ -111,9 +111,9 @@ internal class BlockingSaveMemoRepository(
     val saveStarted = CompletableDeferred<Unit>()
     val releaseSave = CompletableDeferred<Unit>()
 
-    override suspend fun saveMemo(memo: Memo) {
+    override suspend fun saveMemo(memo: Memo, expectedMemo: Memo?) {
         saveStarted.complete(Unit)
         releaseSave.await()
-        delegate.saveMemo(memo)
+        delegate.saveMemo(memo, expectedMemo)
     }
 }

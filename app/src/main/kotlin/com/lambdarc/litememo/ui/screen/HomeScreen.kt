@@ -204,7 +204,7 @@ private fun HomeContent(
                     )
                 }
 
-                uiState.search.results.isEmpty() -> item {
+                !uiState.search.isAwaitingResults && uiState.search.results.isEmpty() -> item {
                     MessageContent(
                         title = stringResource(R.string.no_search_results_title),
                         body = stringResource(R.string.no_search_results_body)

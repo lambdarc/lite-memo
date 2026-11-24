@@ -11,11 +11,11 @@ Lite Memo の Room schema と migration を、既存 DB 構成とテストに沿
 
 - [`docs/architecture.md`](../../../docs/architecture.md)
 - [`docs/implementation-guidelines.md`](../../../docs/implementation-guidelines.md)
-- [`docs/unit-test.md`](../../../docs/unit-test.md)
-- テーブル構成やクエリを変える場合は [`docs/data-model.md`](../../../docs/data-model.md)
 - [`app/src/main/kotlin/com/lambdarc/litememo/data/local/`](../../../app/src/main/kotlin/com/lambdarc/litememo/data/local/)
+- [`app/src/main/kotlin/com/lambdarc/litememo/data/di/`](../../../app/src/main/kotlin/com/lambdarc/litememo/data/di/)
 - [`app/schemas/`](../../../app/schemas/)
-- [`app/src/androidTest/kotlin/com/lambdarc/litememo/data/local/`](../../../app/src/androidTest/kotlin/com/lambdarc/litememo/data/local/)
+- テーブル構成やクエリを変える場合は [`docs/data-model.md`](../../../docs/data-model.md)
+- テストを変更・追加する場合は [`docs/unit-test.md`](../../../docs/unit-test.md) / [`docs/instrumented-test.md`](../../../docs/instrumented-test.md) と [`app/src/test/kotlin/com/lambdarc/litememo/data/local/`](../../../app/src/test/kotlin/com/lambdarc/litememo/data/local/)・[`app/src/androidTest/kotlin/com/lambdarc/litememo/data/local/`](../../../app/src/androidTest/kotlin/com/lambdarc/litememo/data/local/)
 
 # 役割クラスと参照先
 
@@ -43,6 +43,6 @@ mapper / Repository への波及は [`data-implementation`](../data-implementati
 # 注意事項
 
 - Room schema 変更時は `app/schemas/` の差分を必ず確認する。
-- アプリが未リリースでも、既存テストや schema export と矛盾する変更は避ける。
+- 既存テストや schema export と矛盾する変更は避ける。
 - DB 詳細を domain や UI に漏らさず、変換は mapper / Repository 実装に閉じる。
 - DataStore や export/import の変更だけなら `data-implementation` を優先する。

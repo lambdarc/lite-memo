@@ -3,6 +3,8 @@ package com.lambdarc.litememo.ui.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lambdarc.litememo.domain.exception.MemoEditConflictException
+import com.lambdarc.litememo.domain.exception.MemoImageTooLargeException
 import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.MemoImage
 import com.lambdarc.litememo.domain.model.SaveMemoCommand
@@ -100,6 +102,8 @@ class MemoEditViewModel @Inject constructor(
     private var autosaveJob: Job? = null
     private var isFinishing = false
     private var activePersistImageIds: Set<String> = emptySet()
+    private var persistedMemo: Memo? = null
+    private var editSessionId = 0L
     private var tagsJob: Job? = null
 
     init {
@@ -152,6 +156,26 @@ class MemoEditViewModel @Inject constructor(
         loadInitialState()
     }
 
+    fun reloadAfterSaveConflict() {
+        val state = _uiState.value
+        if (!state.hasSaveConflict || isFinishing) return
+        autosaveJob?.cancel()
+        editSessionId++
+        clearSavedState()
+        _uiState.update { current ->
+            MemoEditUiState(
+                status = ScreenUiStatus.LOADING,
+                memoId = current.memoId,
+                availableTags = current.availableTags,
+                hasTagError = current.hasTagError
+            )
+        }
+        viewModelScope.launch {
+            persistMutex.withLock { loadPersistedMemo(memoId) }
+            deleteCopiedImagesQuietly(state.images.filterNot { it.isPersisted })
+        }
+    }
+
     fun formatMemoText(): String? {
         val state = _uiState.value
         return formatMemoTextUseCase(state.title, state.body)
@@ -179,9 +203,11 @@ class MemoEditViewModel @Inject constructor(
     fun attachImages(sourceUris: List<String>) {
         if (sourceUris.isEmpty()) return
         if (!canEdit(_uiState.value)) return
+        val attachSessionId = editSessionId
         viewModelScope.launch {
             val attached = mutableListOf<MemoImageUiModel>()
             var hasFailure = false
+            var hasTooLargeImage = false
             try {
                 sourceUris.forEach { uri ->
                     try {
@@ -196,6 +222,8 @@ class MemoEditViewModel @Inject constructor(
                         }
                     } catch (e: CancellationException) {
                         throw e
+                    } catch (_: MemoImageTooLargeException) {
+                        hasTooLargeImage = true
                     } catch (_: Throwable) {
                         hasFailure = true
                     }
@@ -206,7 +234,7 @@ class MemoEditViewModel @Inject constructor(
                 throw e
             }
 
-            if (isFinishing || _uiState.value.isDeletePending) {
+            if (attachSessionId != editSessionId || !canEdit(_uiState.value)) {
                 deleteCopiedImagesQuietly(attached)
                 return@launch
             }
@@ -214,6 +242,9 @@ class MemoEditViewModel @Inject constructor(
                 updateEditState { state ->
                     state.copy(images = state.images + attached, isModified = true)
                 }
+            }
+            if (hasTooLargeImage) {
+                enqueueUiResult { MemoEditUiResult.ImageTooLarge(it) }
             }
             if (hasFailure) {
                 enqueueUiResult { MemoEditUiResult.ImageAttachFailed(it) }
@@ -274,7 +305,7 @@ class MemoEditViewModel @Inject constructor(
         isFinishing = true
         autosaveJob?.cancel()
         val initialState = _uiState.value
-        if (initialMemoId != null && initialState.status != ScreenUiStatus.CONTENT) {
+        if (initialState.status != ScreenUiStatus.CONTENT) {
             clearSavedState()
             enqueueUiResult { MemoEditUiResult.NavigateBack(it) }
             return
@@ -312,31 +343,45 @@ class MemoEditViewModel @Inject constructor(
                         hasTagError = current.hasTagError
                     )
                 }
+                persistMutex.withLock { persistedMemo = currentPersistedMemoOrNull() }
                 return@launch
             }
 
-            val currentMemoId = initialMemoId ?: run {
+            val currentMemoId = savedStateHandle.get<String>("memoId") ?: run {
                 _uiState.update { it.copy(status = ScreenUiStatus.CONTENT) }
                 return@launch
             }
-            try {
-                val memo = getMemoUseCase(MemoId(currentMemoId))
-                if (memo == null) {
-                    _uiState.update { it.copy(status = ScreenUiStatus.ERROR) }
-                    return@launch
-                }
-                _uiState.update { current ->
-                    memo.toUiState().copy(
-                        availableTags = current.availableTags,
-                        hasTagError = current.hasTagError
-                    )
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Throwable) {
-                _uiState.update { it.copy(status = ScreenUiStatus.ERROR) }
-            }
+            loadPersistedMemo(MemoId(currentMemoId))
         }
+    }
+
+    private suspend fun loadPersistedMemo(id: MemoId) {
+        try {
+            val memo = getMemoUseCase(id)
+            persistedMemo = memo
+            if (memo == null) {
+                _uiState.update { it.copy(status = ScreenUiStatus.ERROR) }
+                return
+            }
+            _uiState.update { current ->
+                memo.toUiState().copy(
+                    availableTags = current.availableTags,
+                    hasTagError = current.hasTagError
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            _uiState.update { it.copy(status = ScreenUiStatus.ERROR) }
+        }
+    }
+
+    private suspend fun currentPersistedMemoOrNull(): Memo? = try {
+        getMemoUseCase(memoId)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Throwable) {
+        null
     }
 
     private fun updateEditState(transform: (MemoEditUiState) -> MemoEditUiState) {
@@ -359,6 +404,7 @@ class MemoEditViewModel @Inject constructor(
     private suspend fun persist(): Boolean = persistMutex.withLock {
         val state = _uiState.value
         if (state.isContentBlank()) return@withLock true
+        if (state.hasSaveConflict) return@withLock false
         val savingImageIds = state.images.map { it.id }.toSet()
         val savingImages = state.images.map {
             MemoImage(
@@ -368,21 +414,29 @@ class MemoEditViewModel @Inject constructor(
         }
         activePersistImageIds = savingImageIds
         try {
-            val memo = saveMemoUseCase(
-                SaveMemoCommand(
-                    id = memoId,
-                    title = MemoTitle(state.title),
-                    body = MemoBody(state.body),
-                    createdAt = createdAt,
-                    tagIds = state.selectedTagIds.toList(),
-                    images = savingImages,
-                    isFavorite = state.isFavorite
+            // コミット後の取消で基準を更新し損ねると、次の保存が自分の書き込みと競合するため取消不能にする。
+            withContext(NonCancellable) {
+                val memo = saveMemoUseCase(
+                    SaveMemoCommand(
+                        id = memoId,
+                        title = MemoTitle(state.title),
+                        body = MemoBody(state.body),
+                        createdAt = createdAt,
+                        tagIds = state.selectedTagIds.toList(),
+                        images = savingImages,
+                        isFavorite = state.isFavorite,
+                        expectedMemo = persistedMemo
+                    )
                 )
-            )
-            applySavedMemo(memo, savingImageIds)
+                persistedMemo = memo
+                applySavedMemo(memo, savingImageIds)
+            }
             true
         } catch (e: CancellationException) {
             throw e
+        } catch (_: MemoEditConflictException) {
+            _uiState.update { it.copy(hasSaveConflict = true) }
+            false
         } catch (_: Throwable) {
             enqueueUiResult { MemoEditUiResult.SaveFailed(it) }
             false
@@ -399,17 +453,29 @@ class MemoEditViewModel @Inject constructor(
                     clearSavedState()
                     enqueueUiResult { MemoEditUiResult.NavigateBack(it) }
                 } else {
-                    val deletedMemoId = moveMemoToTrashUseCase(memoId)
+                    val expectedMemo = persistedMemo
+                    if (_uiState.value.hasSaveConflict || expectedMemo == null) {
+                        raiseSaveConflictWhileFinishing()
+                        return@withLock
+                    }
+                    val deletedMemoId = moveMemoToTrashUseCase(expectedMemo)
                     clearSavedState()
                     enqueueUiResult { MemoEditUiResult.MemoDeleted(it, deletedMemoId) }
                 }
             } catch (e: CancellationException) {
                 throw e
+            } catch (_: MemoEditConflictException) {
+                raiseSaveConflictWhileFinishing()
             } catch (_: Throwable) {
                 isFinishing = false
                 enqueueUiResult { MemoEditUiResult.DeleteFailed(it) }
             }
         }
+    }
+
+    private fun raiseSaveConflictWhileFinishing() {
+        isFinishing = false
+        _uiState.update { it.copy(hasSaveConflict = true) }
     }
 
     private fun applySavedMemo(memo: Memo, savedImageIds: Set<String>) {
@@ -521,8 +587,10 @@ class MemoEditViewModel @Inject constructor(
     private fun MemoEditUiState.isContentBlank(): Boolean =
         title.isBlank() && body.isBlank() && images.isEmpty()
 
-    private fun canEdit(state: MemoEditUiState): Boolean =
-        !isFinishing && !state.isDeletePending && state.status == ScreenUiStatus.CONTENT
+    private fun canEdit(state: MemoEditUiState): Boolean = !isFinishing &&
+        !state.isDeletePending &&
+        !state.hasSaveConflict &&
+        state.status == ScreenUiStatus.CONTENT
 
     private companion object {
         const val AUTOSAVE_DEBOUNCE_MILLIS = 1_000L

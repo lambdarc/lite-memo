@@ -2,6 +2,7 @@ package com.lambdarc.litememo.data.repository
 
 import com.lambdarc.litememo.data.local.dao.MemoBulkDao
 import com.lambdarc.litememo.data.local.dao.MemoDao
+import com.lambdarc.litememo.data.local.dao.MemoTrashDao
 import com.lambdarc.litememo.data.mapper.toDomain
 import com.lambdarc.litememo.data.mapper.toEntity
 import com.lambdarc.litememo.data.mapper.toImageRefs
@@ -11,6 +12,7 @@ import com.lambdarc.litememo.data.mapper.toTagRefs
 import com.lambdarc.litememo.data.mapper.toTagRefsByMemoId
 import com.lambdarc.litememo.data.util.deleteImageFiles
 import com.lambdarc.litememo.data.util.requireNoDuplicateIds
+import com.lambdarc.litememo.domain.exception.MemoEditConflictException
 import com.lambdarc.litememo.domain.model.ActiveMemoBulkWrite
 import com.lambdarc.litememo.domain.model.Memo
 import com.lambdarc.litememo.domain.model.MemoSummary
@@ -31,6 +33,7 @@ import javax.inject.Inject
 class RoomMemoRepository @Inject constructor(
     private val memoDao: MemoDao,
     private val memoBulkDao: MemoBulkDao,
+    private val memoTrashDao: MemoTrashDao,
     private val memoImageStore: MemoImageStore
 ) : MemoRepository {
 
@@ -64,7 +67,7 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override fun observeTrashedMemos(): Flow<List<Memo>> =
-        memoDao.observeTrashedMemosWithRefs().map { memos ->
+        memoTrashDao.observeTrashedMemosWithRefs().map { memos ->
             memos.map { memo -> memo.toDomain() }
         }
 
@@ -82,12 +85,13 @@ class RoomMemoRepository @Inject constructor(
         return distinctIds.mapNotNull { id -> memoById[id.value]?.toDomain() }
     }
 
-    override suspend fun saveMemo(memo: Memo) {
-        val removedFileNames = memoDao.upsertMemoWithRefsAndCollectRemovedFileNames(
+    override suspend fun saveMemo(memo: Memo, expectedMemo: Memo?) {
+        val removedFileNames = memoDao.upsertMemoWithRefsIfUnchangedAndCollectRemovedFileNames(
+            expectedMemo = expectedMemo?.toMemoWithRefs(),
             memo = memo.toEntity(),
             tagRefs = memo.toTagRefs(),
             imageRefs = memo.toImageRefs()
-        )
+        ) ?: throw MemoEditConflictException(memo.id)
         withContext(NonCancellable) {
             memoImageStore.deleteImageFiles(removedFileNames)
         }
@@ -113,8 +117,19 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis) {
-        val affected = memoDao.moveMemoToTrash(id.value, deletedAt.value)
+        val affected = memoTrashDao.moveMemoToTrash(id.value, deletedAt.value)
         check(affected > 0) { "Memo not found or already trashed: ${id.value}" }
+    }
+
+    override suspend fun moveMemoToTrashIfUnchanged(
+        expectedMemo: Memo,
+        deletedAt: TimestampMillis
+    ) {
+        val moved = memoTrashDao.moveMemoToTrashIfUnchanged(
+            expectedMemo = expectedMemo.toMemoWithRefs(),
+            deletedAt = deletedAt.value
+        )
+        if (!moved) throw MemoEditConflictException(expectedMemo.id)
     }
 
     override suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>) {
@@ -129,7 +144,7 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override suspend fun restoreMemoFromTrash(id: MemoId) {
-        val affected = memoDao.restoreMemoFromTrash(id.value)
+        val affected = memoTrashDao.restoreMemoFromTrash(id.value)
         check(affected > 0) { "Memo not found or not in trash: ${id.value}" }
     }
 
@@ -140,7 +155,7 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override suspend fun deleteMemoPermanently(id: MemoId) {
-        val fileNames = memoDao.deleteMemoPermanentlyAndCollectImageFileNames(id.value)
+        val fileNames = memoTrashDao.deleteMemoPermanentlyAndCollectImageFileNames(id.value)
         withContext(NonCancellable) {
             memoImageStore.deleteImageFiles(fileNames)
         }
@@ -166,7 +181,7 @@ class RoomMemoRepository @Inject constructor(
     }
 
     override suspend fun deleteTrashedMemosDeletedAtOrBefore(cutoff: TimestampMillis) {
-        val fileNames = memoDao.deleteTrashedMemosDeletedAtOrBeforeAndCollectImageFileNames(
+        val fileNames = memoTrashDao.deleteTrashedMemosDeletedAtOrBeforeAndCollectImageFileNames(
             cutoff.value
         )
         withContext(NonCancellable) {

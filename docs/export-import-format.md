@@ -62,10 +62,10 @@ LiteMemo 独自のマジックバイトはありません。アーカイブの�
 
 ## version の扱い
 
-現在の version は `1` です。ここが最も注意の要る箇所です。
+`version` の正本は `ExportData.CURRENT_VERSION` です。ここが最も注意の要る箇所です。
 
 - 読み込み側は `version` の**完全一致だけ**を受け付ける。古い版も新しい版も同じく拒否する
-- version の正本は `ExportData.CURRENT_VERSION` とする。Export / Import の UseCase と archive 読み込み時の検証は、この同じ定数を参照する
+- Export / Import の UseCase と archive 読み込み時の検証は、同じ `ExportData.CURRENT_VERSION` を参照する
 - JSON は `ignoreUnknownKeys` を有効にしているため、未知のフィールドがあっても復号自体は通る。ただし `version` が違えば手前で弾かれるため、フィールド追加だけの前方互換は実質的に効かない
 
 つまり形式を変えて version を上げると、旧版のアプリは新しいアーカイブを一切読めません。
@@ -89,6 +89,10 @@ LiteMemo 独自のマジックバイトはありません。アーカイブの�
 宣言値の合計を `maxTotalImageBytes` と照合します。コピー時は `MemoArchiveImageCopier.copyVerified` が
 実際の展開後バイト数を画像ごとの宣言値と照合します。エントリ数は `maxEntryCount` で別に制限します。
 
+メモへ画像を添付するときも、`FileSystemMemoImageStore` が同じ `maxImageBytes` を上限としてコピーします。
+上限を超えた時点でコピーを打ち切り、`MemoImageTooLargeException` を送出します。
+合計サイズとエントリ数は添付時には制限していないため、画像の多いメモを貯めるとエクスポートが失敗することがあります。
+
 ## 読み込み時の検証順序
 
 読み込みは次の順で検証し、いずれかで失敗した時点で中断します。
@@ -102,7 +106,7 @@ LiteMemo 独自のマジックバイトはありません。アーカイブの�
 7. 以降のエントリごとに、エントリ数の上限と名前の安全性を確認し、manifest が宣言した画像エントリと一致するか
 8. manifest が宣言した画像がすべて現れたか
 
-エントリ名は、空、`\`、`:`、制御文字、空セグメント、`.`、`..` のいずれかを含むと拒否します。
+エントリ名は、空文字・空白のみ（`isBlank()`）、`\`、`:`、制御文字、空セグメント、`.`、`..` のいずれかを含むと拒否します。
 これで絶対パスと `..` によるディレクトリ脱出を防ぎます。
 
 manifest が宣言していないエントリが 1 つでもあれば不正とします。未知のエントリは無視しません。
@@ -112,13 +116,15 @@ manifest が宣言していないエントリが 1 つでもあれば不正と�
 
 ## 失敗の分類
 
-アーカイブ内部の失敗理由は 8 種類あり、`MemoImportFailureReason` へ渡る段階で 4 種類に集約されます。
-これに `IOException` から判定するストレージ不足を加え、UI が区別する import の失敗理由は 5 種類です。
+Domain の失敗理由（`MemoImportFailureReason`）と UI のエラー表示（`SettingsImportErrorDialogUiState`）は 1 対 1 ではありません。
+UI 側では `MemoImportFailureReason` の各理由に加えて、タグ名衝突（`ImportTagNameConflictException`）と汎用エラーを独立して区別します。
 
-- version 不一致、サイズ上限超過、画像の破損（サイズ / SHA-256 不一致）はそれぞれ独立した理由として残る
-- ZIP 署名の不一致、ZIP 構造の破損、エントリ名の不正、識別子の重複は、すべて同じ「不正なアーカイブ」に集約される
+`MemoImportFailureReason` では、次のように分類します。
 
-利用者は後者の 4 つを区別できません。切り分けが必要な場合はログか実装を確認します。
+- version 不一致、サイズ上限超過、画像の破損（サイズ / SHA-256 不一致）、`IOException` から判定するストレージ不足（`ENOSPC` 等）はそれぞれ独立した理由として残す
+- それ以外のアーカイブ起因の失敗（ZIP 署名の不一致、ZIP 構造の破損、不正な UTF-8 を含むエントリ名の不正、識別子や画像 id の重複、空メモ、`ENOSPC` 以外の `IOException` など）は、すべて `INVALID_ARCHIVE`（不正なアーカイブ）へ集約する
+
+利用者は `INVALID_ARCHIVE` の内訳を区別できません。切り分けが必要な場合はログか実装を確認します。
 
 ## import の衝突解決
 
@@ -129,9 +135,19 @@ manifest が宣言していないエントリが 1 つでもあれば不正と�
   - その名前を、import に含まれない既存タグ（id が import 対象のタグ id に無いもの）が持っている
 - import に含まれるタグ同士で名前を移す・入れ替えるのは衝突にならない。`TagDao.insertOrUpdateAllTags` が一時名へ退避してから更新する
 - メモが manifest に存在しないタグ id を参照している場合は、その参照だけを黙って取り除く。エラーにはしない
-- タイトル・本文がともに空で画像も無いメモ、および画像 id の重複は不正として拒否する
+- タイトル・本文がともに空または空白のみ（`isBlank()`）で画像も無いメモ、および画像 id の重複は不正として拒否する
 
-## export の対象
+## import のステージングと画像ファイル名
+
+- 取り込み時の画像 `fileName` は `manifest.json` の名前をそのまま再利用せず、`StagingMemoImportArchiveRepository` がセッション接頭辞付きのファイル名へ再採番する（既存画像との衝突回避と中断時回収のため）
+- import はセッション単位で画像を staging 領域へ展開・移動してから Room の transaction をコミットする。検証や DB 更新に失敗した場合は、そのセッション接頭辞を持つ未参照画像を `NonCancellable` でロールバック削除する
+- 処理の途中でプロセスが終了して残った未参照画像は、アプリ起動時に `LiteMemoApplication` 経由でセッション接頭辞をもとに回収する
+
+## export の対象と出力
 
 ごみ箱のメモは含めません。除外は後段の絞り込みではなく、
 `WHERE deletedAt IS NULL` のクエリで取得する時点で行います。
+
+export は先にアプリ内の一時ファイルへ ZIP アーカイブを書き出し、`MemoArchiveReader` で再読込して整合を検証します。
+検証後に確定したファイルだけを `ContentResolver.openOutputStream(..., "wt")` で出力先へ上書きコピーします（`"w"` では truncate しないプロバイダでも末尾の古いバイトが残らないようにするため）。
+中断や画面離脱で取り残された一時ファイルは、破棄処理またはアプリ起動時のクリーンアップで回収します。

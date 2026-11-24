@@ -25,6 +25,7 @@ class RoomDaoInstrumentedTest {
     private lateinit var database: LiteMemoDatabase
     private lateinit var memoDao: MemoDao
     private lateinit var memoBulkDao: MemoBulkDao
+    private lateinit var memoTrashDao: MemoTrashDao
     private lateinit var tagDao: TagDao
 
     @Before
@@ -33,6 +34,7 @@ class RoomDaoInstrumentedTest {
         database = Room.inMemoryDatabaseBuilder(context, LiteMemoDatabase::class.java).build()
         memoDao = database.memoDao()
         memoBulkDao = database.memoBulkDao()
+        memoTrashDao = database.memoTrashDao()
         tagDao = database.tagDao()
     }
 
@@ -369,7 +371,7 @@ class RoomDaoInstrumentedTest {
         memoDao.upsertMemo(memoEntity(id = "memo-new", deletedAt = 3_000L))
 
         // Act
-        val memos = memoDao.observeTrashedMemosWithRefs().first()
+        val memos = memoTrashDao.observeTrashedMemosWithRefs().first()
 
         // Assert
         assertEquals(listOf("memo-new", "memo-old"), memos.map { it.memo.id })
@@ -381,7 +383,7 @@ class RoomDaoInstrumentedTest {
         memoDao.upsertMemo(memoEntity(id = "memo-1", deletedAt = 2_000L))
 
         // Act
-        memoDao.restoreMemoFromTrash("memo-1")
+        memoTrashDao.restoreMemoFromTrash("memo-1")
         val memos = memoDao.observeActiveMemosWithRefs().first()
 
         // Assert
@@ -419,7 +421,7 @@ class RoomDaoInstrumentedTest {
             )
         )
         val activeIds = memoDao.observeActiveMemosWithRefs().first().map { it.memo.id }
-        val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
+        val trashedIds = memoTrashDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
 
         // Assert
         assertEquals(emptyList<String>(), activeIds)
@@ -529,7 +531,7 @@ class RoomDaoInstrumentedTest {
         // Boundary: active members are skipped while trashed members are restored
         memoBulkDao.restoreMemosFromTrash(listOf("memo-trashed", "memo-active"))
         val activeIds = memoDao.observeActiveMemosWithRefs().first().map { it.memo.id }.sorted()
-        val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
+        val trashedIds = memoTrashDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
 
         // Assert
         assertEquals(listOf("memo-active", "memo-trashed"), activeIds)
@@ -548,7 +550,7 @@ class RoomDaoInstrumentedTest {
             listOf("memo-trashed", "memo-active")
         )
         val activeIds = memoDao.observeActiveMemosWithRefs().first().map { it.memo.id }
-        val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
+        val trashedIds = memoTrashDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
 
         // Assert
         assertEquals(listOf("memo-active"), activeIds)
@@ -582,7 +584,7 @@ class RoomDaoInstrumentedTest {
         val fileNames = memoBulkDao.deleteMemosPermanentlyAndCollectImageFileNames(
             listOf("memo-2", "memo-1")
         )
-        val trashedIds = memoDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
+        val trashedIds = memoTrashDao.observeTrashedMemosWithRefs().first().map { it.memo.id }
 
         // Assert
         assertEquals(setOf("image-1.jpg", "image-2.jpg"), fileNames.toSet())
@@ -595,7 +597,7 @@ class RoomDaoInstrumentedTest {
         memoDao.upsertMemo(memoEntity(id = "memo-1"))
 
         // Act
-        val deletedCount = memoDao.deleteMemoPermanently("memo-1")
+        val deletedCount = memoTrashDao.deleteMemoPermanently("memo-1")
 
         // Assert
         assertEquals(0, deletedCount)
@@ -607,8 +609,8 @@ class RoomDaoInstrumentedTest {
         memoDao.upsertMemo(memoEntity(id = "memo-1", deletedAt = 2_000L))
 
         // Act
-        memoDao.deleteMemoPermanently("memo-1")
-        val memos = memoDao.observeTrashedMemosWithRefs().first()
+        memoTrashDao.deleteMemoPermanently("memo-1")
+        val memos = memoTrashDao.observeTrashedMemosWithRefs().first()
 
         // Assert
         assertEquals(0, memos.size)
@@ -687,8 +689,8 @@ class RoomDaoInstrumentedTest {
         memoDao.upsertMemo(memoEntity(id = "memo-new", deletedAt = 1_001L))
 
         // Act
-        memoDao.deleteTrashedMemosDeletedAtOrBefore(1_000L)
-        val memos = memoDao.observeTrashedMemosWithRefs().first()
+        memoTrashDao.deleteTrashedMemosDeletedAtOrBefore(1_000L)
+        val memos = memoTrashDao.observeTrashedMemosWithRefs().first()
 
         // Assert
         assertEquals(listOf("memo-new"), memos.map { it.memo.id })
@@ -701,8 +703,8 @@ class RoomDaoInstrumentedTest {
 
         // Act
         // Boundary: a stale deletedAt is raised to updatedAt so the row stays readable.
-        memoDao.moveMemoToTrash("memo-1", 2_000L)
-        val trashed = memoDao.observeTrashedMemosWithRefs().first().single().memo
+        memoTrashDao.moveMemoToTrash("memo-1", 2_000L)
+        val trashed = memoTrashDao.observeTrashedMemosWithRefs().first().single().memo
 
         // Assert
         assertEquals(5_000L, trashed.deletedAt)
@@ -722,7 +724,7 @@ class RoomDaoInstrumentedTest {
                 "memo-2" to 2_000L
             )
         )
-        val deletedAtById = memoDao.observeTrashedMemosWithRefs().first()
+        val deletedAtById = memoTrashDao.observeTrashedMemosWithRefs().first()
             .associate { it.memo.id to it.memo.deletedAt }
 
         // Assert

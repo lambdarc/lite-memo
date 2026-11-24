@@ -71,7 +71,69 @@ class SearchMemoResultsTest {
         }
 
         // Assert
-        assertEquals(SearchUiState(isActive = true, query = "second"), updated)
+        assertEquals(
+            SearchUiState(isActive = true, query = "second", isAwaitingResults = true),
+            updated
+        )
+    }
+
+    @Test
+    fun boundaryStaleQueryResultMarksCurrentQueryAsAwaiting() {
+        // Arrange
+        val search = SearchUiState().opened().updateQuery("second")
+
+        // Act
+        // Boundary: an empty list before the current query resolves is not a confirmed zero hit
+        val updated = search.applySearchResult(
+            MemoSearchUiResult.Success(query = "first", memos = emptyList())
+        ) { emptyList() }
+
+        // Assert
+        assertEquals(true, updated.isAwaitingResults)
+    }
+
+    @Test
+    fun boundaryInactiveResultMarksNonBlankQueryAsAwaiting() {
+        // Arrange
+        val search = SearchUiState().opened().updateQuery("shopping")
+
+        // Act
+        // Boundary: the first query typed after opening waits for its own result
+        val updated = search.applySearchResult(MemoSearchUiResult.Inactive) { emptyList() }
+
+        // Assert
+        assertEquals(true, updated.isAwaitingResults)
+    }
+
+    @Test
+    fun boundaryInactiveResultDoesNotAwaitBlankQuery() {
+        // Arrange
+        val search = SearchUiState().opened()
+
+        // Act
+        // Boundary: a blank query shows the hint instead of waiting
+        val updated = search.applySearchResult(MemoSearchUiResult.Inactive) { emptyList() }
+
+        // Assert
+        assertEquals(false, updated.isAwaitingResults)
+    }
+
+    @Test
+    fun normalEmptyResultForCurrentQueryConfirmsZeroHits() {
+        // Arrange
+        val search = SearchUiState().opened().updateQuery("missing")
+
+        // Act
+        // Normal: an empty result for the current query is no longer awaited
+        val updated = search.applySearchResult(
+            MemoSearchUiResult.Success(query = "missing", memos = emptyList())
+        ) { emptyList() }
+
+        // Assert
+        assertEquals(
+            SearchUiState(isActive = true, query = "missing", isAwaitingResults = false),
+            updated
+        )
     }
 
     @Test

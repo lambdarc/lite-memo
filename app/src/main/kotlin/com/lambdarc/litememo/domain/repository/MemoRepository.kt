@@ -26,11 +26,13 @@ interface MemoRepository {
 
     suspend fun getActiveMemos(ids: List<MemoId>): List<Memo>
 
-    suspend fun saveMemo(memo: Memo)
+    suspend fun saveMemo(memo: Memo, expectedMemo: Memo?)
 
     suspend fun saveActiveMemoBulkWrites(writes: List<ActiveMemoBulkWrite>)
 
     suspend fun moveMemoToTrash(id: MemoId, deletedAt: TimestampMillis)
+
+    suspend fun moveMemoToTrashIfUnchanged(expectedMemo: Memo, deletedAt: TimestampMillis)
 
     suspend fun moveMemosToTrash(updates: List<MemoTrashUpdate>)
 

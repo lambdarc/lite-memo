@@ -547,6 +547,7 @@ class HomeViewModelTest {
         // Act
         // StateTransition: controls continue publishing while observation remains failed.
         viewModel.selectFilter(HomeFilterUiState.Favorite)
+        viewModel.startSelection(memoId)
         viewModel.toggleSearch()
         viewModel.updateSearchQuery("changed during error")
         runCurrent()

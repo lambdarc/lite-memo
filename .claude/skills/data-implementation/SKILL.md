@@ -11,10 +11,10 @@ Lite Memo の data 層で、domain の interface を既存データ源に接続�
 
 - [`docs/architecture.md`](../../../docs/architecture.md)
 - [`docs/implementation-guidelines.md`](../../../docs/implementation-guidelines.md)
-- [`docs/unit-test.md`](../../../docs/unit-test.md)
+- [`app/src/main/kotlin/com/lambdarc/litememo/data/`](../../../app/src/main/kotlin/com/lambdarc/litememo/data/)（アプリ全体の DI binding に触れる場合は [`app/src/main/kotlin/com/lambdarc/litememo/di/`](../../../app/src/main/kotlin/com/lambdarc/litememo/di/) も確認する）
 - export / import を変える場合は [`docs/export-import-format.md`](../../../docs/export-import-format.md)
-- [`app/src/main/kotlin/com/lambdarc/litememo/data/`](../../../app/src/main/kotlin/com/lambdarc/litememo/data/)
-- 関連する [`app/src/test/kotlin/com/lambdarc/litememo/data/`](../../../app/src/test/kotlin/com/lambdarc/litememo/data/) と [`app/src/androidTest/kotlin/com/lambdarc/litememo/data/`](../../../app/src/androidTest/kotlin/com/lambdarc/litememo/data/)
+- アプリロック設定に触れる場合は [`docs/app-lock.md`](../../../docs/app-lock.md)
+- テストを変更・追加する場合は [`docs/unit-test.md`](../../../docs/unit-test.md) / [`docs/instrumented-test.md`](../../../docs/instrumented-test.md) と関連する [`app/src/test/kotlin/com/lambdarc/litememo/data/`](../../../app/src/test/kotlin/com/lambdarc/litememo/data/)・[`app/src/androidTest/kotlin/com/lambdarc/litememo/data/`](../../../app/src/androidTest/kotlin/com/lambdarc/litememo/data/)
 
 # 役割クラスと参照先
 
@@ -29,7 +29,7 @@ Lite Memo の data 層で、domain の interface を既存データ源に接続�
 | DataStore | [`references/datastore.md`](references/datastore.md) |
 | export / import | [`references/export-import.md`](references/export-import.md) |
 | ContentResolver / URI | [`references/content-resolver.md`](references/content-resolver.md) |
-| provider 実装 / Hilt module の単純な binding / 単純 DTO | reference なし。`docs/architecture.md` の Data 方針に従う（provider 抽象は domain-implementation） |
+| provider 実装 / Hilt module の単純な binding / 単純 DTO | reference なし。`docs/architecture.md` の Data 方針に従う（provider 抽象は `domain-implementation`） |
 
 # 手順
 
